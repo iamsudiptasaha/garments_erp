@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/app.js", "src/fabric/app.js", "src/fortune-demo.js", "src/tabulator-demo.js", "tests/*.test.js"],
+  "project": ["src/**/*.js", "tests/**/*.js", "*.config.js"],
+  "includeEntryExports": true
+}

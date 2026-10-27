@@ -1,0 +1,36 @@
+name: Code quality and sanity
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fabric-poc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: fabric-poc/package-lock.json
+      - run: npm ci
+      - name: Lint, unused code, duplication, tests and build
+        run: npm run quality
+      - name: Dependency security check
+        run: npm audit --audit-level=high
+      - name: Save duplication report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: duplication-report
+          path: fabric-poc/reports/duplication/
+          if-no-files-found: ignore
+          retention-days: 14

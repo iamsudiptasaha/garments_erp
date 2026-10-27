@@ -1,0 +1,15 @@
+.DS_Store
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+*.local
+.supabase/
+supabase/.temp/
+supabase/.branches/
+# Generated review captures; source mockups remain in the workspace.
+fabric-poc/*preview.png
+reports/

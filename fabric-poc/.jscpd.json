@@ -1,0 +1,24 @@
+{
+  "threshold": 5,
+  "minLines": 1,
+  "minTokens": 100,
+  "mode": "mild",
+  "path": [
+    "src",
+    "styles.css"
+  ],
+  "format": [
+    "javascript",
+    "css"
+  ],
+  "reporters": [
+    "console",
+    "json",
+    "html"
+  ],
+  "output": "reports/duplication",
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**"
+  ]
+}
