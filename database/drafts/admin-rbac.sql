@@ -1,3 +1,4 @@
+-- SUPERSEDED by user-management.sql. Retained for historical review only.
 -- REVIEW DRAFT, NOT APPLIED. This is not a Supabase CLI migration.
 -- This additive foundation alone DOES NOT secure existing business tables.
 -- First link an explicitly authorised Supabase Auth user to the real employee,

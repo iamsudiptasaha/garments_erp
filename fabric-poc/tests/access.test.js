@@ -39,3 +39,10 @@ test('access-state upgrade moves employee permissions to HR without losing peopl
  const next=upgradeAccess(access);assert.equal(next.version,2);assert.deepEqual(next.users,access.users);assert.deepEqual(next.audit,access.audit);assert.equal(next.roles[0].permissions.adminUsers,undefined);
  assert.equal(next.roles[1].permissions.employees.edit,true);assert.equal(allowed(next,'sample-accounts','adminRoles','view'),false);
 });
+
+test('archiving retains history and refuses assigned or protected roles',async()=>{
+ const {archiveRole}=await import('../src/admin/model.js');
+ let state=initialAccess();assert.throws(()=>archiveRole(state,'owner','admin',state.revision),/Administrator/);assert.throws(()=>archiveRole(state,'owner','accounts',state.revision),/Reassign all employees/);
+ state=saveRole(state,'owner',{name:'Unused role',permissions:{}},state.revision);const role=state.roles.find(r=>r.name==='Unused role'),archived=archiveRole(state,'owner',role.id,state.revision);assert.equal(archived.roles.find(r=>r.id===role.id).archived,true);assert.equal(archived.audit[0].action,'Archived role');assert.ok(state.roles.find(r=>r.id===role.id)&&!state.roles.find(r=>r.id===role.id).archived);assert.throws(()=>saveAccountAccess(archived,'owner',{id:'sample-viewer',roleId:role.id,active:true},archived.revision),/valid role/);
+ const disabled=structuredClone(state);disabled.users.find(u=>u.id==='sample-accounts').active=false;assert.throws(()=>archiveRole(disabled,'owner','accounts',disabled.revision),/disabled accounts/);
+});

@@ -1,5 +1,7 @@
 # Administration and RBAC foundation
 
+Current database status: the revised eight-table structure has been applied, and screen/table metadata registered. See [user-management design](user-management-design.md) and [catalogue](../database/catalogue/README.md). The old admin-rbac.sql proposal below is historical and superseded; live policies, login and UI integration remain pending.
+
 ## Current local implementation
 
 Employee / HR is the home for the employee directory and profile creation/editing: name, stable employee code and phone. Administration contains Roles & permissions (including account-role assignment and login-access enable/disable) and Activity log. It is visible and routable only to an active Administrator account, independently of custom role grants. New employees require a country-code phone number; duplicate phone numbers and employee IDs are rejected. HR-created profiles start with a Viewer role and disabled account access. HR profile updates preserve role and account-access state; attempts to change either through the HR command are rejected. Role assignment and account access are separate administrator commands. A phone-profile edit does not automatically change a verified Supabase Auth phone identity. Editing a phone does not change the stable internal identity.

@@ -1,11 +1,15 @@
+import {initialProduction,upgradeProduction,productionRows,productionOptions,validateProduction} from '../production/domain.js';
+import {initialMiscellaneous,upgradeMiscellaneous,miscellaneousRows,miscellaneousOptions,validateMiscellaneous} from '../miscellaneous/domain.js';
 import {initialInventory,upgradeInventory,inventoryRows,inventoryOptions,validateInventory,prepareInventoryEdit} from '../inventory/domain.js';
 import {pages} from './catalog.js';
 const copy=value=>structuredClone(value);
 const uid=()=>crypto.randomUUID();
 const sum=(rows,key)=>rows.reduce((total,row)=>total+Number(row[key]||0),0);
 const list=values=>[...new Set(values.filter(Boolean))].join(', ');
-export function initialFabric(){return {
+export function initialFabric(){return upgradeProduction({
  ...initialInventory(),
+ ...initialMiscellaneous(),
+ ...initialProduction(),
  contacts:[{id:'s7',company_name:'Trim House'},{id:'s1',company_name:'Shivam Yarns'},{id:'s2',company_name:'Swan Yarns'},{id:'s3',company_name:'Sri Knits'},{id:'s4',company_name:'Metro Knitting'},{id:'s5',company_name:'River Dyeing'},{id:'s6',company_name:'City Processors'}],
  yarn_supplier:[{id:'ys1',contacts_id:'s1'},{id:'ys2',contacts_id:'s2'}],knitter:[{id:'kn1',contacts_id:'s3'},{id:'kn2',contacts_id:'s4'}],dyer:[{id:'dy1',contacts_id:'s5'},{id:'dy2',contacts_id:'s6'}],
  yarn_type:[{id:'yt1',name:'30S Shivam CCH',yarn_count:'30S'},{id:'yt2',name:'24S Swan CCH',yarn_count:'24S'}],fabric_type:[{id:'ft1',name:'Sinker'},{id:'ft2',name:'Rib'},{id:'ft3',name:'Interlock'}],
@@ -22,13 +26,14 @@ export function initialFabric(){return {
  dyeing_program_item:[{id:'di1',dyeing_program_id:'dp1',fabric_type_id:'ft1',quantity:300,color_map_by_brand_id:'co1',comments:'Match approved navy swatch.'},{id:'di2',dyeing_program_id:'dp1',fabric_type_id:'ft2',quantity:100,color_map_by_brand_id:'co1',comments:'Match approved navy swatch.'},{id:'di3',dyeing_program_id:'dp1',fabric_type_id:'ft1',quantity:200,color_map_by_brand_id:'co2',comments:'Soft finish.'},{id:'di4',dyeing_program_id:'dp2',fabric_type_id:'ft1',quantity:100,color_map_by_brand_id:'co2',comments:'Soft finish.'}],
  dyed_fabric_bill:[{id:'db1',invoice_number:'DF-031',invoice_date:'2026-10-26'},{id:'db2',invoice_number:'DF-032',invoice_date:'2026-10-27'}],
  dyed_fabric_item:[{id:'df1',dyed_fabric_bill_id:'db1',dyeing_program_item_id:'di1',knitting_bill_item_id:'ki1',batch_no:'B-104',dyeing_rate:35,gross_quantity:300,billed_quantity:288,final_quantity:285,dyeing_rolls:15},{id:'df2',dyed_fabric_bill_id:'db1',dyeing_program_item_id:'di2',knitting_bill_item_id:'ki2',batch_no:'B-106',dyeing_rate:35,gross_quantity:100,billed_quantity:95,final_quantity:94,dyeing_rolls:5},{id:'df3',dyed_fabric_bill_id:'db2',dyeing_program_item_id:'di3',knitting_bill_item_id:'ki3',batch_no:'B-105',dyeing_rate:32,gross_quantity:200,billed_quantity:192,final_quantity:190,dyeing_rolls:10},{id:'df4',dyed_fabric_bill_id:'db2',dyeing_program_item_id:'di4',knitting_bill_item_id:'ki1',batch_no:'B-109',dyeing_rate:32,gross_quantity:100,billed_quantity:96,final_quantity:94,dyeing_rolls:5}]
-}}
+})}
 // Upgrade the earlier local fixture without changing document or mapping IDs.
 export function upgradeFabric(data){
- if(data.color_map&&data.brand_list)return upgradeInventory(data);
+ if(data.color_map&&data.brand_list)return upgradeProduction(upgradeMiscellaneous(upgradeInventory(data)));
  const next=copy(data);next.color_map=[];next.brand_list=[];
  next.color_map_by_brand=next.color_map_by_brand.map(old=>{let colour=next.color_map.find(c=>c.name===old.name);if(!colour){colour={id:uid(),name:old.name,pantone_code:'',attached_swatch:false};next.color_map.push(colour)}let brand=next.brand_list.find(b=>b.brand===(old.brand||'Core'));if(!brand){brand={id:uid(),brand:old.brand||'Core'};next.brand_list.push(brand)}return {id:old.id,color_map_id:colour.id,brand_list_id:brand.id,dyer_id:null,shade_card_no:'',shade_card_option:'',shade_card_image:''}});
- return upgradeInventory(next);
+ next.item=(next.item||[]).map(r=>({...r,brand_id:next.brand_list.some(b=>b.id===r.brand_id)?r.brand_id:null}));
+ return upgradeProduction(upgradeMiscellaneous(upgradeInventory(next)));
 }
 export function selectors(data){
  const get=(table,id)=>data[table].find(row=>row.id===id);
@@ -41,7 +46,9 @@ export function selectors(data){
 }
 export function fabricRows(data,page){
  const s=selectors(data),{get,supplier,yarn,knit,dyed}=s;
+ if(pages[page]?.production)return productionRows(data,page);
  if(pages[page]?.inventory)return inventoryRows(data,page,s);
+ if(pages[page]?.miscellaneous)return miscellaneousRows(data,page);
  if(page==='yarnTypes')return data.yarn_type.map(r=>({id:r.id,documentId:r.id,name:r.name,count:r.yarn_count,uses:data.yarn_purchase_order_item.filter(l=>l.yarn_type_id===r.id).length}));
  if(page==='fabricTypes')return data.fabric_type.map(r=>({id:r.id,documentId:r.id,name:r.name,knitting:data.knitting_bill_item.filter(l=>l.fabric_type_id===r.id).length,programs:data.dyeing_program_item.filter(l=>l.fabric_type_id===r.id).length}));
  if(page==='brands')return data.brand_list.map(r=>({id:r.id,documentId:r.id,name:r.brand,mappings:data.color_map_by_brand.filter(m=>m.brand_list_id===r.id).length}));
@@ -65,7 +72,7 @@ export function batchesForMapping(data,mappingId){
  return [...new Set(data.dyed_fabric_item.filter(row=>programIds.has(row.dyeing_program_item_id)).map(row=>row.batch_no))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
 }
 export function optionsFor(data,source,dyerId=null){
- const s=selectors(data);const inventory=inventoryOptions(data,source,s);if(inventory)return inventory;const suppliers=table=>data[table].map(r=>[r.id,s.supplier(table,r.id)]);
+ const s=selectors(data);const production=productionOptions(data,source);if(production)return production;const miscellaneous=miscellaneousOptions(data,source);if(miscellaneous)return miscellaneous;const inventory=inventoryOptions(data,source,s);if(inventory)return inventory;const suppliers=table=>data[table].map(r=>[r.id,s.supplier(table,r.id)]);
  if(source==='yarnSuppliers')return suppliers('yarn_supplier');if(source==='knitters')return suppliers('knitter');if(source==='dyers')return suppliers('dyer');
  if(source==='yarnTypes')return data.yarn_type.map(r=>[r.id,r.name]);if(source==='fabricTypes')return data.fabric_type.map(r=>[r.id,r.name]);if(source==='colors')return data.color_map_by_brand.filter(r=>!dyerId||!r.dyer_id||r.dyer_id===dyerId).map(r=>{const c=s.color(r.id);return [r.id,`${c.name} / ${c.brand}${r.dyer_id?' · '+s.supplier('dyer',r.dyer_id):''}${r.shade_card_no?' · '+r.shade_card_no:''}${r.shade_card_option?' / '+r.shade_card_option:''}`]});
  if(source==='colourLibrary')return data.color_map.map(r=>[r.id,`${r.name}${r.pantone_code?' · '+r.pantone_code:''}`]);if(source==='brands')return data.brand_list.map(r=>[r.id,r.brand]);
@@ -75,6 +82,8 @@ export function optionsFor(data,source,dyerId=null){
 const required=(value,label)=>{if(value===undefined||value===null||String(value).trim()==='')throw Error(`${label} is required.`)};
 export function validateFabric(data){
  validateInventory(data);
+ validateMiscellaneous(data);
+ validateProduction(data);
  const links={color_map_by_brand:{color_map_id:'color_map',brand_list_id:'brand_list'},yarn_purchase_order:{yarn_supplier_id:'yarn_supplier'},yarn_purchase_order_item:{purchase_order_number_id:'yarn_purchase_order',yarn_type_id:'yarn_type'},yarn_bill_item:{yarn_bill_id:'yarn_bill',yarn_purchase_order_item_id:'yarn_purchase_order_item'},knitting_bill:{knitter_id:'knitter'},knitting_bill_item:{knitting_bill_id:'knitting_bill',yarn_bill_item_id:'yarn_bill_item',fabric_type_id:'fabric_type'},dyeing_program:{dyer_id:'dyer'},dyeing_program_item:{dyeing_program_id:'dyeing_program',fabric_type_id:'fabric_type',color_map_by_brand_id:'color_map_by_brand'},dyed_fabric_item:{dyed_fabric_bill_id:'dyed_fabric_bill',dyeing_program_item_id:'dyeing_program_item',knitting_bill_item_id:'knitting_bill_item'}};
  for(const [table,fields]of Object.entries(links))for(const row of data[table])for(const [key,target]of Object.entries(fields))if(!data[target].some(r=>r.id===row[key]))throw Error(`A linked ${target.replaceAll('_',' ')} is missing. Restore the line or change its linked records first.`);
  for(const page of Object.values(pages).filter(p=>p.entity&&p.lines)){

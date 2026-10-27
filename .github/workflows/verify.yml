@@ -24,6 +24,8 @@ jobs:
       - run: npm ci
       - name: Lint, unused code, duplication, tests and build
         run: npm run quality
+      - name: Access catalogue checks
+        run: node ../database/test-access-catalogue.mjs
       - name: Dependency security check
         run: npm audit --audit-level=high
       - name: Save duplication report

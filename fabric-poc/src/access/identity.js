@@ -1,0 +1,2 @@
+export function normalisePhone(value){const digits=String(value||'').replace(/[\s()-]/g,'');if(!/^[6-9]\d{9}$/.test(digits))throw Error('Enter a valid 10-digit mobile number.');return '+91'+digits}
+export function normaliseEmployeeCode(value){const input=String(value||'').trim().toUpperCase();const digits=input.startsWith('SCE/')?input.slice(4):input;if(!/^\d{5}$/.test(digits))throw Error('Enter the five digits of the employee code.');return 'SCE/'+digits}
