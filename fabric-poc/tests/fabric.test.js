@@ -64,3 +64,26 @@ test('colour mapping labels display colour before brand consistently',()=>{
  const data=initialFabric();assert.equal(optionsFor(data,'colors').find(([id])=>id==='co1')[1],'Navy / Core');
  assert.equal(fabricRows(data,'programs').find(row=>row.id==='di1').mapping,'Navy / Core');
 });
+
+test('reference edits preserve IDs and propagate to linked choices and derived fabrics',()=>{
+ const data=initialFabric();
+ const next=saveDocument(data,'yarnTypes',{header:{id:'yt1',name:'32S Shivam CCH',yarn_count:'32S'}});
+ assert.equal(fabricRows(next,'knitting').find(r=>r.id==='ki1').name,'32S Sinker');
+ assert.equal(optionsFor(next,'yarnTypes').find(([id])=>id==='yt1')[1],'32S Shivam CCH');
+ assert.equal(data.yarn_type[0].yarn_count,'30S');
+ const renamed=saveDocument(next,'brands',{header:{id:'br1',brand:'Essential'}});
+ assert.match(optionsFor(renamed,'colors')[0][1],/Navy \/ Essential/);
+ assert.equal(fabricRows(renamed,'brands')[0].mappings,2);
+ const fabric=saveDocument(renamed,'fabricTypes',{header:{id:'ft1',name:'Single jersey'}});
+ assert.equal(fabricRows(fabric,'batches')[0].name,'32S Single jersey');
+ assert.equal(fabricRows(fabric,'fabricTypes').find(r=>r.id==='ft1').knitting,2);
+});
+test('reference masters reject duplicate names, missing counts and stale edit identities',()=>{
+ const data=initialFabric();
+ assert.throws(()=>saveDocument(data,'fabricTypes',{header:{name:' sinker '}}),/already exists/);
+ assert.throws(()=>saveDocument(data,'yarnTypes',{header:{name:'New yarn',yarn_count:''}}),/Yarn count is required/);
+ assert.throws(()=>saveDocument(data,'brands',{header:{id:'deleted',brand:'New'}}),/no longer exists/);
+ const next=saveDocument(data,'brands',{header:{brand:'Summer'}});
+ assert.equal(next.brand_list.length,2);assert.equal(data.brand_list.length,1);
+ assert.ok(optionsFor(next,'brands').some(([,name])=>name==='Summer'));
+});

@@ -24,6 +24,8 @@ GitHub Actions will run installation, tests and the production build after these
 
 ## Project boundaries
 
+- [Raw Material Inventory pilot](docs/raw-material-inventory.md)
+- [Administration and RBAC preview](docs/admin-rbac.md)
 - [Fabric implementation and data mapping](docs/fabric-data-map.md)
 - [Code quality and sanity checks](docs/code-quality.md)
 - [Architecture and decisions](docs/architecture.md)

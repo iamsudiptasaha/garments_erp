@@ -60,3 +60,9 @@ order by receipt.batch_no;
 `$1` is the selected mapping ID; it is not the colour master ID or name. This is a parameterised query specification for the live adapter, not a schema migration. Read-only schema inspection confirmed that `dyeing_program_item.batch_no` already references the unique `dyed_fabric_item.batch_no`; no duplicate batch column/table is needed. Local implementation uses the same join path over schema-shaped records.
 
 Colour mappings display attached-swatch status by joining `color_map_by_brand.color_map_id` to `color_map.attached_swatch`. The flag stays editable only on the colour master and appears in mapping Overview, Sheet and export/print columns.
+
+## Reference data screens
+
+The separate expandable **Reference data** section provides Yarn types (`yarn_type.name`, `yarn_count`), Fabric types (`fabric_type.name`) and Brands (`brand_list.brand`). These reuse the existing master-record forms, review/confirmation, Overview and protected Sheet with formatting, CSV and print. Usage counts are derived from linked records. Renames retain IDs and update derived fabric names and form choices. Names are trimmed and duplicate names are rejected without case sensitivity. Yarn count is required when creating or editing a yarn type. No delete operation is offered for linked reference records.
+
+These are local screens over the existing schema-shaped collections, with no database migration or live writes. Existing custom roles receive no new grants automatically; Administrator's protected catalogue is refreshed to include new resources. HR and Administration remain separate. Broader inventory, production, billing and dispatch workflows still require their own schema/behaviour review.
