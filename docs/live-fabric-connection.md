@@ -19,7 +19,7 @@ The user explicitly approved this migration on 30 October 2026; it was applied s
 - Header, detail lines and output batch mappings save together; temporary browser IDs are resolved to database-generated IDs in one transaction.
 - Database-generated program and yarn PO numbers remain server-owned.
 - Bigint identifiers travel as strings, without browser precision loss.
-- Original row contents and root timestamp are checked under locks to reject stale edits. Portal writes serialize before checking yarn/greige balances; root timestamps advance after every document save.
+- Original row contents and root timestamp are checked under locks to reject stale edits. Portal writes serialize and root timestamps advance after every document save. Fabric weight shortages and gains are allowed: source/output quantity comparisons do not reject saves.
 - Caller-supplied fields, tables, cross-document moves, arbitrary attachment links and header deletion are rejected. Uploads continue through the existing file endpoints.
 - A failed network/database save keeps the editor open and shows the error; nothing falls back to local business storage.
 - Missing historical values remain missing. No sample rows, approvals, quantities or identifiers are synthesized for live records.

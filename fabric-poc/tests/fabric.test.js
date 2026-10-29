@@ -9,7 +9,7 @@ test('one header is saved with many lines atomically and edits retain line ident
  const data=initialFabric(),draft=documentFor(data,'knitting','kb1');draft.header.invoice_number='KB-026-EDIT';draft.header.knitter_id='kn2';draft.lines[0].consumption=520;
  const next=saveDocument(data,'knitting',draft),rows=fabricRows(next,'knitting').filter(r=>r.documentId==='kb1');
  assert.equal(next.knitting_bill.length,2);assert.equal(rows.length,2);assert.ok(rows.every(r=>r.bill==='KB-026-EDIT'&&r.supplier==='Metro Knitting'));assert.deepEqual(draft.lines.map(l=>l.id),['ki1','ki2']);assert.equal(fabricTotals(next).yarnLeft,860);assert.equal(data.knitting_bill[0].invoice_number,'KB-026');
- const failed=structuredClone(draft);failed.lines[1].consumption=600;assert.throws(()=>saveDocument(data,'knitting',failed),/exceeds the yarn available/);assert.equal(data.knitting_bill_item[0].consumption,500);
+ const failed=structuredClone(draft);failed.lines[1].consumption=600;assert.equal(saveDocument(data,'knitting',failed).knitting_bill_item.find(r=>r.id===failed.lines[1].id).consumption,600);assert.equal(data.knitting_bill_item[0].consumption,500);
 });
 test('new multi-line knitting bill creates one parent and prevents duplicate invoice parents',()=>{
  const data=initialFabric(),line={yarn_bill_item_id:'ybi2',fabric_type_id:'ft1',greige_gsm:180,billed_rate:12,consumption:50,billed_quantity:48,billed_rolls:2};
@@ -126,3 +126,5 @@ test('database-generated document numbers cannot be entered or overwritten in lo
 test('lab-dip record picker exposes separate metadata columns and swatch blanks',async()=>{
  const {labRecordRows}=await import('../src/fabric/lab-record-select.js'),data=initialFabric(),v=data.lab_dip_version[0];v.lab_dip_status_id='ld-swatch';v.attached_swatch=true;v.date='2026-10-30';v.shade_card_no='unused';v.shade_card_option='unused';const row=labRecordRows(data,'co1','dy1').find(r=>r.id===v.id);assert.equal(row.status,'Attached Swatch');assert.equal(row.date,'2026-10-30');assert.equal(row.shade,null);assert.equal(row.option,null);assert.equal(row.edition,1);assert.equal(row.version,1);
 });
+
+test('Fabric permits weight gain, shortage and negative remaining balance without altering inputs',()=>{const d=initialFabric();d.knitting_bill_item[0].consumption=2000;d.knitting_bill_item[0].billed_quantity=2200;d.dyed_fabric_item[0].gross_quantity=3000;d.dyed_fabric_item[0].billed_quantity=3100;d.dyed_fabric_item[0].final_quantity=3200;assert.equal(validateFabric(d),true);assert.ok(fabricRows(d,'yarnLeft').some(r=>r.left<0));assert.ok(fabricRows(d,'greige').some(r=>r.left<0))});
