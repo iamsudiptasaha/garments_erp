@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4.156.0/config-schema.json",
+  "name": "garments-erp",
+  "pages_build_output_dir": "../../fabric-poc/dist",
+  "compatibility_date": "2026-10-30"
+}

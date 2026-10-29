@@ -1,0 +1,101 @@
+name: Approved Pages release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+concurrency:
+  group: erp-pages-release
+  cancel-in-progress: false
+jobs:
+  checks:
+    uses: ./.github/workflows/verify.yml
+  staging:
+    needs: checks
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      VITE_DATA_MODE: supabase
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      PRODUCTION_SUPABASE_URL: ${{ vars.PRODUCTION_SUPABASE_URL }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+      - name: Staging must use its own backend
+        run: node -e 'if(!process.env.PRODUCTION_SUPABASE_URL || process.env.VITE_SUPABASE_URL===process.env.PRODUCTION_SUPABASE_URL) throw Error("Configure a separate staging Supabase project")'
+      - run: npm --prefix fabric-poc ci
+      - run: node scripts/ci/build-public.mjs
+      - run: node scripts/ci/bundle-guard.mjs
+      - run: npm --prefix deploy/cloudflare ci --ignore-scripts
+      - name: Deploy staging only
+        run: node scripts/ci/pages-deploy.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+          DEPLOY_BRANCH: staging
+      - name: Verify hosted staging entries and headers
+        run: node scripts/ci/verify-deployment.mjs
+        env:
+          DEPLOYMENT_URL: ${{ vars.DEPLOYMENT_URL }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+      - run: npm --prefix fabric-poc exec playwright install --with-deps chromium
+      - name: Staging browser smoke tests without writes
+        run: npm --prefix fabric-poc run e2e
+        env:
+          E2E_BASE_URL: ${{ vars.DEPLOYMENT_URL }}
+  production:
+    needs: staging
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+      actions: read
+    env:
+      VITE_DATA_MODE: supabase
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+      - name: Verify independent production approval and protected main
+        run: node scripts/ci/environment-policy.mjs
+        env:
+          GH_POLICY_TOKEN: ${{ secrets.GH_POLICY_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Require explicit confirmation that reviewed DB migrations are applied
+        run: node scripts/ci/check-db-approval.mjs
+        env:
+          APPLIED_DATABASE_MANIFEST_SHA256: ${{ vars.APPLIED_DATABASE_MANIFEST_SHA256 }}
+      - run: npm --prefix fabric-poc ci
+      - run: node scripts/ci/build-public.mjs
+      - run: node scripts/ci/bundle-guard.mjs
+      - run: npm --prefix deploy/cloudflare ci --ignore-scripts
+      - name: Deploy reviewed production commit
+        run: node scripts/ci/pages-deploy.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+          DEPLOY_BRANCH: main
+      - name: Verify production deployment
+        run: node scripts/ci/verify-deployment.mjs
+        env:
+          DEPLOYMENT_URL: ${{ vars.DEPLOYMENT_URL }}
+          EXPECTED_COMMIT: ${{ github.sha }}

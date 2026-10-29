@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+export TEST_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55422/postgres'
+node scripts/ci/assert-test-db.mjs
+container=supabase_db_garments-erp-ci
+# Fixed container name and no remote flags. Production URLs/keys are never accepted.
+node database/ci/seed.mjs /tmp/erp-ci-seed.sql
+docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/ci/baseline.sql >/tmp/erp-ci-baseline.log
+for migration in supabase/migrations/*.sql; do
+  version=$(basename "$migration" | cut -d_ -f1)
+  if [[ "$version" > 20261029201439 ]]; then
+    docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$migration" >/tmp/erp-ci-migration.log
+  fi
+done
+docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < /tmp/erp-ci-seed.sql >/tmp/erp-ci-seed.log
+node fabric-poc/integration/database-check.mjs
+# Existing contracts run in the isolated database only.
+for sql in database/tests/fabric-reference-contract.sql database/tests/live-fabric-access.sql database/tests/fabric-validation-scope.sql; do
+  docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$sql" >/tmp/erp-ci-contract.log
+done
+# Restore rehearsal for a synthetic application backup; never downloads production backups.
+docker exec "$container" pg_dump -U postgres -d postgres -Fc -n auth -n storage -n garments_erp -n garments_access > /tmp/erp-ci-backup.dump
+docker exec "$container" createdb -U postgres --template=template0 erp_ci_restore
+docker exec "$container" psql -U postgres -d erp_ci_restore -v ON_ERROR_STOP=1 -c 'create schema extensions; create extension if not exists pgcrypto with schema extensions; create extension if not exists "uuid-ossp" with schema extensions;' >/tmp/erp-ci-restore-reset.log 2>&1
+docker exec -i "$container" pg_restore -U supabase_admin -d erp_ci_restore --no-owner --exit-on-error < /tmp/erp-ci-backup.dump >/tmp/erp-ci-restore.log 2>&1
+docker exec "$container" psql -U postgres -d erp_ci_restore -v ON_ERROR_STOP=1 -c "do \$\$ begin if (select count(*) from garments_access.app_user)<>2 then raise exception 'Synthetic restore count mismatch';end if;end \$\$;" >/tmp/erp-ci-restore-check.log
+echo 'PASS isolated schema replay, security/transactions/concurrency, and synthetic backup restore'

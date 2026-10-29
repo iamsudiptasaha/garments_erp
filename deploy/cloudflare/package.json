@@ -1,0 +1,8 @@
+{
+  "name": "erp-cloudflare-deployment-adapter",
+  "private": true,
+  "version": "1.0.0",
+  "devDependencies": {
+    "wrangler": "4.156.0"
+  }
+}

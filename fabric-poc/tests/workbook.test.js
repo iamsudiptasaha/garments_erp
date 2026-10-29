@@ -1,4 +1,30 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {seed,clone} from '../src/model.js';import {buildWorkbook,readSourceChanges} from '../src/workbook.js';
-test('workbook uses native formulas for yarn, greige and prices',()=>{const w=buildWorkbook(seed);assert.equal(w.sheetOrder.length,4);assert.match(w.sheets.yarn.cellData[1][5].f,/SUMIF/);assert.match(w.sheets.greige.cellData[1][5].f,/SUMIFS/);assert.match(w.sheets.dyed.cellData[1][10].f,/1\+J2\/100/);assert.equal(w.sheets.knitting.freeze.ySplit,1);assert.equal(w.sheets.knitting.freeze.xSplit,2)});
-test('source values are matched by stable identity after rows are sorted',()=>{const w=buildWorkbook(seed);const cells=w.sheets.knitting.cellData;[cells[1],cells[2]]=[cells[2],cells[1]];cells[2][5].v=550;const next=readSourceChanges(w,seed);assert.equal(next.knitting.find(k=>k.id==='k1').consumption,550);assert.equal(next.knitting.find(k=>k.id==='k2').consumption,120);assert.deepEqual(seed,clone(seed))});
-test('source formulas and deleted identities cannot be validated as raw input',()=>{const w=buildWorkbook(seed);w.sheets.knitting.cellData[1][5]={f:'=1+1',v:2};assert.throws(()=>readSourceChanges(w,seed),/not formulas/);delete w.sheets.knitting.cellData[1];assert.throws(()=>readSourceChanges(w,seed),/deleted|identity/)});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { seed, clone } from '../src/model.js';
+import { buildWorkbook, readSourceChanges } from '../src/workbook.js';
+test('workbook uses native formulas for yarn, greige and prices', () => {
+  const w = buildWorkbook(seed);
+  assert.equal(w.sheetOrder.length, 4);
+  assert.match(w.sheets.yarn.cellData[1][5].f, /SUMIF/);
+  assert.match(w.sheets.greige.cellData[1][5].f, /SUMIFS/);
+  assert.match(w.sheets.dyed.cellData[1][10].f, /1\+J2\/100/);
+  assert.equal(w.sheets.knitting.freeze.ySplit, 1);
+  assert.equal(w.sheets.knitting.freeze.xSplit, 2);
+});
+test('source values are matched by stable identity after rows are sorted', () => {
+  const w = buildWorkbook(seed);
+  const cells = w.sheets.knitting.cellData;
+  [cells[1], cells[2]] = [cells[2], cells[1]];
+  cells[2][5].v = 550;
+  const next = readSourceChanges(w, seed);
+  assert.equal(next.knitting.find((k) => k.id === 'k1').consumption, 550);
+  assert.equal(next.knitting.find((k) => k.id === 'k2').consumption, 120);
+  assert.deepEqual(seed, clone(seed));
+});
+test('source formulas and deleted identities cannot be validated as raw input', () => {
+  const w = buildWorkbook(seed);
+  w.sheets.knitting.cellData[1][5] = { f: '=1+1', v: 2 };
+  assert.throws(() => readSourceChanges(w, seed), /not formulas/);
+  delete w.sheets.knitting.cellData[1];
+  assert.throws(() => readSourceChanges(w, seed), /deleted|identity/);
+});

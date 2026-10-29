@@ -1,0 +1,41 @@
+name: Approved Pages rollback
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_id:
+        description: Previous successful production deployment ID
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: erp-pages-release
+  cancel-in-progress: false
+jobs:
+  rollback:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/ci/environment-policy.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_POLICY_TOKEN: ${{ secrets.GH_POLICY_TOKEN }}
+      - name: Roll back only the approved production frontend deployment
+        run: node scripts/ci/pages-rollback.mjs
+        env:
+          ROLLBACK_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+      - run: node scripts/ci/verify-deployment.mjs
+        env:
+          DEPLOYMENT_URL: ${{ vars.DEPLOYMENT_URL }}

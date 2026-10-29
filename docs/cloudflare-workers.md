@@ -1,3 +1,5 @@
+> Legacy Workers deployment reference. The proposed Pages pipeline is documented in `docs/secure-ci-setup.md`. Do not run both deployment authorities.
+
 # Cloudflare Workers CI/CD
 
 GitHub Actions runs coherence checks, lint, unused/duplicate checks, tests, build, catalogue verification and dependency audit. Only a successful `main` run can deploy; pull requests never deploy. The deployment uploads the exact verified build artifact using pinned Wrangler 4.156.0. No database migrations run in this workflow.
@@ -30,4 +32,4 @@ Rollback using Cloudflare Workers → Deployments → an earlier successful prod
 
 Official guide: https://developers.cloudflare.com/workers/static-assets/
 
-The token should be scoped to the selected Cloudflare account. Account → Account Settings → Read may also be needed for account discovery when creating a new Worker. Never use a Global API Key. `wrangler.json` contains no credentials; production values are supplied through GitHub secrets/variables.
+The token should be scoped to the selected Cloudflare account. Account → Account Settings → Read may also be needed for account discovery when creating a new Worker. Never use a Global API Key. `deploy/cloudflare/legacy-worker.json` contains no credentials; production values are supplied through GitHub secrets/variables.
