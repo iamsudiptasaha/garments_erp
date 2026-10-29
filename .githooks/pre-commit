@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+root=$(git rev-parse --show-toplevel)
+snapshot=$(mktemp -d)
+trap 'rm -rf "$snapshot"' EXIT HUP INT TERM
+# Export the staged tree: unstaged fixes cannot disguise a broken commit.
+git archive "$(git write-tree)" | tar -x -C "$snapshot"
+ln -s "$root/fabric-poc/node_modules" "$snapshot/fabric-poc/node_modules"
+cd "$snapshot"
+node scripts/check-coherence.mjs
+node --test scripts/coherence.test.mjs
+cd fabric-poc
+npm test

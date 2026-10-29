@@ -33,3 +33,13 @@ The FortuneSheet dependency chain reports uuid advisory GHSA-w5hq-g745-h8pq, sho
 ## Initial verification
 
 The complete gate passes with 15 tests. Separate temporary probes confirmed non-zero exits for an undefined variable, an unreachable unused file, and an intentionally duplicated source block. Probe files were removed. Initial cleanup removed unused exports and an unused navigation-registry placeholder, fixed local const declarations, and documented the browser-storage fallback catch.
+
+## Database/UI coherence gate
+
+The database is authoritative. `npm run check:coherence` compares declared form entities, input keys, detail keys, document foreign keys, checklist fields and screen/table catalogue references with `database/schema/live-schema.json`, captured read-only from Supabase. Missing names block the check. A UI label can differ from a database identifier; a stored field cannot silently do so. Composite forms and derived output columns need explicit adapter contracts before they can be certified.
+
+`.githooks/pre-commit` runs the checker and domain tests on every normal local commit after installing with `git config core.hooksPath .githooks`. The hook exports the staged Git tree to a temporary folder, so unstaged changes cannot mask the committed version. Git hooks can be bypassed; the same gate is part of `npm run quality` in GitHub Actions. Repository branch protection is not configured.
+
+A committed schema snapshot is not a live connection. Refresh it from the read-only query in `database/schema/capture.sql` after every approved database change, retaining the project ID and capture timestamp. No service key is stored in the repository. Remote changes made without refreshing this snapshot cannot be detected by an offline commit hook.
+
+Workflow correctness also requires the domain regression tests and human review of changed source-to-destination mappings, nullability, units, quantities, defaults, role rules and status transitions. This gate is deliberately not described as an AI reviewer or proof that all dataflows are correct. Do not add blanket exceptions or baseline current mismatches just to pass it. Resolve discrepancies against the database or record an explicit reviewed adapter with a regression test.

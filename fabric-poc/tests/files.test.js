@@ -39,3 +39,42 @@ test('only Administrator can edit registry settings; referenced buckets cannot b
  const next=updateBucketSettings(registry,input,{isAdministrator:true,buckets});assert.equal(resolveGroup(next,'fabric_bills').bucket_id,'new-private-bucket');assert.equal(resolveGroup(next,'fabric_bills').version,2);assert.equal(resolveGroup(registry,'fabric_bills').bucket_id,group.bucket_id);
  const existing=updateBucketSettings(registry,{...input,bucketId:group.bucket_id},{isAdministrator:true,buckets,attachments:[{bucket_group_id:group.id}]});assert.equal(resolveGroup(existing,'fabric_bills').description,'Revised fabric documents');
 });
+test('server content validation rejects spoofed MIME types',async()=>{
+ const {matchesContent}=await import('../../supabase/functions/erp-files/content.mjs');
+ assert.equal(matchesContent(new TextEncoder().encode('%PDF-1.4\n'),'application/pdf'),true);
+ assert.equal(matchesContent(new TextEncoder().encode('<script>bad</script>'),'application/pdf'),false);
+ assert.equal(matchesContent(new Uint8Array([137,80,78,71,13,10,26,10]),'image/png'),true);
+ assert.equal(matchesContent(new Uint8Array([255,216,255]),'image/jpeg'),true);
+ assert.equal(matchesContent(new TextEncoder().encode('RIFF0000WEBP'),'image/webp'),true);
+ assert.equal(matchesContent(new Uint8Array([]),'image/svg+xml'),false);
+});
+test('live file commands preserve string IDs and upload only validated saved-record files',async()=>{
+ const {liveFileCommands}=await import('../src/files/live.js');const calls=[];
+ const client={rpc:async(name,args)=>{calls.push({name,args});return {data:[],error:null}},functions:{invoke:async(name,args)=>{calls.push({name,args});return {data:{id:'9223372036854775807'},error:null}}}};
+ const commands=liveFileCommands(client),store=commands.store(initialBucketRegistry());
+ await store.list('knittingBill','9223372036854775807');assert.equal(calls[0].args.p_record_id,'9223372036854775807');
+ await store.attach({targetKey:'knittingBill',recordId:'12',file:file()});assert.equal(calls[1].name,'erp-files');assert.equal(calls[1].args.body.get('recordId'),'12');
+ await assert.rejects(store.attach({targetKey:'knittingBill',recordId:'sample-12',file:file()}),/Save the record/);
+ assert.equal(calls.length,2);
+});
+test('live uploads follow database routes rather than default group/type settings',async()=>{
+ const {liveFileCommands}=await import('../src/files/live.js');let invoked=0;
+ const client={functions:{invoke:async()=>{invoked++;return {data:{id:'1'},error:null}}}};
+ const registry=initialBucketRegistry(),route={...targetFor('knittingBill'),group:'items',mime:['image/png'],max_bytes:10,enabled:true};
+ const store=liveFileCommands(client).store(registry,[route]);
+ await assert.rejects(store.attach({targetKey:'knittingBill',recordId:'1',file:file()}),/size|supported/);
+ await assert.rejects(store.attach({targetKey:'knittingBill',recordId:'1',file:new File(['12345678901'],'x.png',{type:'image/png'})}),/size/);
+ await store.attach({targetKey:'knittingBill',recordId:'1',file:new File(['png'],'x.png',{type:'image/png'})});
+ assert.equal(invoked,1);
+ const paused=liveFileCommands(client).store(registry,[{...route,enabled:false}]);
+ await assert.rejects(paused.attach({targetKey:'knittingBill',recordId:'1',file:file()}),/disabled/);
+});
+test('bucket lifecycle commands send administrator inputs without exposing storage credentials',async()=>{
+ const {liveFileCommands}=await import('../src/files/live.js');const calls=[];
+ const client={rpc:async(name,args)=>{calls.push({name,args});return {data:{id:'9'},error:null}},functions:{invoke:async(name,args)=>{calls.push({name,args});return {data:{removed:true},error:null}}}};
+ const commands=liveFileCommands(client);
+ await commands.createGroup({group:'lab_dip_files',description:'Shade cards',mime:['image/png'],max_bytes:1048576});
+ assert.deepEqual(calls[0],{name:'erp_create_bucket_group',args:{p_group:'lab_dip_files',p_description:'Shade cards',p_mimes:['image/png'],p_max_bytes:1048576}});
+ await commands.removeGroup({id:'9223372036854775807',version:2},'lab_dip_files');
+ assert.equal(calls[1].args.body.groupId,'9223372036854775807');assert.equal(calls[1].args.body.confirmation,'lab_dip_files');
+});

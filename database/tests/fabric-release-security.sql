@@ -1,0 +1,6 @@
+begin;
+do $$ begin
+ if exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='garments_erp' and c.relname=any(array['attachments','batch_no_lab_dip_version_map','blood_group','brand_list','bucket_group','color_map','color_map_by_brand','contact_purpose','contacts','dyed_fabric_bill','dyed_fabric_item','dyeing_program','dyeing_program_item','dyer','employee','fabric_status_list','fabric_type','gender','knitter','knitting_bill','knitting_bill_item','lab_dip','lab_dip_version','lab_dip_version_status','type_of_employment','yarn_bill','yarn_bill_item','yarn_purchase_order','yarn_purchase_order_item','yarn_supplier','yarn_type','document_number_counter']) and (not c.relrowsecurity or has_table_privilege('anon',c.oid,'SELECT,INSERT,UPDATE,DELETE') or has_table_privilege('authenticated',c.oid,'SELECT,INSERT,UPDATE,DELETE'))) then raise exception 'Direct Fabric data exposure remains';end if;
+ if has_schema_privilege('anon','supasheet','USAGE') or exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='supasheet' and has_function_privilege('anon',p.oid,'EXECUTE')) then raise exception 'Legacy API exposure remains';end if;
+end $$;
+rollback;

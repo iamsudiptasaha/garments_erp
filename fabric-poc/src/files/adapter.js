@@ -44,14 +44,3 @@ export function createMemoryFileRepository(){const rows=new Map(),blobs=new Map(
  async list(targetKey,recordId){return [...rows.values()].filter(r=>r.target_key===targetKey&&r.record_id===String(recordId)).sort((a,b)=>b.created_at.localeCompare(a.created_at)).map(clone)},
  async getBlob(id){const blob=blobs.get(id);if(!blob)throw Error('File is not available in this browser.');return blob}
 }}
-export function createIndexedFileRepository(indexedDB){
- if(!indexedDB)throw Error('This browser does not support local file storage.');
- let connection;
- async function database(){if(!connection)connection=new Promise((resolve,reject)=>{const request=indexedDB.open('garments-local-files-v1',1);request.onupgradeneeded=()=>request.result.createObjectStore('files',{keyPath:'id'});request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)});return connection}
- async function request(mode,operation){const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction('files',mode),req=operation(tx.objectStore('files'));let result;req.onsuccess=()=>{result=req.result};tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error||Error('Local file storage failed.'));tx.onabort=()=>reject(tx.error||Error('Local file storage was interrupted.'))})}
- return {
-  async put(row,blob){await request('readwrite',store=>store.put({...clone(row),blob}))},
-  async list(targetKey,recordId){const rows=await request('readonly',store=>store.getAll());return rows.filter(r=>r.target_key===targetKey&&r.record_id===String(recordId)).sort((a,b)=>b.created_at.localeCompare(a.created_at)).map(({blob:_blob,...row})=>row)},
-  async getBlob(id){const row=await request('readonly',store=>store.get(id));if(!row?.blob)throw Error('The local file is unavailable.');return row.blob}
- };
-}

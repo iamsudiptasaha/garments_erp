@@ -8,6 +8,7 @@ export const FILE_GROUPS=Object.freeze([
 ]);
 const images=['image/jpeg','image/png','image/webp'],documents=['application/pdf',...images];
 export const FILE_TARGETS=Object.freeze([
+ {key:'labDipShade',group:'items',resource:'labDips',table:'lab_dip_version',slot:'shade_card_image_attachment',label:'Lab-dip shade card',mime:images},
  {key:'yarnBill',group:'fabric_bills',resource:'yarn',table:'yarn_bill',slot:'bill_attachment',label:'Yarn bill',mime:documents},
  {key:'knittingBill',group:'fabric_bills',resource:'knitting',table:'knitting_bill',slot:'bill_attachment',label:'Knitting bill',mime:documents},
  {key:'dyedBill',group:'fabric_bills',resource:'dyeBills',table:'dyed_fabric_bill',slot:'bill_attachment',label:'Dyed fabric bill',mime:documents},

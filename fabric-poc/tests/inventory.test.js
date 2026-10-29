@@ -35,8 +35,10 @@ test('receipt supplier and material must belong to its purchase order; SKUs are 
 });
 
 test('order receipts resolve the exact ordered item and fabric receipts clear supplier and purchase order',()=>{
- const data=initialFabric();const next=saveDocument(data,'materialReceipts',receipt({raw_material_item_id:'',raw_material_purchase_order_item_id:'mpl2'}));const added=next.raw_material_check_in.find(r=>r.sku==='NEW-001');assert.equal(added.raw_material_item_id,'mat2');assert.equal(added.raw_material_purchase_order_item_id,'mpl2');
- const fabric=saveDocument(data,'materialReceipts',receipt({raw_material_item_id:'',dyed_fabric_item_id:'df1',raw_material_purchase_order_item_id:'mpl1',quantity:50}));const f=fabric.raw_material_check_in.find(r=>r.sku==='NEW-001');assert.equal(f.raw_material_supplier_list_id,null);assert.equal(f.purchase_order_id,null);assert.equal(f.raw_material_purchase_order_item_id,null);
+ const data=initialFabric();const next=saveDocument(data,'materialReceipts',receipt({raw_material_item_id:'mat2'}));const added=next.raw_material_check_in.find(r=>r.sku==='NEW-001');assert.equal(added.raw_material_item_id,'mat2');assert.equal('raw_material_purchase_order_item_id' in added,false);
+ const fabric=saveDocument(data,'materialReceipts',receipt({raw_material_item_id:'',dyed_fabric_item_id:'df1',quantity:50}));const f=fabric.raw_material_check_in.find(r=>r.sku==='NEW-001');assert.equal(f.raw_material_supplier_list_id,null);assert.equal(f.purchase_order_id,null);assert.equal('raw_material_purchase_order_item_id' in f,false);
  assert.throws(()=>saveDocument(data,'materialReceipts',receipt({purchase_order_id:''})),/purchase order or a fabric batch/);assert.throws(()=>saveDocument(data,'materialReceipts',receipt({raw_material_supplier_list_id:''})),/Select the supplier/);
  const auto=saveDocument(data,'materialReceipts',receipt({sku:''}));assert.match(auto.raw_material_check_in.at(-1).sku,/^RCV-\d{6}$/);
 });
+
+test('legacy receipt upgrade removes nonexistent order-line field without changing source or quantity',()=>{const d=initialFabric();d.raw_material_check_in[0].raw_material_purchase_order_item_id='mpl1';const upgraded=upgradeFabric(d),r=upgraded.raw_material_check_in[0];assert.equal('raw_material_purchase_order_item_id' in r,false);assert.equal(r.purchase_order_id,'mp1');assert.equal(r.raw_material_item_id,'mat1');assert.equal(r.quantity,1500);assert.equal(validateFabric(upgraded),true)});

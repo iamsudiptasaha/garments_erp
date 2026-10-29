@@ -10,7 +10,8 @@
     "lint": "eslint . --max-warnings 0",
     "check:unused": "knip",
     "check:duplicates": "jscpd --config .jscpd.json",
-    "quality": "npm run lint && npm run check:unused && npm run check:duplicates && npm test && npm run build"
+    "quality": "npm run check:coherence && npm run lint && npm run check:unused && npm run check:duplicates && npm test && npm run build",
+    "check:coherence": "node ../scripts/check-coherence.mjs && node --test ../scripts/coherence.test.mjs"
   },
   "dependencies": {
     "@fortune-sheet/react": "1.0.4",
