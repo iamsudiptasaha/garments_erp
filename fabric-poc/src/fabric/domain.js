@@ -1,3 +1,4 @@
+import {upgradeColours,labRows} from '../colours/domain.js';
 import {initialProduction,upgradeProduction,productionRows,productionOptions,validateProduction} from '../production/domain.js';
 import {initialMiscellaneous,upgradeMiscellaneous,miscellaneousRows,miscellaneousOptions,validateMiscellaneous} from '../miscellaneous/domain.js';
 import {initialInventory,upgradeInventory,inventoryRows,inventoryOptions,validateInventory,prepareInventoryEdit} from '../inventory/domain.js';
@@ -6,7 +7,7 @@ const copy=value=>structuredClone(value);
 const uid=()=>crypto.randomUUID();
 const sum=(rows,key)=>rows.reduce((total,row)=>total+Number(row[key]||0),0);
 const list=values=>[...new Set(values.filter(Boolean))].join(', ');
-export function initialFabric(){return upgradeProduction({
+export function initialFabric(){return upgradeColours(upgradeProduction({
  ...initialInventory(),
  ...initialMiscellaneous(),
  ...initialProduction(),
@@ -26,14 +27,14 @@ export function initialFabric(){return upgradeProduction({
  dyeing_program_item:[{id:'di1',dyeing_program_id:'dp1',fabric_type_id:'ft1',quantity:300,color_map_by_brand_id:'co1',comments:'Match approved navy swatch.'},{id:'di2',dyeing_program_id:'dp1',fabric_type_id:'ft2',quantity:100,color_map_by_brand_id:'co1',comments:'Match approved navy swatch.'},{id:'di3',dyeing_program_id:'dp1',fabric_type_id:'ft1',quantity:200,color_map_by_brand_id:'co2',comments:'Soft finish.'},{id:'di4',dyeing_program_id:'dp2',fabric_type_id:'ft1',quantity:100,color_map_by_brand_id:'co2',comments:'Soft finish.'}],
  dyed_fabric_bill:[{id:'db1',invoice_number:'DF-031',invoice_date:'2026-10-26'},{id:'db2',invoice_number:'DF-032',invoice_date:'2026-10-27'}],
  dyed_fabric_item:[{id:'df1',dyed_fabric_bill_id:'db1',dyeing_program_item_id:'di1',knitting_bill_item_id:'ki1',batch_no:'B-104',dyeing_rate:35,gross_quantity:300,billed_quantity:288,final_quantity:285,dyeing_rolls:15},{id:'df2',dyed_fabric_bill_id:'db1',dyeing_program_item_id:'di2',knitting_bill_item_id:'ki2',batch_no:'B-106',dyeing_rate:35,gross_quantity:100,billed_quantity:95,final_quantity:94,dyeing_rolls:5},{id:'df3',dyed_fabric_bill_id:'db2',dyeing_program_item_id:'di3',knitting_bill_item_id:'ki3',batch_no:'B-105',dyeing_rate:32,gross_quantity:200,billed_quantity:192,final_quantity:190,dyeing_rolls:10},{id:'df4',dyed_fabric_bill_id:'db2',dyeing_program_item_id:'di4',knitting_bill_item_id:'ki1',batch_no:'B-109',dyeing_rate:32,gross_quantity:100,billed_quantity:96,final_quantity:94,dyeing_rolls:5}]
-})}
+}))}
 // Upgrade the earlier local fixture without changing document or mapping IDs.
 export function upgradeFabric(data){
- if(data.color_map&&data.brand_list)return upgradeProduction(upgradeMiscellaneous(upgradeInventory(data)));
+ if(data.color_map&&data.brand_list)return upgradeColours(upgradeProduction(upgradeMiscellaneous(upgradeInventory(data))));
  const next=copy(data);next.color_map=[];next.brand_list=[];
  next.color_map_by_brand=next.color_map_by_brand.map(old=>{let colour=next.color_map.find(c=>c.name===old.name);if(!colour){colour={id:uid(),name:old.name,pantone_code:'',attached_swatch:false};next.color_map.push(colour)}let brand=next.brand_list.find(b=>b.brand===(old.brand||'Core'));if(!brand){brand={id:uid(),brand:old.brand||'Core'};next.brand_list.push(brand)}return {id:old.id,color_map_id:colour.id,brand_list_id:brand.id,dyer_id:null,shade_card_no:'',shade_card_option:'',shade_card_image:''}});
  next.item=(next.item||[]).map(r=>({...r,brand_id:next.brand_list.some(b=>b.id===r.brand_id)?r.brand_id:null}));
- return upgradeProduction(upgradeMiscellaneous(upgradeInventory(next)));
+ return upgradeColours(upgradeProduction(upgradeMiscellaneous(upgradeInventory(next))));
 }
 export function selectors(data){
  const get=(table,id)=>data[table].find(row=>row.id===id);
@@ -52,8 +53,9 @@ export function fabricRows(data,page){
  if(page==='yarnTypes')return data.yarn_type.map(r=>({id:r.id,documentId:r.id,name:r.name,count:r.yarn_count,uses:data.yarn_purchase_order_item.filter(l=>l.yarn_type_id===r.id).length}));
  if(page==='fabricTypes')return data.fabric_type.map(r=>({id:r.id,documentId:r.id,name:r.name,knitting:data.knitting_bill_item.filter(l=>l.fabric_type_id===r.id).length,programs:data.dyeing_program_item.filter(l=>l.fabric_type_id===r.id).length}));
  if(page==='brands')return data.brand_list.map(r=>({id:r.id,documentId:r.id,name:r.brand,mappings:data.color_map_by_brand.filter(m=>m.brand_list_id===r.id).length}));
- if(page==='colours')return data.color_map.map(r=>({id:r.id,documentId:r.id,name:r.name,pantone:r.pantone_code||'—',swatch:r.attached_swatch?'Attached':'Not attached',mappings:data.color_map_by_brand.filter(m=>m.color_map_id===r.id).length}));
- if(page==='colourMappings')return data.color_map_by_brand.map(r=>{const c=s.color(r.id);return {id:r.id,documentId:r.id,name:c.name,pantone:c.pantone_code||'—',swatch:c.attached_swatch?'Attached':'Not attached',brand:c.brand,supplier:r.dyer_id?supplier('dyer',r.dyer_id):'Any dyer',shade:r.shade_card_no||'—',option:r.shade_card_option||'—',image:r.shade_card_image||'—'}});
+ if(page==='labDips')return labRows(data);
+ if(page==='colours')return data.color_map.map(r=>({id:r.id,documentId:r.id,name:r.name,pantone:r.pantone_code||'—',mappings:data.color_map_by_brand.filter(m=>m.color_map_id===r.id).length}));
+ if(page==='colourMappings')return data.color_map_by_brand.map(r=>{const c=s.color(r.id);return {id:r.id,documentId:r.id,name:c.name,pantone:c.pantone_code||'—',brand:c.brand}});
  if(page==='suppliers')return ['yarn_supplier','knitter','dyer'].flatMap(table=>data[table].map(r=>({id:`${table}:${r.id}`,documentId:`${table}:${r.id}`,name:supplier(table,r.id),kind:table==='yarn_supplier'?'Yarn supplier':table==='knitter'?'Knitter':'Dyer',table,orders:data[table==='yarn_supplier'?'yarn_purchase_order':table==='knitter'?'knitting_bill':'dyeing_program'].filter(d=>d[table==='yarn_supplier'?'yarn_supplier_id':`${table}_id`]===r.id).length})));
  if(page==='orders')return data.yarn_purchase_order_item.map(r=>{const h=get('yarn_purchase_order',r.purchase_order_number_id),received=sum(data.yarn_bill_item.filter(x=>x.yarn_purchase_order_item_id===r.id),'billed_quantity');return {id:r.id,documentId:h.id,bill:h.purchase_order_number,supplier:supplier('yarn_supplier',h.yarn_supplier_id),name:get('yarn_type',r.yarn_type_id).name,quantity:r.quantity,received,left:r.quantity-received,rate:r.rate}});
  if(['yarn','yarnLeft'].includes(page))return data.yarn_bill_item.map(r=>{const y=yarn(r),linked=data.knitting_bill_item.filter(k=>k.yarn_bill_item_id===r.id),consumed=sum(linked,'consumption');return {id:r.id,documentId:y.bill.id,bill:y.bill.invoice_number,date:y.bill.invoice_date,name:y.type.name,supplier:y.supplier,source:y.order.purchase_order_number,quantity:r.billed_quantity,bags:r.billed_bags,rate:r.billed_rate,consumed,left:r.billed_quantity-consumed,knitters:list(linked.map(k=>knit(k).supplier)),displayValues:{knitters:[...new Set(linked.map(k=>knit(k).supplier))]}}});
@@ -90,7 +92,7 @@ export function validateFabric(data){
   for(const row of data[page.entity])for(const field of page.header)if(field.required!==false)required(row[field.key],field.label);
   for(const row of data[page.lines])for(const field of page.lineFields){if(field.required!==false)required(row[field.key],field.label);if(field.type==='number'&&(!Number.isFinite(row[field.key])||row[field.key]<0))throw Error(`${field.label} must be a non-negative number.`)}
  }
- for(const spec of Object.values(pages).filter(p=>p.master))for(const row of data[spec.entity])for(const f of spec.header)if(f.required!==false&&!(row.reconciliation&&f.key==='check_out_type_id'))required(row[f.key],f.label);
+ for(const spec of Object.values(pages).filter(p=>p.master))for(const row of data[spec.entity])for(const f of spec.header)if(f.required!==false&&!(spec.entity==='job'&&f.key==='verify_employee_id'&&!row.verify_employee_id)&&!(row.reconciliation&&f.key==='check_out_type_id'))required(row[f.key],f.label);
  for(const m of data.color_map_by_brand)if(m.dyer_id&&!data.dyer.some(d=>d.id===m.dyer_id))throw Error('The mapped dyer is missing.');
  for(const line of data.dyeing_program_item){const mapping=data.color_map_by_brand.find(m=>m.id===line.color_map_by_brand_id),program=data.dyeing_program.find(p=>p.id===line.dyeing_program_id);if(mapping.dyer_id&&mapping.dyer_id!==program.dyer_id)throw Error('A dyeing program colour mapping belongs to a different dyer.');if(line.batch_no&&!batchesForMapping(data,line.color_map_by_brand_id).includes(line.batch_no))throw Error('Selected batch does not belong to this colour mapping.');}
  for(const row of data.yarn_bill_item){const consumed=sum(data.knitting_bill_item.filter(k=>k.yarn_bill_item_id===row.id),'consumption');if(consumed>row.billed_quantity+1e-8)throw Error('Knitting consumption exceeds the yarn available on its source bill line.')}
@@ -104,7 +106,9 @@ export function saveDocument(data,page,draft){
  for(const field of spec.header){const value=draft.header[field.key];if(field.required!==false&&!((draft.reconciliation||draft.header.reconciliation)&&field.key==='check_out_type_id'))required(value,field.label);header[field.key]=field.type==='checkbox'?Boolean(value):field.type==='number'?(value==null||String(value).trim()===''?null:Number(value)):value==null?'':String(value).trim();if(field.type==='select'&&!header[field.key])header[field.key]=null;if(field.key==='dyer_id'&&!header[field.key])header[field.key]=null;}
  for(const field of spec.header)if(field.type==='number'&&header[field.key]!=null&&(!Number.isFinite(header[field.key])||header[field.key]<0))throw Error(`${field.label} must be a non-negative number.`);
  if(spec.inventory)prepareInventoryEdit(next,page,header,draft);
- if(spec.master){if(draft.header.id&&!next[spec.entity].some(r=>r.id===id))throw Error('This record no longer exists. Reopen the page before editing.');if(spec.identity&&next[spec.entity].some(r=>r.id!==id&&r[spec.identity].trim().toLowerCase()===header[spec.identity].toLowerCase()))throw Error('This name already exists. Edit the existing record.');const index=next[spec.entity].findIndex(r=>r.id===id);if(index>=0)next[spec.entity][index]={...next[spec.entity][index],...header};else next[spec.entity].push(header);if(page==='colours'&&next.color_map.some(r=>r.id!==id&&r.name.toLowerCase()===header.name.toLowerCase()&&(r.pantone_code||'').toLowerCase()===(header.pantone_code||'').toLowerCase()))throw Error('This colour and Pantone reference already exist. Edit the existing colour.');if(page==='colourMappings'&&next.color_map_by_brand.some(r=>r.id!==id&&['color_map_id','brand_list_id','dyer_id','shade_card_no','shade_card_option'].every(k=>(r[k]||'')===(header[k]||''))))throw Error('This colour mapping already exists. Edit the existing mapping.');validateFabric(next);return next;}
+ if(page==='productionDesigns')header.share_weight=1;
+ if(page==='productionJobs'&&draft.header.id&&next.job.find(j=>j.id===id)?.stage_id!==header.stage_id)throw Error('A stage change requires a new job row.');
+ if(spec.master){if(draft.header.id&&!next[spec.entity].some(r=>r.id===id))throw Error('This record no longer exists. Reopen the page before editing.');if(spec.identity&&next[spec.entity].some(r=>r.id!==id&&r[spec.identity].trim().toLowerCase()===header[spec.identity].toLowerCase()))throw Error('This name already exists. Edit the existing record.');const index=next[spec.entity].findIndex(r=>r.id===id);if(index>=0)next[spec.entity][index]={...next[spec.entity][index],...header};else next[spec.entity].push(header);if(page==='colours'&&next.color_map.some(r=>r.id!==id&&r.name.toLowerCase()===header.name.toLowerCase()&&(r.pantone_code||'').toLowerCase()===(header.pantone_code||'').toLowerCase()))throw Error('This colour and Pantone reference already exist. Edit the existing colour.');if(page==='colourMappings'&&next.color_map_by_brand.some(r=>r.id!==id&&['color_map_id','brand_list_id'].every(k=>(r[k]||'')===(header[k]||''))))throw Error('This colour mapping already exists. Edit the existing mapping.');validateFabric(next);return next;}
  const invoiceKey=spec.entity==='raw_material_purchase_order'?'purchase_order_number':page==='orders'?'purchase_order_number':page==='programs'?'program_number':'invoice_number';
  if(next[spec.entity].some(r=>r.id!==id&&r[invoiceKey]===header[invoiceKey]&&(page!=='knitting'||r.knitter_id===header.knitter_id)))throw Error('This document already exists. Open it and edit its line items instead.');
  const index=next[spec.entity].findIndex(r=>r.id===id);if(index>=0)next[spec.entity][index]={...next[spec.entity][index],...header};else next[spec.entity].push(header);

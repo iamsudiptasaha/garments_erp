@@ -1,25 +1,27 @@
 import {writeFileSync} from 'node:fs';
 import {pages} from '../fabric-poc/src/fabric/catalog.js';
 const fabricChain=['contacts','yarn_supplier','yarn_type','yarn_purchase_order','yarn_purchase_order_item','yarn_bill','yarn_bill_item','knitter','fabric_type','knitting_bill','knitting_bill_item'];
-const dyeChain=[...fabricChain,'dyer','dyeing_program','dyeing_program_item','color_map','color_map_by_brand','brand_list','dyed_fabric_bill','dyed_fabric_item'];
+const labChain=['lab_dip','lab_dip_version','lab_dip_version_status','batch_no_lab_dip_version_map'];
+const dyeChain=[...labChain,...fabricChain,'dyer','dyeing_program','dyeing_program_item','color_map','color_map_by_brand','brand_list','dyed_fabric_bill','dyed_fabric_item'];
 const stockChain=['raw_material_check_in','raw_material_check_out','raw_material_item','category_list','unit_of_measure','raw_material_supplier_list','contacts','raw_material_purchase_order','raw_material_purchase_order_item',...dyeChain];
 const definitions={
- productionItems:{write:['item'],read:['brand_list','product_type_list','attachments','item_part','job']},
- productionJobs:{write:['job','design_per_job','stage_pieces'],read:['item','item_part','part_list','stage','stage_type','item_status_list','job_worker','contacts','employee','design','item_size_list','size_list','challan_job_item','challan_job_item_pieces']},
+ productionItems:{write:['item','item_part','item_size_list','item_cut_ratio','variant','variant_item','production_checklist'],read:['brand_list','product_type_list','attachments','part_list','size_list','job','item_status_list',...labChain,'color_map','color_map_by_brand','view_variant_item_lab_dip_status']},
+ productionJobs:{write:['job','variant_item_per_job','stage_pieces','job_assignees'],read:['item','item_part','part_list','stage','stage_type','item_status_list','job_worker','contacts','employee','variant','item_size_list','size_list','challan_job_item','challan_job_item_pieces']},
  productionWorkers:{write:['job_worker'],read:['contacts','contact_purpose','job']},
  productionParts:{write:['item_part'],read:['item','part_list','job']},
  productionItemSizes:{write:['item_size_list'],read:['item','size_list']},
- productionDesigns:{write:['design']},productionStages:{write:['stage'],read:['stage_type']},
+ productionDesigns:{write:['variant']},productionStages:{write:['stage'],read:['stage_type']},
  productionStageTypes:{write:['stage_type']},productionPartTypes:{write:['part_list']},productionSizes:{write:['size_list']},
  productionProductTypes:{write:['product_type_list'],read:['gender']},productionStatuses:{write:['item_status_list']},
  yarnTypes:{write:['yarn_type'],read:['yarn_purchase_order_item']},fabricTypes:{write:['fabric_type'],read:['knitting_bill_item','dyeing_program_item']},brands:{write:['brand_list'],read:['color_map_by_brand']},
+ labDips:{write:['lab_dip','lab_dip_version'],read:['color_map_by_brand','color_map','brand_list','dyer','contacts','lab_dip_version_status','attachments']},
  colours:{write:['color_map'],read:['color_map_by_brand']},colourMappings:{write:['color_map_by_brand'],read:['color_map','brand_list','dyer','contacts']},
  suppliers:{write:['contacts','yarn_supplier','knitter','dyer'],read:['contact_purpose','yarn_purchase_order','knitting_bill','dyeing_program']},
  orders:{write:['yarn_purchase_order','yarn_purchase_order_item'],read:['yarn_supplier','contacts','yarn_type','yarn_bill_item']},
  yarn:{write:['yarn_bill','yarn_bill_item'],read:['yarn_purchase_order','yarn_purchase_order_item','yarn_supplier','contacts','yarn_type','knitting_bill_item']},
  knitting:{write:['knitting_bill','knitting_bill_item'],read:[...fabricChain,'dyed_fabric_item','fabric_status_list','view_knitted_fabric_name']},
- programs:{write:['dyeing_program','dyeing_program_item'],read:['dyer','contacts','fabric_type','color_map','color_map_by_brand','brand_list','dyed_fabric_item']},
- dyeBills:{write:['dyed_fabric_bill','dyed_fabric_item'],read:dyeChain},
+ programs:{write:['dyeing_program','dyeing_program_item'],read:[...labChain,'view_default_lab_dip_version','dyer','contacts','fabric_type','color_map','color_map_by_brand','brand_list','dyed_fabric_item']},
+ dyeBills:{write:['dyed_fabric_bill','dyed_fabric_item','batch_no_lab_dip_version_map'],read:dyeChain},
  dyed:{report:dyeChain},yarnLeft:{report:fabricChain},greige:{report:dyeChain},batches:{report:dyeChain},
  materials:{write:['raw_material_item'],read:['category_list','unit_of_measure','raw_material_supplier_list','contacts','raw_material_purchase_order_item','raw_material_check_in']},
  materialSuppliers:{write:['raw_material_supplier_list'],read:['contacts','contact_purpose','transporter','raw_material_purchase_order']},

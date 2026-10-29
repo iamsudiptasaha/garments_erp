@@ -110,7 +110,7 @@
     },
     {
       "key": "productionDesigns",
-      "name": "Designs",
+      "name": "Variants",
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionDesigns",
@@ -361,12 +361,21 @@
       "admin_only": false
     },
     {
+      "key": "labDips",
+      "name": "Lab dips",
+      "resource_type": "screen",
+      "parent": "section:colours",
+      "route": "/fabric.html#labDips",
+      "sort_order": 40,
+      "admin_only": false
+    },
+    {
       "key": "suppliers",
       "name": "Suppliers",
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#suppliers",
-      "sort_order": 40,
+      "sort_order": 41,
       "admin_only": false
     },
     {
@@ -375,7 +384,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#orders",
-      "sort_order": 41,
+      "sort_order": 42,
       "admin_only": false
     },
     {
@@ -384,7 +393,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#yarn",
-      "sort_order": 42,
+      "sort_order": 43,
       "admin_only": false
     },
     {
@@ -393,7 +402,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#knitting",
-      "sort_order": 43,
+      "sort_order": 44,
       "admin_only": false
     },
     {
@@ -402,7 +411,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#programs",
-      "sort_order": 44,
+      "sort_order": 45,
       "admin_only": false
     },
     {
@@ -411,7 +420,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#dyeBills",
-      "sort_order": 45,
+      "sort_order": 46,
       "admin_only": false
     },
     {
@@ -420,7 +429,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#dyed",
-      "sort_order": 46,
+      "sort_order": 47,
       "admin_only": false
     },
     {
@@ -429,7 +438,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#yarnLeft",
-      "sort_order": 47,
+      "sort_order": 48,
       "admin_only": false
     },
     {
@@ -438,7 +447,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#greige",
-      "sort_order": 48,
+      "sort_order": 49,
       "admin_only": false
     },
     {
@@ -447,7 +456,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#batches",
-      "sort_order": 49,
+      "sort_order": 50,
       "admin_only": false
     },
     {
@@ -456,7 +465,7 @@
       "resource_type": "screen",
       "parent": "section:hr",
       "route": "/fabric.html#employees",
-      "sort_order": 50,
+      "sort_order": 51,
       "admin_only": false
     },
     {
@@ -465,7 +474,7 @@
       "resource_type": "screen",
       "parent": "section:admin",
       "route": "/fabric.html#adminRoles",
-      "sort_order": 51,
+      "sort_order": 52,
       "admin_only": true
     },
     {
@@ -474,7 +483,7 @@
       "resource_type": "screen",
       "parent": "section:admin",
       "route": "/fabric.html#adminRoles",
-      "sort_order": 52,
+      "sort_order": 53,
       "admin_only": true
     },
     {
@@ -483,7 +492,7 @@
       "resource_type": "screen",
       "parent": "section:admin",
       "route": "/fabric.html#adminAudit",
-      "sort_order": 53,
+      "sort_order": 54,
       "admin_only": true
     }
   ],
@@ -491,6 +500,30 @@
     {
       "schema_name": "garments_erp",
       "table_name": "item"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "item_part"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "item_size_list"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "item_cut_ratio"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "variant"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "variant_item"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "production_checklist"
     },
     {
       "schema_name": "garments_erp",
@@ -506,7 +539,11 @@
     },
     {
       "schema_name": "garments_erp",
-      "table_name": "item_part"
+      "table_name": "part_list"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "size_list"
     },
     {
       "schema_name": "garments_erp",
@@ -514,7 +551,39 @@
     },
     {
       "schema_name": "garments_erp",
-      "table_name": "design_per_job"
+      "table_name": "item_status_list"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "batch_no_lab_dip_version_map"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "color_map"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "color_map_by_brand"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "view_variant_item_lab_dip_status"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "variant_item_per_job"
     },
     {
       "schema_name": "garments_erp",
@@ -522,7 +591,7 @@
     },
     {
       "schema_name": "garments_erp",
-      "table_name": "part_list"
+      "table_name": "job_assignees"
     },
     {
       "schema_name": "garments_erp",
@@ -531,10 +600,6 @@
     {
       "schema_name": "garments_erp",
       "table_name": "stage_type"
-    },
-    {
-      "schema_name": "garments_erp",
-      "table_name": "item_status_list"
     },
     {
       "schema_name": "garments_erp",
@@ -547,18 +612,6 @@
     {
       "schema_name": "garments_erp",
       "table_name": "employee"
-    },
-    {
-      "schema_name": "garments_erp",
-      "table_name": "design"
-    },
-    {
-      "schema_name": "garments_erp",
-      "table_name": "item_size_list"
-    },
-    {
-      "schema_name": "garments_erp",
-      "table_name": "size_list"
     },
     {
       "schema_name": "garments_erp",
@@ -662,14 +715,6 @@
     },
     {
       "schema_name": "garments_erp",
-      "table_name": "color_map"
-    },
-    {
-      "schema_name": "garments_erp",
-      "table_name": "color_map_by_brand"
-    },
-    {
-      "schema_name": "garments_erp",
       "table_name": "dyed_fabric_bill"
     },
     {
@@ -707,6 +752,10 @@
     {
       "schema_name": "garments_erp",
       "table_name": "view_knitted_fabric_name"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "view_default_lab_dip_version"
     },
     {
       "schema_name": "garments_erp",
@@ -763,6 +812,66 @@
     {
       "resource_key": "productionItems",
       "schema_name": "garments_erp",
+      "table_name": "item_part",
+      "relation_type": "detail",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "item_size_list",
+      "relation_type": "detail",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "item_cut_ratio",
+      "relation_type": "detail",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "variant",
+      "relation_type": "detail",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "variant_item",
+      "relation_type": "detail",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "production_checklist",
+      "relation_type": "detail",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
       "table_name": "brand_list",
       "relation_type": "lookup",
       "can_view": true,
@@ -793,7 +902,17 @@
     {
       "resource_key": "productionItems",
       "schema_name": "garments_erp",
-      "table_name": "item_part",
+      "table_name": "part_list",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "size_list",
       "relation_type": "lookup",
       "can_view": true,
       "can_create": false,
@@ -804,6 +923,86 @@
       "resource_key": "productionItems",
       "schema_name": "garments_erp",
       "table_name": "job",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "item_status_list",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "batch_no_lab_dip_version_map",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "color_map",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "color_map_by_brand",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "view_variant_item_lab_dip_status",
       "relation_type": "lookup",
       "can_view": true,
       "can_create": false,
@@ -823,7 +1022,7 @@
     {
       "resource_key": "productionJobs",
       "schema_name": "garments_erp",
-      "table_name": "design_per_job",
+      "table_name": "variant_item_per_job",
       "relation_type": "detail",
       "can_view": true,
       "can_create": true,
@@ -834,6 +1033,16 @@
       "resource_key": "productionJobs",
       "schema_name": "garments_erp",
       "table_name": "stage_pieces",
+      "relation_type": "detail",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionJobs",
+      "schema_name": "garments_erp",
+      "table_name": "job_assignees",
       "relation_type": "detail",
       "can_view": true,
       "can_create": true,
@@ -933,7 +1142,7 @@
     {
       "resource_key": "productionJobs",
       "schema_name": "garments_erp",
-      "table_name": "design",
+      "table_name": "variant",
       "relation_type": "lookup",
       "can_view": true,
       "can_create": false,
@@ -1093,7 +1302,7 @@
     {
       "resource_key": "productionDesigns",
       "schema_name": "garments_erp",
-      "table_name": "design",
+      "table_name": "variant",
       "relation_type": "primary",
       "can_view": true,
       "can_create": true,
@@ -1264,6 +1473,46 @@
       "resource_key": "materialStock",
       "schema_name": "garments_erp",
       "table_name": "raw_material_purchase_order_item",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialStock",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialStock",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialStock",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialStock",
+      "schema_name": "garments_erp",
+      "table_name": "batch_no_lab_dip_version_map",
       "relation_type": "report_source",
       "can_view": true,
       "can_create": false,
@@ -1534,6 +1783,46 @@
       "resource_key": "materialMovements",
       "schema_name": "garments_erp",
       "table_name": "raw_material_purchase_order_item",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialMovements",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialMovements",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialMovements",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialMovements",
+      "schema_name": "garments_erp",
+      "table_name": "batch_no_lab_dip_version_map",
       "relation_type": "report_source",
       "can_view": true,
       "can_create": false,
@@ -2063,6 +2352,46 @@
     {
       "resource_key": "materialReceipts",
       "schema_name": "garments_erp",
+      "table_name": "lab_dip",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialReceipts",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialReceipts",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialReceipts",
+      "schema_name": "garments_erp",
+      "table_name": "batch_no_lab_dip_version_map",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialReceipts",
+      "schema_name": "garments_erp",
       "table_name": "yarn_supplier",
       "relation_type": "lookup",
       "can_view": true,
@@ -2344,6 +2673,46 @@
       "resource_key": "materialIssues",
       "schema_name": "garments_erp",
       "table_name": "raw_material_purchase_order_item",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialIssues",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialIssues",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialIssues",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialIssues",
+      "schema_name": "garments_erp",
+      "table_name": "batch_no_lab_dip_version_map",
       "relation_type": "lookup",
       "can_view": true,
       "can_create": false,
@@ -2881,6 +3250,96 @@
       "can_delete": false
     },
     {
+      "resource_key": "labDips",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip",
+      "relation_type": "primary",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "labDips",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version",
+      "relation_type": "detail",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "labDips",
+      "schema_name": "garments_erp",
+      "table_name": "color_map_by_brand",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "labDips",
+      "schema_name": "garments_erp",
+      "table_name": "color_map",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "labDips",
+      "schema_name": "garments_erp",
+      "table_name": "brand_list",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "labDips",
+      "schema_name": "garments_erp",
+      "table_name": "dyer",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "labDips",
+      "schema_name": "garments_erp",
+      "table_name": "contacts",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "labDips",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "labDips",
+      "schema_name": "garments_erp",
+      "table_name": "attachments",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
       "resource_key": "suppliers",
       "schema_name": "garments_erp",
       "table_name": "contacts",
@@ -3263,6 +3722,56 @@
     {
       "resource_key": "programs",
       "schema_name": "garments_erp",
+      "table_name": "lab_dip",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "programs",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "programs",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "programs",
+      "schema_name": "garments_erp",
+      "table_name": "batch_no_lab_dip_version_map",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "programs",
+      "schema_name": "garments_erp",
+      "table_name": "view_default_lab_dip_version",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "programs",
+      "schema_name": "garments_erp",
       "table_name": "dyer",
       "relation_type": "lookup",
       "can_view": true,
@@ -3353,6 +3862,46 @@
     {
       "resource_key": "dyeBills",
       "schema_name": "garments_erp",
+      "table_name": "batch_no_lab_dip_version_map",
+      "relation_type": "detail",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "dyeBills",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "dyeBills",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "dyeBills",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "dyeBills",
+      "schema_name": "garments_erp",
       "table_name": "contacts",
       "relation_type": "lookup",
       "can_view": true,
@@ -3515,6 +4064,46 @@
       "schema_name": "garments_erp",
       "table_name": "brand_list",
       "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "dyed",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "dyed",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "dyed",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "dyed",
+      "schema_name": "garments_erp",
+      "table_name": "batch_no_lab_dip_version_map",
+      "relation_type": "report_source",
       "can_view": true,
       "can_create": false,
       "can_edit": false,
@@ -3823,6 +4412,46 @@
     {
       "resource_key": "greige",
       "schema_name": "garments_erp",
+      "table_name": "lab_dip",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "greige",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "greige",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "greige",
+      "schema_name": "garments_erp",
+      "table_name": "batch_no_lab_dip_version_map",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "greige",
+      "schema_name": "garments_erp",
       "table_name": "contacts",
       "relation_type": "report_source",
       "can_view": true,
@@ -4004,6 +4633,46 @@
       "resource_key": "greige",
       "schema_name": "garments_erp",
       "table_name": "dyed_fabric_item",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "batches",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "batches",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "batches",
+      "schema_name": "garments_erp",
+      "table_name": "lab_dip_version_status",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "batches",
+      "schema_name": "garments_erp",
+      "table_name": "batch_no_lab_dip_version_map",
       "relation_type": "report_source",
       "can_view": true,
       "can_create": false,

@@ -1,0 +1,11 @@
+begin;
+set local lock_timeout='5s';
+alter table garments_erp.production_checklist rename column tna_acquired_status_id to techpack_aqcuired_status_id;
+alter table garments_erp.production_checklist rename constraint production_checklist_tna_acquired_status_id_fkey to production_checklist_techpack_aqcuired_status_id_fkey;
+alter table garments_erp.production_checklist add column ordersheet_acquired_status_id bigint references garments_erp.item_status_list(id);
+create index production_checklist_ordersheet_status_idx on garments_erp.production_checklist(ordersheet_acquired_status_id);
+insert into garments_erp.item_status_list(status) select 'Disputed' where not exists(select 1 from garments_erp.item_status_list where lower(status)='disputed');
+update garments_erp.variant set share_weight=1 where share_weight<>1;
+alter table garments_erp.variant alter column share_weight set default 1;
+alter table garments_erp.variant add constraint variant_equal_share_for_pilot check(share_weight=1);
+commit;

@@ -25,13 +25,13 @@ test('shared sheet adapter protects new page values and preserves hidden-row sty
 test('suppliers add to the correct role and contact collection',()=>{const data=initialFabric(),next=saveSupplier(data,{name:'New Knitter',kind:'knitter'});assert.equal(next.knitter.length,3);assert.equal(data.knitter.length,2);assert.ok(fabricRows(next,'suppliers').some(s=>s.name==='New Knitter'&&s.kind==='Knitter'))});
 test('supplier editing keeps its role identity and duplicate creation is rejected',()=>{const data=initialFabric();const next=saveSupplier(data,{id:'knitter:kn1',kind:'knitter',name:'Sri Knits Updated'});assert.equal(next.knitter.length,2);assert.equal(fabricRows(next,'knitting').find(r=>r.id==='ki1').supplier,'Sri Knits Updated');assert.throws(()=>saveSupplier(data,{kind:'knitter',name:'Sri Knits'}),/already has/)});
 
-test('colour library and mapping are separate schema-shaped records used throughout dyeing',()=>{
- const data=initialFabric();const colour=saveDocument(data,'colours',{header:{name:'Coral',pantone_code:'16-1546',attached_swatch:true},lines:[]});
- const coral=colour.color_map.find(c=>c.name==='Coral');assert.equal(coral.attached_swatch,true);
- const mapped=saveDocument(colour,'colourMappings',{header:{color_map_id:coral.id,brand_list_id:'br1',dyer_id:'dy2',shade_card_no:'SC-17',shade_card_option:'B',shade_card_image:''},lines:[]});
- const mapping=mapped.color_map_by_brand.find(m=>m.color_map_id===coral.id);assert.equal(mapping.dyer_id,'dy2');assert.ok(optionsFor(mapped,'colors','dy2').some(([id])=>id===mapping.id));assert.ok(!optionsFor(mapped,'colors','dy1').some(([id])=>id===mapping.id));
+test('colour library and brand mappings keep approval metadata on lab dips',()=>{
+ const data=initialFabric();const colour=saveDocument(data,'colours',{header:{name:'Coral',pantone_code:'16-1546'},lines:[]});
+ const coral=colour.color_map.find(c=>c.name==='Coral');
+ const mapped=saveDocument(colour,'colourMappings',{header:{color_map_id:coral.id,brand_list_id:'br1'},lines:[]});
+ const mapping=mapped.color_map_by_brand.find(m=>m.color_map_id===coral.id);assert.equal(mapping.dyer_id,undefined);assert.ok(optionsFor(mapped,'colors','dy1').some(([id])=>id===mapping.id));
  assert.equal(fabricRows(mapped,'colours').find(c=>c.id===coral.id).mappings,1);
- assert.equal(fabricRows(mapped,'colourMappings').find(c=>c.id===mapping.id).supplier,'City Processors');
+ assert.throws(()=>saveDocument(mapped,'colourMappings',{header:{color_map_id:coral.id,brand_list_id:'br1'}}),/already exists/);
 });
 test('colour rename propagates to programs and batch trace without changing mapping identity',()=>{
  const data=initialFabric();const next=saveDocument(data,'colours',{header:{...data.color_map[0],name:'Deep Navy'},lines:[]});
@@ -55,9 +55,10 @@ test('program save requires mapping, permits null batch and rejects a batch from
  draft.lines[0].batch_no='B-105';assert.throws(()=>saveDocument(data,'programs',draft),/does not belong to this colour mapping/);
  draft.lines[0].batch_no=null;draft.lines[0].color_map_by_brand_id='';assert.throws(()=>saveDocument(data,'programs',draft),/Colour mapping is required/);
 });
-test('colour mapping swatch column follows its colour master without a duplicate field',()=>{
- const data=initialFabric();assert.equal(fabricRows(data,'colourMappings')[0].swatch,'Not attached');data.color_map[0].attached_swatch=true;
- assert.equal(fabricRows(data,'colourMappings')[0].swatch,'Attached');assert.ok(pages.colourMappings.columns.some(c=>c.key==='swatch'));assert.equal(Object.hasOwn(data.color_map_by_brand[0],'attached_swatch'),false);
+test('colour master and mapping forms do not expose obsolete swatch or shade fields',()=>{
+ assert.deepEqual(pages.colourMappings.header.map(f=>f.key),['color_map_id','brand_list_id']);
+ assert.ok(!pages.colours.header.some(f=>f.key==='attached_swatch'));
+ assert.ok(!pages.colourMappings.columns.some(c=>c.key==='swatch'));
 });
 
 test('colour mapping labels display colour before brand consistently',()=>{
