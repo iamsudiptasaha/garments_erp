@@ -13,7 +13,7 @@ test('portable root has a usable landing page or production sign-in', async ({ p
 test('direct sign-in entry remains accessible', async ({ page }) => {
   await page.goto('/access.html');
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Administrator email sign-in' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Use email login' })).toBeVisible();
 });
 test('overview and Fabric overview are distinct, navigable pages', async ({ page }) => {
   test.skip(hosted, 'Hosted smoke tests do not authenticate or write production data');
@@ -98,4 +98,68 @@ test('successful sign-in lands on Overview using a mocked transport, never a rea
   await page.getByLabel('Password', { exact: true }).fill('synthetic-test-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+});
+
+test('email password login stops at Authenticator without loading business data', async ({
+  page,
+}) => {
+  test.skip(hosted, 'Hosted smoke tests do not submit credentials');
+  const id = '00000000-0000-4000-8000-000000000003';
+  const part = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const token = [
+    part({ alg: 'HS256', typ: 'JWT' }),
+    part({
+      sub: id,
+      role: 'authenticated',
+      aal: 'aal1',
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    }),
+    'synthetic_test_signature',
+  ].join('.');
+  const user = {
+    id,
+    email: 'employee@example.invalid',
+    aud: 'authenticated',
+    role: 'authenticated',
+    app_metadata: {},
+    user_metadata: {},
+    factors: [
+      {
+        id: '00000000-0000-4000-8000-000000000004',
+        factor_type: 'totp',
+        status: 'verified',
+        friendly_name: 'Test authenticator',
+      },
+    ],
+  };
+  const business = [];
+  await page.route('https://example.invalid/**', async (route) => {
+    const url = route.request().url();
+    let body = {};
+    if (url.includes('/auth/v1/token')) {
+      expect(route.request().postDataJSON().email).toBe('employee@example.invalid');
+      body = {
+        access_token: token,
+        refresh_token: 'synthetic_refresh',
+        token_type: 'bearer',
+        expires_in: 3600,
+        user,
+      };
+    } else if (url.includes('/auth/v1/user')) body = user;
+    else if (url.includes('erp_account_security'))
+      body = { enabled: true, ready: false, mustChangePassword: false };
+    else if (url.includes('/rest/v1/')) business.push(url);
+    await route.fulfill({ json: body });
+  });
+  await page.goto('/access.html');
+  await page.getByRole('button', { name: 'Use email login', exact: true }).click();
+  await page.getByLabel('Email', { exact: true }).fill('employee@example.invalid');
+  await page.getByLabel('Password', { exact: true }).fill('synthetic-test-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Google Authenticator', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel('Authenticator code', { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/access\.html/);
+  expect(business).toEqual([]);
 });

@@ -37,7 +37,7 @@ function AccessApp() {
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [phone, setPhone] = useState(''),
-    [adminEmail, setAdminEmail] = useState(false),
+    [emailLogin, setEmailLogin] = useState(false),
     [password, setPassword] = useState(''),
     [tab, setTab] = useState(
       () =>
@@ -98,12 +98,14 @@ function AccessApp() {
     setError('');
     try {
       const { error } = await client.auth.signInWithPassword({
-        ...(adminEmail ? { email: phone.trim() } : { phone: normalisePhone(phone) }),
+        ...(emailLogin ? { email: phone.trim() } : { phone: normalisePhone(phone) }),
         password,
       });
       if (error) throw error;
       setPassword('');
-      location.assign('/fabric.html?live=1');
+      const checked = await rpc('erp_account_security');
+      setSecurity(checked);
+      if (checked?.ready) location.assign('/fabric.html?live=1');
     } catch (e) {
       setError(e.message);
     } finally {
@@ -181,8 +183,8 @@ function AccessApp() {
               h(
                 'p',
                 null,
-                adminEmail
-                  ? 'Use the Administrator email and password.'
+                emailLogin
+                  ? 'Use your email and password.'
                   : 'Use your 10-digit mobile number and password.',
               ),
               h(
@@ -191,13 +193,13 @@ function AccessApp() {
                 h(
                   'label',
                   null,
-                  adminEmail ? 'Administrator email' : 'Mobile number',
+                  emailLogin ? 'Email' : 'Mobile number',
                   h('input', {
-                    type: adminEmail ? 'email' : 'tel',
-                    autoComplete: adminEmail ? 'username' : 'tel-national',
-                    inputMode: adminEmail ? 'email' : 'numeric',
-                    maxLength: adminEmail ? undefined : 10,
-                    placeholder: adminEmail ? 'you@example.com' : '10-digit mobile number',
+                    type: emailLogin ? 'email' : 'tel',
+                    autoComplete: emailLogin ? 'username' : 'tel-national',
+                    inputMode: emailLogin ? 'email' : 'numeric',
+                    maxLength: emailLogin ? undefined : 10,
+                    placeholder: emailLogin ? 'you@example.com' : '10-digit mobile number',
                     value: phone,
                     onChange: (e) => setPhone(e.target.value),
                     required: true,
@@ -227,12 +229,12 @@ function AccessApp() {
                   type: 'button',
                   className: 'login-method-switch',
                   onClick: () => {
-                    setAdminEmail((v) => !v);
+                    setEmailLogin((v) => !v);
                     setPhone('');
                     setError('');
                   },
                 },
-                adminEmail ? 'Use phone login' : 'Administrator email sign-in',
+                emailLogin ? 'Use phone login' : 'Use email login',
               ),
               h(RecoveryForm),
               h(

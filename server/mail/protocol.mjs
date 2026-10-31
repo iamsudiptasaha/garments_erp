@@ -7,7 +7,7 @@ export function validateMail(message) {
   if (
     message.type !== 'account-recovery' ||
     !/^SCE\/\d{5}$/.test(message.employeeCode || '') ||
-    !/^[A-F0-9]{32}$/.test(message.code || '') ||
+    !/^(?:[0-9]{8}|[A-F0-9]{32})$/.test(message.code || '') ||
     Object.keys(message).some((k) => !['type', 'employeeCode', 'code'].includes(k))
   )
     throw Error('Invalid mail');

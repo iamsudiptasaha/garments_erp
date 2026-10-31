@@ -58,7 +58,9 @@ export function RecoveryForm() {
         'Recovery code',
         h('input', {
           required: true,
-          autoComplete: 'off',
+          autoComplete: 'one-time-code',
+          inputMode: 'numeric',
+          placeholder: '8-digit recovery code',
           value: code,
           onChange: (e) => setCode(e.target.value.trim().toUpperCase()),
         }),

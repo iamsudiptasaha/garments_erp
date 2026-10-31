@@ -46,6 +46,16 @@ try {
     false,
   );
   await c.query('rollback');
+  // Removing the last verified factor must invalidate access even with a stale AAL2 JWT.
+  await c.query('begin');
+  await c.query('delete from auth.mfa_factors where user_id=$1', [admin]);
+  await c.query('set local role authenticated');
+  await claims();
+  assert.equal(
+    (await c.query("select (public.erp_account_security()->>'ready')::boolean ok")).rows[0].ok,
+    false,
+  );
+  await c.query('rollback');
   // Wrong attempts persist because invalid credentials return null, never roll back the counter.
   await c.query('begin');
   await c.query('set local role service_role');

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   accountAction,
+  recoveryCode,
   credentialDigest,
   phoneNumber,
   strongPassword,
@@ -117,4 +118,19 @@ test('credentials enforce ten-digit phone and minimum password length', () => {
   assert.equal(phoneNumber('9000000000'), '+919000000000');
   assert.throws(() => phoneNumber('+919000000000'));
   assert.throws(() => strongPassword('short'));
+});
+
+test('recovery uses an eight-digit OTP while initial passwords retain high entropy', async () => {
+  assert.match(recoveryCode(), /^[0-9]{8}$/);
+  const io = fake();
+  io.sendCode = async (_target, code) => assert.match(code, /^[0-9]{8}$/);
+  await accountAction({ action: 'issueRecovery', userId: 'employee' }, io);
+  io.createUser = async (_phone, password) => {
+    assert.match(password, /^[A-F0-9]{32}$/);
+    return { id: 'new' };
+  };
+  await accountAction(
+    { action: 'create', employeeId: '12', phone: '9000000000', roleIds: ['1'], enabled: true },
+    io,
+  );
 });

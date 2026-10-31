@@ -41,7 +41,7 @@ jobs:
           npm --prefix deploy/cloudflare-mailer run build
       - name: Check locked account service types and dependencies
         run: |
-          npx --yes deno@2.9.6 check --frozen --config supabase/functions/erp-accounts/deno.json supabase/functions/erp-accounts/index.ts scripts/ci/serve-accounts-local.ts
+          npx --yes deno@2.9.6 check --frozen --config supabase/functions/erp-accounts/deno.json supabase/functions/erp-accounts/index.ts supabase/functions/admin-*/index.ts scripts/ci/serve-accounts-local.ts
           npx --yes deno@2.9.6 audit --lock supabase/functions/erp-accounts/deno.lock --level moderate
       - run: bash scripts/ci/install-actionlint.sh
       - run: .ci-tools/actionlint -shellcheck= .github/workflows/*.yml

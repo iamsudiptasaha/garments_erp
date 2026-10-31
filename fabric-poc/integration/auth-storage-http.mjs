@@ -4,7 +4,6 @@ import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 import assert from 'node:assert/strict';
 import '../../scripts/ci/assert-test-db.mjs';
-import { credentialDigest } from '../../supabase/functions/erp-accounts/service.mjs';
 const settings = JSON.parse(
   readFileSync(process.env.TEST_RUNTIME_FILE || '/tmp/erp-test-runtime.json', 'utf8'),
 );
@@ -176,19 +175,26 @@ try {
       ).rows[0].n,
       '0',
     );
-    // Local fixture replaces the delivery step only; the actual handler consumes the persisted credential.
-    const code = 'B'.repeat(32),
-      digest = await credentialDigest(code, 'synthetic-integration-pepper-never-for-production');
+    // Actual account -> signed mail protocol -> mailer handler, with SMTP delivery captured locally.
+    // The harness cannot access external networks or send real email.
     await db.query('delete from garments_access.account_recovery where user_id=$1', [
       createdEmployeeAuth,
     ]);
-    ok(
-      await admin.rpc('erp_issue_recovery', {
-        p_user_id: createdEmployeeAuth,
-        p_digest: digest,
-        p_actor: uid,
-      }),
-      'Reserve synthetic recovery',
+    assert.equal(
+      (await fetch('http://127.0.0.1:55425/__test-enable-mailer', { method: 'POST' })).status,
+      204,
+    );
+    const issued = await command({ action: 'issueRecovery', userId: createdEmployeeAuth });
+    assert.equal(issued.status, 200);
+    const issuedBody = await issued.json();
+    const delivered = await (await fetch('http://127.0.0.1:55425/__test-mailbox')).json();
+    assert.equal(delivered.to, 'sahacreationsllp0int@gmail.com');
+    assert.ok(delivered.text.includes('SCE/90004'));
+    const code = delivered.text.match(/Single-use recovery code: ([0-9]{8}|[A-F0-9]{32})/)[1];
+    assert.equal(
+      JSON.stringify(issuedBody).includes(code),
+      false,
+      'Recovery credential never returns to the requesting browser',
     );
     const resetPassword = randomBytes(24).toString('hex');
     const reset = await fetch('http://127.0.0.1:55425', {

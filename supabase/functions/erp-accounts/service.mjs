@@ -24,17 +24,25 @@ export async function credentialDigest(code, pepper) {
     .map((x) => x.toString(16).padStart(2, '0'))
     .join('');
 }
-export function recoveryCode() {
+function initialPassword() {
   return [...crypto.getRandomValues(new Uint8Array(16))]
     .map((x) => x.toString(16).padStart(2, '0'))
     .join('')
     .toUpperCase();
 }
+export function recoveryCode() {
+  // Rejection sampling avoids modulo bias; eight digits are easier to relay than a token.
+  const value = new Uint32Array(1);
+  do {
+    crypto.getRandomValues(value);
+  } while (value[0] >= 4200000000);
+  return String(value[0] % 100000000).padStart(8, '0');
+}
 export async function accountAction(input, io) {
   if (input.action === 'recover') {
     const phone = phoneNumber(input.phone);
     strongPassword(input.password);
-    if (!/^[A-F0-9]{32}$/.test(input.code || ''))
+    if (!/^(?:[0-9]{8}|[A-F0-9]{32})$/.test(input.code || ''))
       throw Error('Recovery code is invalid or expired.');
     const target = await io.consume(phone, await credentialDigest(input.code, io.pepper));
     if (!target) throw Error('Recovery code is invalid or expired.');
@@ -57,7 +65,7 @@ export async function accountAction(input, io) {
     if (!/^\d+$/.test(String(input.employeeId))) throw Error('Choose an employee.');
     const phone = phoneNumber(input.phone);
     await io.employeeAvailable(String(input.employeeId));
-    const account = await io.createUser(phone, recoveryCode());
+    const account = await io.createUser(phone, initialPassword());
     try {
       await io.link(account.id, String(input.employeeId), input.roleIds, input.enabled === true);
     } catch {
