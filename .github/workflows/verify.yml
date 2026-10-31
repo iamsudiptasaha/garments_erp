@@ -155,3 +155,46 @@ jobs:
       RESULTS: ${{ toJSON(needs) }}
     steps:
       - run: node -e 'const jobs=JSON.parse(process.env.RESULTS); if(Object.values(jobs).some(j=>j.result!=="success")) process.exit(1); console.log("All required checks passed")'
+  deploy:
+    name: Deploy production Worker
+    needs: gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.gate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: cloudflare-workers-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      VITE_DATA_MODE: supabase
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
+      RELEASE_GATE_RESULT: ${{ needs.gate.result }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: fabric-poc/package-lock.json
+      - name: Validate release context and scoped configuration
+        run: node --input-type=module -e "import {deploymentConfig} from './scripts/ci/workers-deploy.mjs'; deploymentConfig(process.env)"
+      - run: npm --prefix fabric-poc ci
+      - name: Build production configuration from the checked commit
+        run: node scripts/ci/build-public.mjs
+      - run: node scripts/ci/bundle-guard.mjs
+      - run: npm --prefix deploy/cloudflare ci --ignore-scripts
+      - name: Deploy through GitHub Actions only
+        run: node scripts/ci/workers-deploy.mjs
+      - name: Verify production deployment and commit
+        run: node scripts/ci/verify-deployment.mjs
+        env:
+          DEPLOYMENT_URL: https://garments-erp.sahacreationsllp0int.workers.dev
+          EXPECTED_COMMIT: ${{ github.sha }}
