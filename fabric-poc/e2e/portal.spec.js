@@ -4,7 +4,7 @@ test('portable root has a usable landing page or production sign-in', async ({ p
   await page.goto('/');
   if (hosted) {
     await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
-    await expect(page.getByLabel('Mobile number', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Email', { exact: true })).toBeVisible();
   } else {
     await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Documents by section' })).toBeVisible();

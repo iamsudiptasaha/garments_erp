@@ -1,5 +1,7 @@
 # Shared modules release candidate
 
+For applied changes and current production status, see [production release record](common-modules-production-release.md).
+
 Prepared on 31 October 2026 on `dev`. Production changes require approval. This document is not a production sign-off.
 
 ## Confirmed behaviour
