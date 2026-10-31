@@ -84,9 +84,15 @@ Deno.serve(async (req) => {
         )
           throw Error('Employee already linked or unavailable.');
       },
-      createUser: async (phone: string, password: string) => {
+      createUser: async (phone: string, password: string, email: string) => {
         const d = await checked(
-          service.auth.admin.createUser({ phone, password, phone_confirm: true }),
+          service.auth.admin.createUser({
+            phone,
+            email,
+            password,
+            phone_confirm: true,
+            email_confirm: true,
+          }),
         );
         return d.user;
       },

@@ -134,6 +134,8 @@ try {
         body: JSON.stringify(body),
       });
     }
+    const createdEmployeeEmail =
+      'provisioned-' + randomBytes(8).toString('hex') + '@example.invalid';
     const snap = ok(await user.rpc('erp_admin_snapshot'), 'Admin provisioning catalogue');
     const role = snap.roles.find((r) => r.key === 'ci_viewer');
     await db.query(
@@ -148,6 +150,7 @@ try {
           action: 'create',
           employeeId: '900004',
           phone: '9000000004',
+          email: createdEmployeeEmail,
           roleIds: [String(role.id)],
           enabled: true,
         })
@@ -212,6 +215,10 @@ try {
     ok(
       await fresh.auth.signInWithPassword({ phone: '+919000000004', password: resetPassword }),
       'Sign in with reset password',
+    );
+    ok(
+      await fresh.auth.signInWithPassword({ email: createdEmployeeEmail, password: resetPassword }),
+      'Email login with reset password',
     );
     assert.equal(
       ok(await fresh.rpc('erp_account_security'), 'Require enrollment after recovery').ready,

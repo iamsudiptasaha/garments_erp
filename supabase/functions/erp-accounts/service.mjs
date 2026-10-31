@@ -11,6 +11,14 @@ export function phoneNumber(value) {
     throw Error('Enter a valid 10-digit mobile number.');
   return '+91' + value;
 }
+export function emailAddress(value) {
+  const email = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    throw Error('Enter the employee login email.');
+  return email;
+}
 export async function credentialDigest(code, pepper) {
   if (!pepper || pepper.length < 32) throw Error('Recovery is not configured.');
   const key = await crypto.subtle.importKey(
@@ -64,8 +72,9 @@ export async function accountAction(input, io) {
   if (input.action === 'create') {
     if (!/^\d+$/.test(String(input.employeeId))) throw Error('Choose an employee.');
     const phone = phoneNumber(input.phone);
+    const email = emailAddress(input.email);
     await io.employeeAvailable(String(input.employeeId));
-    const account = await io.createUser(phone, initialPassword());
+    const account = await io.createUser(phone, initialPassword(), email);
     try {
       await io.link(account.id, String(input.employeeId), input.roleIds, input.enabled === true);
     } catch {

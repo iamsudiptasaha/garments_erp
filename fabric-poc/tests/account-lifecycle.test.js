@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   accountAction,
   recoveryCode,
+  emailAddress,
   credentialDigest,
   phoneNumber,
   strongPassword,
@@ -42,7 +43,14 @@ test('account creation requires administrator before touching Auth and compensat
   };
   await assert.rejects(
     accountAction(
-      { action: 'create', employeeId: '12', phone: '9000000000', roleIds: ['1'], enabled: true },
+      {
+        action: 'create',
+        employeeId: '12',
+        phone: '9000000000',
+        email: 'employee@example.invalid',
+        roleIds: ['1'],
+        enabled: true,
+      },
       io,
     ),
     /could not be linked/,
@@ -130,7 +138,20 @@ test('recovery uses an eight-digit OTP while initial passwords retain high entro
     return { id: 'new' };
   };
   await accountAction(
-    { action: 'create', employeeId: '12', phone: '9000000000', roleIds: ['1'], enabled: true },
+    {
+      action: 'create',
+      employeeId: '12',
+      phone: '9000000000',
+      email: 'employee@example.invalid',
+      roleIds: ['1'],
+      enabled: true,
+    },
     io,
   );
+});
+
+test('employee provisioning requires a usable email login and normalises it', () => {
+  assert.equal(emailAddress(' Employee@Example.invalid '), 'employee@example.invalid');
+  assert.throws(() => emailAddress(''), /login email/);
+  assert.throws(() => emailAddress('not-an-email'), /login email/);
 });

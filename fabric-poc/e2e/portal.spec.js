@@ -13,7 +13,7 @@ test('portable root has a usable landing page or production sign-in', async ({ p
 test('direct sign-in entry remains accessible', async ({ page }) => {
   await page.goto('/access.html');
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Use email login' })).toBeVisible();
+  await expect(page.getByLabel('Email', { exact: true })).toBeVisible();
 });
 test('overview and Fabric overview are distinct, navigable pages', async ({ page }) => {
   test.skip(hosted, 'Hosted smoke tests do not authenticate or write production data');
@@ -94,7 +94,7 @@ test('successful sign-in lands on Overview using a mocked transport, never a rea
     });
   });
   await page.goto('/access.html');
-  await page.getByLabel('Mobile number', { exact: true }).fill('9000000000');
+  await page.getByLabel('Email', { exact: true }).fill('employee@example.invalid');
   await page.getByLabel('Password', { exact: true }).fill('synthetic-test-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
@@ -152,7 +152,6 @@ test('email password login stops at Authenticator without loading business data'
     await route.fulfill({ json: body });
   });
   await page.goto('/access.html');
-  await page.getByRole('button', { name: 'Use email login', exact: true }).click();
   await page.getByLabel('Email', { exact: true }).fill('employee@example.invalid');
   await page.getByLabel('Password', { exact: true }).fill('synthetic-test-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();

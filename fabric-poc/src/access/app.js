@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { getAccessClient } from './client.js';
+import { getAccessClient, getLoginMethods } from './client.js';
 import { AccessNavigation } from './navigation.js';
 import { Authenticator, RecoveryForm, PasswordSettings } from './security.js';
 import { AccountLifecycle } from '../admin/account-lifecycle.js';
@@ -37,7 +37,8 @@ function AccessApp() {
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [phone, setPhone] = useState(''),
-    [emailLogin, setEmailLogin] = useState(false),
+    [emailLogin, setEmailLogin] = useState(true),
+    [phoneEnabled, setPhoneEnabled] = useState(false),
     [password, setPassword] = useState(''),
     [tab, setTab] = useState(
       () =>
@@ -52,6 +53,11 @@ function AccessApp() {
       return;
     }
     let active = true;
+    getLoginMethods()
+      .then((methods) => {
+        if (active) setPhoneEnabled(methods.phone);
+      })
+      .catch(() => {});
     client.auth.getSession().then(({ data, error }) => {
       if (active) {
         setUser(data.session?.user || null);
@@ -223,19 +229,20 @@ function AccessApp() {
                   busy ? 'Signing in…' : 'Sign in',
                 ),
               ),
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'login-method-switch',
-                  onClick: () => {
-                    setEmailLogin((v) => !v);
-                    setPhone('');
-                    setError('');
+              phoneEnabled &&
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'login-method-switch',
+                    onClick: () => {
+                      setEmailLogin((v) => !v);
+                      setPhone('');
+                      setError('');
+                    },
                   },
-                },
-                emailLogin ? 'Use phone login' : 'Use email login',
-              ),
+                  emailLogin ? 'Use phone login' : 'Use email login',
+                ),
               h(RecoveryForm),
               h(
                 'p',

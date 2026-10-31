@@ -5,6 +5,7 @@ const h = React.createElement;
 export function AccountLifecycle({ snapshot, onSaved }) {
   const [employee, setEmployee] = useState(null),
     [phone, setPhone] = useState(''),
+    [email, setEmail] = useState(''),
     [roles, setRoles] = useState([]),
     [enabled, setEnabled] = useState(true),
     [target, setTarget] = useState(''),
@@ -17,6 +18,7 @@ export function AccountLifecycle({ snapshot, onSaved }) {
       const r = await accountCommand(input);
       setMessage(r.message);
       setPhone('');
+      setEmail('');
       await onSaved();
     } catch (e) {
       setMessage(e.message);
@@ -38,7 +40,14 @@ export function AccountLifecycle({ snapshot, onSaved }) {
         {
           onSubmit: (e) => {
             e.preventDefault();
-            void submit({ action: 'create', employeeId: employee, phone, roleIds: roles, enabled });
+            void submit({
+              action: 'create',
+              employeeId: employee,
+              phone,
+              email,
+              roleIds: roles,
+              enabled,
+            });
           },
         },
         h(EmployeeSelect, {
@@ -50,6 +59,18 @@ export function AccountLifecycle({ snapshot, onSaved }) {
           onChange: setEmployee,
           disabled: busy,
         }),
+        h(
+          'label',
+          null,
+          'Employee login email',
+          h('input', {
+            type: 'email',
+            required: true,
+            autoComplete: 'off',
+            value: email,
+            onChange: (e) => setEmail(e.target.value),
+          }),
+        ),
         h(
           'label',
           null,
