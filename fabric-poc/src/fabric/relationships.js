@@ -1,14 +1,106 @@
 // Database-shaped relationships. Legacy conversion is local-preview-only.
-export function programContext(data,line){const version=data.lab_dip_version.find(v=>v.id===line?.lab_dip_version_id),lab=data.lab_dip.find(l=>l.id===version?.lab_dip_id);return {version,lab,mappingId:lab?.color_map_by_brand_id||line?.legacy_color_map_by_brand_id||null}}
-export function batchFor(data,id){return (data.batch_no_lab_dip_version_map||[]).find(b=>b.dyed_fabric_item_id===id)}
-export function batchesForVersion(data,versionId,excludeProgramId=null){if(!versionId)return [];return (data.batch_no_lab_dip_version_map||[]).filter(b=>b.lab_dip_version_id===versionId&&(!excludeProgramId||data.dyed_fabric_item.find(d=>d.id===b.dyed_fabric_item_id)?.dyeing_program_item_id!==excludeProgramId)).map(b=>b.batch_no).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}))}
-export function versionsForMapping(data,mappingId,dyerId){return data.lab_dip_version.filter(v=>data.lab_dip.some(l=>l.id===v.lab_dip_id&&l.color_map_by_brand_id===mappingId&&l.dyer_id===dyerId)).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(data.lab_dip.find(l=>l.id===b.lab_dip_id).edition-data.lab_dip.find(l=>l.id===a.lab_dip_id).edition)||b.version-a.version||String(b.id).localeCompare(String(a.id),undefined,{numeric:true}))}
-export function defaultVersion(data,mappingId,dyerId){return versionsForMapping(data,mappingId,dyerId).find(v=>(data.lab_dip_version_status.find(s=>s.id===v.lab_dip_status_id)?.sort_order||0)>=4)?.id||''}
-export function versionLabel(data,id){const v=data.lab_dip_version.find(v=>v.id===id),l=data.lab_dip.find(l=>l.id===v?.lab_dip_id);return v?`Edition ${l?.edition} · Version ${v.version} · ${data.lab_dip_version_status.find(s=>s.id===v.lab_dip_status_id)?.status||'Status not recorded'}${v.date?' · '+v.date:''}`:'Choose a lab-dip version'}
-export function upgradeFabricRelationships(data){
- const next=structuredClone(data);next.batch_no_lab_dip_version_map||=[];
- for(const table of ['brand_list','yarn_supplier','knitter','dyer'])for(const row of next[table]){if(!row.contacts_id||!row.contact_purpose_id){row.contacts_id||=null;row.contact_purpose_id||=null;row._needsContactLinks=true}}
- for(const row of next.dyeing_program_item){if(!row.lab_dip_version_id&&row.color_map_by_brand_id){const dyer=next.dyeing_program.find(p=>p.id===row.dyeing_program_id)?.dyer_id,editions=next.lab_dip.filter(l=>l.color_map_by_brand_id===row.color_map_by_brand_id&&l.dyer_id===dyer&&l.edition===1),versions=next.lab_dip_version.filter(v=>editions.some(l=>l.id===v.lab_dip_id)&&v.version===1);if(versions.length===1)row.lab_dip_version_id=versions[0].id;else{row.legacy_color_map_by_brand_id=row.color_map_by_brand_id;row._needsLabDipSelection=true}}delete row.color_map_by_brand_id}
- for(const row of next.dyed_fabric_item){if(row.batch_no&&!batchFor(next,row.id)){const versionId=next.dyeing_program_item.find(p=>p.id===row.dyeing_program_item_id)?.lab_dip_version_id;next.batch_no_lab_dip_version_map.push({id:crypto.randomUUID(),dyed_fabric_item_id:row.id,batch_no:row.batch_no,lab_dip_version_id:versionId||null})}delete row.batch_no}
- return next;
+export function programContext(data, line) {
+  const version = data.lab_dip_version.find((v) => v.id === line?.lab_dip_version_id),
+    lab = data.lab_dip.find((l) => l.id === version?.lab_dip_id);
+  return {
+    version,
+    lab,
+    mappingId: lab?.color_map_by_brand_id || line?.legacy_color_map_by_brand_id || null,
+  };
+}
+export function batchFor(data, id) {
+  return (data.batch_no_lab_dip_version_map || []).find((b) => b.dyed_fabric_item_id === id);
+}
+export function batchesForVersion(data, versionId, excludeProgramId = null) {
+  if (!versionId) return [];
+  return (data.batch_no_lab_dip_version_map || [])
+    .filter(
+      (b) =>
+        b.lab_dip_version_id === versionId &&
+        (!excludeProgramId ||
+          data.dyed_fabric_item.find((d) => d.id === b.dyed_fabric_item_id)
+            ?.dyeing_program_item_id !== excludeProgramId),
+    )
+    .map((b) => b.batch_no)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+export function versionsForMapping(data, mappingId, dyerId) {
+  return data.lab_dip_version
+    .filter((v) =>
+      data.lab_dip.some(
+        (l) =>
+          l.id === v.lab_dip_id && l.color_map_by_brand_id === mappingId && l.dyer_id === dyerId,
+      ),
+    )
+    .sort(
+      (a, b) =>
+        (b.date || '').localeCompare(a.date || '') ||
+        data.lab_dip.find((l) => l.id === b.lab_dip_id).edition -
+          data.lab_dip.find((l) => l.id === a.lab_dip_id).edition ||
+        b.version - a.version ||
+        String(b.id).localeCompare(String(a.id), undefined, { numeric: true }),
+    );
+}
+export function defaultVersion(data, mappingId, dyerId) {
+  return (
+    versionsForMapping(data, mappingId, dyerId).find(
+      (v) =>
+        (data.lab_dip_version_status.find((s) => s.id === v.lab_dip_status_id)?.sort_order || 0) >=
+        4,
+    )?.id || ''
+  );
+}
+export function versionLabel(data, id) {
+  const v = data.lab_dip_version.find((v) => v.id === id),
+    l = data.lab_dip.find((l) => l.id === v?.lab_dip_id);
+  return v
+    ? `Edition ${l?.edition} · Version ${v.version} · ${data.lab_dip_version_status.find((s) => s.id === v.lab_dip_status_id)?.status || 'Status not recorded'}${v.date ? ' · ' + v.date : ''}`
+    : 'Choose a lab-dip version';
+}
+export function upgradeFabricRelationships(data) {
+  const next = structuredClone(data);
+  next.batch_no_lab_dip_version_map ||= [];
+  for (const table of ['brand_list', 'yarn_supplier', 'knitter', 'dyer'])
+    for (const row of next[table]) {
+      if (!row.contacts_id || !row.contact_purpose_id) {
+        row.contacts_id ||= null;
+        row.contact_purpose_id ||= null;
+        row._needsContactLinks = true;
+      }
+    }
+  for (const row of next.dyeing_program_item) {
+    if (!row.lab_dip_version_id && row.color_map_by_brand_id) {
+      const dyer = next.dyeing_program.find((p) => p.id === row.dyeing_program_id)?.dyer_id,
+        editions = next.lab_dip.filter(
+          (l) =>
+            l.color_map_by_brand_id === row.color_map_by_brand_id &&
+            l.dyer_id === dyer &&
+            l.edition === 1,
+        ),
+        versions = next.lab_dip_version.filter(
+          (v) => editions.some((l) => l.id === v.lab_dip_id) && v.version === 1,
+        );
+      if (versions.length === 1) row.lab_dip_version_id = versions[0].id;
+      else {
+        row.legacy_color_map_by_brand_id = row.color_map_by_brand_id;
+        row._needsLabDipSelection = true;
+      }
+    }
+    delete row.color_map_by_brand_id;
+  }
+  for (const row of next.dyed_fabric_item) {
+    if (row.batch_no && !batchFor(next, row.id)) {
+      const versionId = next.dyeing_program_item.find(
+        (p) => p.id === row.dyeing_program_item_id,
+      )?.lab_dip_version_id;
+      next.batch_no_lab_dip_version_map.push({
+        id: crypto.randomUUID(),
+        dyed_fabric_item_id: row.id,
+        batch_no: row.batch_no,
+        lab_dip_version_id: versionId || null,
+      });
+    }
+    delete row.batch_no;
+  }
+  return next;
 }

@@ -1,8 +1,117 @@
 import React from 'react';
-import {pages} from '../fabric/catalog.js';
-const h=React.createElement;
-const groups=[['fabric','Fabric'],['colours','Colours'],['production','Production'],['inventory','Raw Material Inventory'],['miscellaneous','Miscellaneous']];
-export function AccessNavigation({access,tab,onTab,open,onClose}){
- const can=key=>access.permissions?.[key]?.view===true;
- return h('aside',{id:'live-workspace-sidebar',className:'fabric-sidebar access-navigation',hidden:!open,'aria-label':'Workspace navigation'},h('div',{className:'sidebar-top'},h('a',{className:'fabric-brand',href:'/fabric.html?live=1'},h('span',null,'G'),h('div',null,'Garment workspace',h('small',null,'Signed in'))),h('button',{'aria-label':'Collapse navigation','aria-controls':'live-workspace-sidebar','aria-expanded':open,onClick:onClose},'‹')),groups.map(([group,title])=>{const entries=Object.entries(pages).filter(([key,p])=>(p.section||'fabric')===group&&can(key));return entries.length>0&&h('details',{open:true,key:group},h('summary',null,title),h('nav',{'aria-label':title+' pages'},entries.map(([key,p])=>h('a',{key,href:'/fabric.html?live=1#'+key},p.title))))}),can('employees')&&h('details',{open:true},h('summary',null,'Employee / HR'),h('nav',null,h('a',{href:'/fabric.html?live=1#employees'},'Employees'))),access.administrator&&h('details',{open:true},h('summary',null,'Administration'),h('nav',{'aria-label':'Administration pages'},[['roles','Roles & permissions'],['accounts','Account access'],['audit','Activity log']].map(([key,title])=>h('button',{key,'aria-current':tab===key?'page':undefined,onClick:()=>onTab(key)},title)),h('a',{href:'/files-admin.html'},'Bucket groups'))),access.enabled&&h('details',{open:true},h('summary',null,'File Uploads'),h('nav',{'aria-label':'File Uploads pages'},h('a',{href:'/files.html'},'Saved-record files'))),h('div',{className:'workspace-mode'},'SIGNED-IN WORKSPACE',h('p',null,'Fabrics, Colours and account permissions save to Supabase. Other modules are not connected yet.')));
+import { pages } from '../fabric/catalog.js';
+const h = React.createElement;
+const groups = [
+  ['fabric', 'Fabric'],
+  ['colours', 'Colours'],
+  ['production', 'Production'],
+  ['inventory', 'Raw Material Inventory'],
+  ['miscellaneous', 'Miscellaneous'],
+];
+export function AccessNavigation({ access, tab, onTab, open, onClose }) {
+  const can = (key) => access.permissions?.[key]?.view === true;
+  return h(
+    'aside',
+    {
+      id: 'live-workspace-sidebar',
+      className: 'fabric-sidebar access-navigation',
+      hidden: !open,
+      'aria-label': 'Workspace navigation',
+    },
+    h(
+      'div',
+      { className: 'sidebar-top' },
+      h(
+        'a',
+        { className: 'fabric-brand', href: '/fabric.html?live=1' },
+        h('span', null, 'G'),
+        h('div', null, 'Garment workspace', h('small', null, 'Signed in')),
+      ),
+      h(
+        'button',
+        {
+          'aria-label': 'Collapse navigation',
+          'aria-controls': 'live-workspace-sidebar',
+          'aria-expanded': open,
+          onClick: onClose,
+        },
+        '‹',
+      ),
+    ),
+    h(
+      'nav',
+      { className: 'overview-navigation', 'aria-label': 'Workspace overview' },
+      h('a', { href: '/fabric.html?live=1' }, 'Overview'),
+    ),
+    groups.map(([group, title]) => {
+      const entries = Object.entries(pages).filter(
+        ([key, p]) => (p.section || 'fabric') === group && can(key),
+      );
+      return (
+        entries.length > 0 &&
+        h(
+          'details',
+          { open: true, key: group },
+          h('summary', null, title),
+          h(
+            'nav',
+            { 'aria-label': title + ' pages' },
+            entries.map(([key, p]) => h('a', { key, href: '/fabric.html?live=1#' + key }, p.title)),
+          ),
+        )
+      );
+    }),
+    can('employees') &&
+      h(
+        'details',
+        { open: true },
+        h('summary', null, 'Employee / HR'),
+        h('nav', null, h('a', { href: '/fabric.html?live=1#employees' }, 'Employees')),
+      ),
+    access.administrator &&
+      h(
+        'details',
+        { open: true },
+        h('summary', null, 'Administration'),
+        h(
+          'nav',
+          { 'aria-label': 'Administration pages' },
+          [
+            ['roles', 'Roles & permissions'],
+            ['accounts', 'Account access'],
+            ['audit', 'Activity log'],
+          ].map(([key, title]) =>
+            h(
+              'button',
+              { key, 'aria-current': tab === key ? 'page' : undefined, onClick: () => onTab(key) },
+              title,
+            ),
+          ),
+          h('a', { href: '/files-admin.html' }, 'Bucket groups'),
+        ),
+      ),
+    access.enabled &&
+      h(
+        'details',
+        { open: true },
+        h('summary', null, 'File Uploads'),
+        h(
+          'nav',
+          { 'aria-label': 'File Uploads pages' },
+          h('a', { href: '/files.html' }, 'Saved-record files'),
+        ),
+      ),
+    access.enabled &&
+      h('a', { href: '/access.html', className: 'live-access-link' }, 'My account and password'),
+    h(
+      'div',
+      { className: 'workspace-mode' },
+      'SIGNED-IN WORKSPACE',
+      h(
+        'p',
+        null,
+        'Fabrics, Colours and account permissions save to Supabase. Other modules are not connected yet.',
+      ),
+    ),
+  );
 }

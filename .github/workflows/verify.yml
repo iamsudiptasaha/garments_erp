@@ -1,62 +1,166 @@
-name: Verify and deploy Cloudflare Workers
-
+name: ERP CI
 on:
-  push:
   pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 2 * * 1'
   workflow_dispatch:
-
+  workflow_call:
 permissions:
   contents: read
-
+concurrency:
+  group: erp-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
-  verify:
+  quality:
+    name: Quality and browser tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
-      VITE_DATA_MODE: ${{ vars.CLOUDFLARE_WORKER_NAME != '' && 'supabase' || 'demo' }}
-      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
-    defaults:
-      run:
-        working-directory: fabric-poc
+      VITE_DATA_MODE: demo
+      VITE_SUPABASE_URL: https://example.invalid
+      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_fixture
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: fabric-poc/package-lock.json
-      - run: npm ci
-      - name: Validate production browser configuration
-        if: vars.CLOUDFLARE_WORKER_NAME != ''
-        run: node --input-type=module -e "import {readEnvironment} from './src/foundation/environment.js'; readEnvironment(process.env)"
-      - name: Lint, unused code, duplication, tests and build
-        run: npm run quality
-      - name: Access catalogue checks
-        run: node ../database/test-access-catalogue.mjs
-      - name: Dependency security check
-        run: npm audit --audit-level=high
-      - name: Save duplication report
-        if: always()
-        uses: actions/upload-artifact@v4
+      - run: npm --prefix fabric-poc ci
+      - run: npm --prefix fabric-poc run quality
+      - run: node database/test-access-catalogue.mjs
+      - run: node --test scripts/ci/security.test.mjs
+      - name: Isolated Gmail mailer adapter checks
+        run: |
+          npm --prefix deploy/cloudflare-mailer ci --ignore-scripts
+          npm --prefix deploy/cloudflare-mailer test
+          npm --prefix deploy/cloudflare-mailer run build
+      - name: Check locked account service types and dependencies
+        run: |
+          npx --yes deno@2.9.6 check --frozen --config supabase/functions/erp-accounts/deno.json supabase/functions/erp-accounts/index.ts supabase/functions/admin-*/index.ts scripts/ci/serve-accounts-local.ts
+          npx --yes deno@2.9.6 audit --lock supabase/functions/erp-accounts/deno.lock --level moderate
+      - run: bash scripts/ci/install-actionlint.sh
+      - run: .ci-tools/actionlint -shellcheck= .github/workflows/*.yml
+      - run: node scripts/ci/config-policy.mjs
+      - run: node scripts/ci/portability-check.mjs
+      - run: node scripts/ci/bundle-guard.mjs
+      - run: npm --prefix fabric-poc exec playwright install --with-deps chromium
+      - run: npm --prefix fabric-poc run e2e
+      - name: Portable build provenance
+        run: |
+          mkdir -p reports
+          node --input-type=module -e 'import {writeFileSync} from "node:fs"; writeFileSync("reports/release.json",JSON.stringify({commit:process.env.GITHUB_SHA,run:process.env.GITHUB_RUN_ID},null,2))'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: duplication-report
-          path: fabric-poc/reports/duplication/
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Save verified site
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.CLOUDFLARE_WORKER_NAME != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: verified-site
-          path: fabric-poc/dist/
-          if-no-files-found: error
+          name: portable-build-${{ github.run_id }}
+          path: |
+            fabric-poc/dist/
+            reports/release.json
           retention-days: 7
-
-  deploy:
-    needs: verify
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.CLOUDFLARE_WORKER_NAME != ''
+          if-no-files-found: error
+  security:
+    name: Dependencies and secrets
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+      - run: npm --prefix fabric-poc ci --ignore-scripts
+      - run: npm --prefix fabric-poc audit --audit-level=moderate
+      - run: npm --prefix deploy/cloudflare ci --ignore-scripts
+      - run: npm --prefix deploy/cloudflare audit --audit-level=moderate
+      - run: npm --prefix deploy/cloudflare-mailer ci --ignore-scripts
+      - run: npm --prefix deploy/cloudflare-mailer audit --audit-level=moderate
+      - run: bash scripts/ci/install-gitleaks.sh
+      - name: Full-history secret detection with complete redaction
+        run: .ci-tools/gitleaks git --redact=100 --no-banner --log-level=error .
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@793b778da9c9275a0f276522b27cb5fc14bba279
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@793b778da9c9275a0f276522b27cb5fc14bba279
+        with:
+          output: sarif
+          upload: false
+      - run: node scripts/ci/check-sarif.mjs sarif
+      - name: Retain checked CodeQL report privately
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: codeql-results-${{ github.run_id }}
+          path: sarif/
+          retention-days: 7
+          if-no-files-found: error
+
+  database:
+    name: Isolated database safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+      - run: npm --prefix fabric-poc ci --ignore-scripts
+      - name: Start disposable local database
+        run: npx --yes supabase@2.122.0 start --workdir database/ci/project -x realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor > /tmp/erp-ci-db-start.log 2>&1
+      - name: Schema replay, permissions, constraints, atomicity, concurrency and restore
+        run: bash scripts/ci/test-database.sh
+      - name: Real local Auth, TOTP and private Storage integration
+        run: |
+          umask 077
+          npx --yes supabase@2.122.0 status --workdir database/ci/project -o json > /tmp/erp-test-runtime.json 2>/tmp/erp-ci-status.log
+          npx --yes deno@2.9.6 run --frozen --config supabase/functions/erp-accounts/deno.json --allow-env --allow-read=/tmp/erp-test-runtime.json --allow-net=127.0.0.1,localhost scripts/ci/serve-accounts-local.ts > /tmp/erp-ci-account-service.log 2>&1 &
+          account_pid=$!
+          trap 'kill "$account_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail -X OPTIONS http://127.0.0.1:55425/ > /dev/null; then break; fi
+            sleep 1
+          done
+          TEST_ACCOUNTS_SERVICE=1 TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55422/postgres node fabric-poc/integration/auth-storage-http.mjs
+      - name: Lint database functions in the isolated instance
+        run: npx --yes supabase@2.122.0 db lint --local --schema garments_erp,garments_access --fail-on error --workdir database/ci/project
+      - name: Stop and discard local database
+        if: always()
+        run: npx --yes supabase@2.122.0 stop --workdir database/ci/project --no-backup
+  gate:
+    name: Release gate
+    if: always()
+    needs: [quality, security, codeql, database]
+    runs-on: ubuntu-latest
+    permissions: {}
+    env:
+      RESULTS: ${{ toJSON(needs) }}
+    steps:
+      - run: node -e 'const jobs=JSON.parse(process.env.RESULTS); if(Object.values(jobs).some(j=>j.result!=="success")) process.exit(1); console.log("All required checks passed")'
+  deploy:
+    name: Deploy production Worker
+    needs: gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.gate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: production
     concurrency:
       group: cloudflare-workers-production
@@ -64,23 +168,33 @@ jobs:
     permissions:
       contents: read
     env:
+      VITE_DATA_MODE: supabase
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
+      RELEASE_GATE_RESULT: ${{ needs.gate.result }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          node-version: 22
-      - name: Check deployment credentials
-        shell: bash
-        run: |
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN repository secret"; exit 1; }
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID repository secret"; exit 1; }
-          [[ "$CLOUDFLARE_WORKER_NAME" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "Invalid Worker name"; exit 1; }
-      - uses: actions/download-artifact@v4
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          name: verified-site
-          path: fabric-poc/dist
-      - name: Deploy verified artifact to Cloudflare Workers
-        run: npx --yes wrangler@4.156.0 deploy --config wrangler.json --name="$CLOUDFLARE_WORKER_NAME"
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: fabric-poc/package-lock.json
+      - name: Validate release context and scoped configuration
+        run: node --input-type=module -e "import {deploymentConfig} from './scripts/ci/workers-deploy.mjs'; deploymentConfig(process.env)"
+      - run: npm --prefix fabric-poc ci
+      - name: Build production configuration from the checked commit
+        run: node scripts/ci/build-public.mjs
+      - run: node scripts/ci/bundle-guard.mjs
+      - run: npm --prefix deploy/cloudflare ci --ignore-scripts
+      - name: Deploy through GitHub Actions only
+        run: node scripts/ci/workers-deploy.mjs
+      - name: Verify production deployment and commit
+        run: node scripts/ci/verify-deployment.mjs
+        env:
+          DEPLOYMENT_URL: https://garments-erp.sahacreationsllp0int.workers.dev
+          EXPECTED_COMMIT: ${{ github.sha }}

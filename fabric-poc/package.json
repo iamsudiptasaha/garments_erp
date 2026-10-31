@@ -7,11 +7,15 @@
     "test": "node --test tests/*.test.js",
     "build": "vite build",
     "dev": "vite --host 127.0.0.1 --port 8766 --strictPort",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "cd .. && node fabric-poc/node_modules/eslint/bin/eslint.js fabric-poc scripts/ci database/ci/seed.mjs server/mail deploy/cloudflare-mailer",
     "check:unused": "knip",
     "check:duplicates": "jscpd --config .jscpd.json",
-    "quality": "npm run check:coherence && npm run lint && npm run check:unused && npm run check:duplicates && npm test && npm run build",
-    "check:coherence": "node ../scripts/check-coherence.mjs && node --test ../scripts/coherence.test.mjs"
+    "quality": "npm run check:coherence && npm run typecheck && npm run lint && npm run format:check && npm run check:unused && npm run check:duplicates && npm test && npm run build",
+    "check:coherence": "node ../scripts/check-coherence.mjs && node --test ../scripts/coherence.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "format:check": "prettier --check \"src/**/*.{js,ts,tsx,css}\" \"tests/**/*.js\" \"e2e/**/*.js\" \"*.config.js\" \"integration/**/*.mjs\" \"../scripts/ci/*.{mjs,ts}\" \"../database/ci/seed.mjs\" \"../.github/**/*.{yml,yaml}\" \"../deploy/**/*.json\" \"../server/mail/*.mjs\" \"../deploy/cloudflare-mailer/**/*.mjs\"",
+    "format": "prettier --write \"src/**/*.{js,ts,tsx,css}\" \"tests/**/*.js\" \"e2e/**/*.js\" \"*.config.js\" \"integration/**/*.mjs\" \"../scripts/ci/*.{mjs,ts}\" \"../database/ci/seed.mjs\" \"../.github/**/*.{yml,yaml}\" \"../deploy/**/*.json\" \"../server/mail/*.mjs\" \"../deploy/cloudflare-mailer/**/*.mjs\"",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@fortune-sheet/react": "1.0.4",
@@ -27,10 +31,19 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.1",
+    "@types/node": "22.20.5",
     "eslint": "10.13.0",
     "globals": "17.13.0",
     "jscpd": "5.4.2",
     "knip": "6.43.0",
+    "pg": "8.16.3",
+    "prettier": "3.9.10",
+    "typescript": "7.0.2",
     "vite": "7.3.7"
+  },
+  "overrides": {
+    "uuid": "11.1.1",
+    "minimatch": "11.0.1"
   }
 }

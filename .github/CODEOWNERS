@@ -1,0 +1,8 @@
+# Require this owner through repository rules; this file alone does not enforce approval.
+/.github/ @iamsudiptasaha
+/scripts/ci/ @iamsudiptasaha
+/database/ @iamsudiptasaha
+/supabase/ @iamsudiptasaha
+/deploy/ @iamsudiptasaha
+/fabric-poc/src/access/ @iamsudiptasaha
+/fabric-poc/src/foundation/ @iamsudiptasaha

@@ -1,18 +1,114 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialFabric} from '../src/fabric/domain.js';
-import {upgradeColours,saveLabDip,labClosed,labRows,versionsFor} from '../src/colours/domain.js';
-const input=()=>({color_map_by_brand_id:'co1',dyer_id:'dy1',date:'2026-10-29',lab_dip_status_id:'ld-at-dyer',shade_card_no:'A01',comments:'First attempt'});
-test('legacy references gain unknown-status editions without fabric or mapping ID changes',()=>{const d=initialFabric();assert.ok(d.lab_dip.length);assert.ok(d.lab_dip_version.every(v=>v.lab_dip_status_id===null&&v.updated_at===null));assert.equal(labRows(d)[0].status,'Status not recorded');assert.deepEqual(upgradeColours(d),d)});
-test('edition creation, redo versions and all accepted outcomes follow terminal lifecycle',()=>{
- for(const status of ['ld-approved','ld-comments','ld-swatch']){const original=initialFabric();let d=saveLabDip(original,input());const lab=d.lab_dip.at(-1);assert.equal(lab.edition,2);assert.equal(versionsFor(d,lab.id)[0].version,1);
- d=saveLabDip(d,{...input(),id:lab.id,mode:'update',lab_dip_status_id:'ld-failed'});d=saveLabDip(d,{...input(),id:lab.id,mode:'version',lab_dip_status_id:'ld-awaiting'});assert.equal(labRows(d).find(r=>r.id===lab.id).status,'Redo 2 · Awaiting buyer comments');
- d=saveLabDip(d,{...input(),id:lab.id,mode:'update',lab_dip_status_id:status,attached_swatch:status==='ld-swatch'});assert.ok(labClosed(d,lab.id));assert.equal(versionsFor(d,lab.id).at(-1).attached_swatch,status==='ld-swatch');assert.throws(()=>saveLabDip(d,{...input(),id:lab.id,mode:'version'}),/completed/);assert.throws(()=>saveLabDip(d,{...input(),id:lab.id,mode:'update'}),/completed/);
- const next=saveLabDip(d,input());assert.equal(next.lab_dip.at(-1).edition,3);assert.equal(versionsFor(next,next.lab_dip.at(-1).id)[0].version,1);assert.equal(original.lab_dip.length,initialFabric().lab_dip.length);
- }
+import { initialFabric } from '../src/fabric/domain.js';
+import {
+  upgradeColours,
+  saveLabDip,
+  labClosed,
+  labRows,
+  versionsFor,
+} from '../src/colours/domain.js';
+const input = () => ({
+  color_map_by_brand_id: 'co1',
+  dyer_id: 'dy1',
+  date: '2026-10-29',
+  lab_dip_status_id: 'ld-at-dyer',
+  shade_card_no: 'A01',
+  comments: 'First attempt',
 });
-test('lab dip rejects missing mappings, invalid dates, status and attachment references',()=>{const d=initialFabric();assert.throws(()=>saveLabDip(d,{...input(),color_map_by_brand_id:'bad'}),/mapping and dyer/);assert.throws(()=>saveLabDip(d,{...input(),date:''}),/date/);assert.throws(()=>saveLabDip(d,{...input(),lab_dip_status_id:'bad'}),/status/);assert.throws(()=>saveLabDip(d,{...input(),shade_card_image_attachment:'bad'}),/attachment/)});
-test('lab dip attachment labels use the database filename column',()=>{const d=initialFabric();d.attachments.push({id:'attachment-1',filename:'shade-card.png'});d.lab_dip_version[0].shade_card_image_attachment='attachment-1';assert.equal(labRows(d).find(r=>r.id===d.lab_dip_version[0].lab_dip_id).attachment,'shade-card.png')});
-test('Attached Swatch retains date and clears shade-card metadata',()=>{const next=saveLabDip(initialFabric(),{...input(),lab_dip_status_id:'ld-swatch',attached_swatch:true,date:'2026-10-30',shade_card_no:'unused',shade_card_option:'unused'}),lab=next.lab_dip.at(-1),v=versionsFor(next,lab.id)[0];assert.equal(lab.date,'2026-10-30');assert.equal(v.date,'2026-10-30');assert.equal(v.shade_card_no,null);assert.equal(v.shade_card_option,null);assert.equal(v.version,1);assert.equal(lab.edition,2)});
+test('legacy references gain unknown-status editions without fabric or mapping ID changes', () => {
+  const d = initialFabric();
+  assert.ok(d.lab_dip.length);
+  assert.ok(d.lab_dip_version.every((v) => v.lab_dip_status_id === null && v.updated_at === null));
+  assert.equal(labRows(d)[0].status, 'Status not recorded');
+  assert.deepEqual(upgradeColours(d), d);
+});
+test('edition creation, redo versions and all accepted outcomes follow terminal lifecycle', () => {
+  for (const status of ['ld-approved', 'ld-comments', 'ld-swatch']) {
+    const original = initialFabric();
+    let d = saveLabDip(original, input());
+    const lab = d.lab_dip.at(-1);
+    assert.equal(lab.edition, 2);
+    assert.equal(versionsFor(d, lab.id)[0].version, 1);
+    d = saveLabDip(d, { ...input(), id: lab.id, mode: 'update', lab_dip_status_id: 'ld-failed' });
+    d = saveLabDip(d, {
+      ...input(),
+      id: lab.id,
+      mode: 'version',
+      lab_dip_status_id: 'ld-awaiting',
+    });
+    assert.equal(
+      labRows(d).find((r) => r.id === lab.id).status,
+      'Redo 2 · Awaiting buyer comments',
+    );
+    d = saveLabDip(d, {
+      ...input(),
+      id: lab.id,
+      mode: 'update',
+      lab_dip_status_id: status,
+      attached_swatch: status === 'ld-swatch',
+    });
+    assert.ok(labClosed(d, lab.id));
+    assert.equal(versionsFor(d, lab.id).at(-1).attached_swatch, status === 'ld-swatch');
+    assert.throws(() => saveLabDip(d, { ...input(), id: lab.id, mode: 'version' }), /completed/);
+    assert.throws(() => saveLabDip(d, { ...input(), id: lab.id, mode: 'update' }), /completed/);
+    const next = saveLabDip(d, input());
+    assert.equal(next.lab_dip.at(-1).edition, 3);
+    assert.equal(versionsFor(next, next.lab_dip.at(-1).id)[0].version, 1);
+    assert.equal(original.lab_dip.length, initialFabric().lab_dip.length);
+  }
+});
+test('lab dip rejects missing mappings, invalid dates, status and attachment references', () => {
+  const d = initialFabric();
+  assert.throws(
+    () => saveLabDip(d, { ...input(), color_map_by_brand_id: 'bad' }),
+    /mapping and dyer/,
+  );
+  assert.throws(() => saveLabDip(d, { ...input(), date: '' }), /date/);
+  assert.throws(() => saveLabDip(d, { ...input(), lab_dip_status_id: 'bad' }), /status/);
+  assert.throws(
+    () => saveLabDip(d, { ...input(), shade_card_image_attachment: 'bad' }),
+    /attachment/,
+  );
+});
+test('lab dip attachment labels use the database filename column', () => {
+  const d = initialFabric();
+  d.attachments.push({ id: 'attachment-1', filename: 'shade-card.png' });
+  d.lab_dip_version[0].shade_card_image_attachment = 'attachment-1';
+  assert.equal(
+    labRows(d).find((r) => r.id === d.lab_dip_version[0].lab_dip_id).attachment,
+    'shade-card.png',
+  );
+});
+test('Attached Swatch retains date and clears shade-card metadata', () => {
+  const next = saveLabDip(initialFabric(), {
+      ...input(),
+      lab_dip_status_id: 'ld-swatch',
+      attached_swatch: true,
+      date: '2026-10-30',
+      shade_card_no: 'unused',
+      shade_card_option: 'unused',
+    }),
+    lab = next.lab_dip.at(-1),
+    v = versionsFor(next, lab.id)[0];
+  assert.equal(lab.date, '2026-10-30');
+  assert.equal(v.date, '2026-10-30');
+  assert.equal(v.shade_card_no, null);
+  assert.equal(v.shade_card_option, null);
+  assert.equal(v.version, 1);
+  assert.equal(lab.edition, 2);
+});
 
-test('attached swatch boolean sets Attached Swatch status and clears shade fields',()=>{const d=saveLabDip(initialFabric(),{...input(),attached_swatch:true,shade_card_no:'discard',shade_card_option:'discard'});const v=d.lab_dip_version.at(-1);assert.equal(v.attached_swatch,true);assert.equal(v.shade_card_no,null);assert.equal(v.shade_card_option,null);assert.equal(v.lab_dip_status_id,'ld-swatch')});
+test('attached swatch boolean sets Attached Swatch status and clears shade fields', () => {
+  const d = saveLabDip(initialFabric(), {
+    ...input(),
+    attached_swatch: true,
+    shade_card_no: 'discard',
+    shade_card_option: 'discard',
+  });
+  const v = d.lab_dip_version.at(-1);
+  assert.equal(v.attached_swatch, true);
+  assert.equal(v.shade_card_no, null);
+  assert.equal(v.shade_card_option, null);
+  assert.equal(v.lab_dip_status_id, 'ld-swatch');
+});

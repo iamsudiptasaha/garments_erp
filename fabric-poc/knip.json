@@ -1,6 +1,26 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["src/app.js", "src/access/app.js", "src/files/app.js", "src/fabric/app.js", "src/fortune-demo.js", "src/tabulator-demo.js", "tests/*.test.js"],
-  "project": ["src/**/*.js", "tests/**/*.js", "*.config.js"],
+  "entry": [
+    "src/app.js",
+    "src/access/app.js",
+    "src/files/app.js",
+    "src/fabric/app.js",
+    "src/fortune-demo.js",
+    "src/tabulator-demo.js",
+    "tests/*.test.js",
+    "../scripts/ci/*.mjs",
+    "../database/ci/seed.mjs",
+    "e2e/*.js",
+    "integration/*.mjs"
+  ],
+  "project": [
+    "src/**/*.js",
+    "tests/**/*.js",
+    "*.config.js",
+    "src/**/*.ts",
+    "../scripts/ci/*.mjs",
+    "e2e/*.js",
+    "integration/*.mjs"
+  ],
   "includeEntryExports": true
 }

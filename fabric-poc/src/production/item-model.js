@@ -1,22 +1,146 @@
-export const checklistFields=[['fpt_gpt_status_id','FPT / GPT'],['photoshoot_sample_status_id','Photoshoot sample'],['shipment_sample_status_id','Shipment sample'],['techpack_aqcuired_status_id','Techpack acquired'],['ordersheet_acquired_status_id','Ordersheet acquired']];
-export function allocatePieces(pieces,weights){
- const total=Number(pieces),values=weights.map(Number),sum=values.reduce((n,v)=>n+v,0);
- if(String(pieces).trim()===''||!Number.isSafeInteger(total)||total<0)throw Error('Enter whole non-negative pieces for every size.');
- if(!values.length||values.some(v=>!Number.isFinite(v)||v<=0)||!Number.isFinite(sum))throw Error('Each variant needs a positive share weight.');
- const exact=values.map(v=>total*(v/sum)),allocated=exact.map(Math.floor),remaining=total-allocated.reduce((n,v)=>n+v,0),order=exact.map((n,i)=>({i,fraction:n-allocated[i]})).sort((a,b)=>b.fraction-a.fraction||a.i-b.i);
- for(let i=0;i<remaining;i++)allocated[order[i].i]++;
- return allocated;
+export const checklistFields = [
+  ['fpt_gpt_status_id', 'FPT / GPT'],
+  ['photoshoot_sample_status_id', 'Photoshoot sample'],
+  ['shipment_sample_status_id', 'Shipment sample'],
+  ['techpack_aqcuired_status_id', 'Techpack acquired'],
+  ['ordersheet_acquired_status_id', 'Ordersheet acquired'],
+];
+export function allocatePieces(pieces, weights) {
+  const total = Number(pieces),
+    values = weights.map(Number),
+    sum = values.reduce((n, v) => n + v, 0);
+  if (String(pieces).trim() === '' || !Number.isSafeInteger(total) || total < 0)
+    throw Error('Enter whole non-negative pieces for every size.');
+  if (!values.length || values.some((v) => !Number.isFinite(v) || v <= 0) || !Number.isFinite(sum))
+    throw Error('Each variant needs a positive share weight.');
+  const exact = values.map((v) => total * (v / sum)),
+    allocated = exact.map(Math.floor),
+    remaining = total - allocated.reduce((n, v) => n + v, 0),
+    order = exact
+      .map((n, i) => ({ i, fraction: n - allocated[i] }))
+      .sort((a, b) => b.fraction - a.fraction || a.i - b.i);
+  for (let i = 0; i < remaining; i++) allocated[order[i].i]++;
+  return allocated;
 }
-export function itemSetup(data,id){
- const parts=data.item_part.filter(p=>p.item_id===id),links=data.variant_item.filter(v=>parts.some(p=>p.id===v.item_part_id));
- return {checklist:{...(data.production_checklist||[]).find(c=>c.item_id===id)},sizes:data.item_size_list.filter(s=>s.item_id===id).map(s=>({...s,pieces:(data.item_cut_ratio||[]).find(r=>r.item_size_list_id===s.id)?.pieces??''})),variants:[...new Set(links.map(v=>v.variant_id))].map(variantId=>({variant_id:variantId,name:data.variant.find(d=>d.id===variantId)?.variant_name||'',share_weight:1,parts:links.filter(v=>v.variant_id===variantId).map(v=>({...v,part_list_id:parts.find(p=>p.id===v.item_part_id).part_list_id}))}))};
+export function itemSetup(data, id) {
+  const parts = data.item_part.filter((p) => p.item_id === id),
+    links = data.variant_item.filter((v) => parts.some((p) => p.id === v.item_part_id));
+  return {
+    checklist: { ...(data.production_checklist || []).find((c) => c.item_id === id) },
+    sizes: data.item_size_list
+      .filter((s) => s.item_id === id)
+      .map((s) => ({
+        ...s,
+        pieces: (data.item_cut_ratio || []).find((r) => r.item_size_list_id === s.id)?.pieces ?? '',
+      })),
+    variants: [...new Set(links.map((v) => v.variant_id))].map((variantId) => ({
+      variant_id: variantId,
+      name: data.variant.find((d) => d.id === variantId)?.variant_name || '',
+      share_weight: 1,
+      parts: links
+        .filter((v) => v.variant_id === variantId)
+        .map((v) => ({
+          ...v,
+          part_list_id: parts.find((p) => p.id === v.item_part_id).part_list_id,
+        })),
+    })),
+  };
 }
-export function saveItemSetup(data,itemId,setup){
- const next=structuredClone(data);next.item_cut_ratio||=[];next.production_checklist||=[];
- if(!setup.sizes.length||!setup.variants.length)throw Error('Add at least one size and variant.');
- const seenSizes=new Set(),seenNames=new Set();
- for(const size of setup.sizes){if(!next.size_list.some(s=>s.id===size.size_list_id)||seenSizes.has(size.size_list_id))throw Error('Choose each size once.');seenSizes.add(size.size_list_id);allocatePieces(size.pieces,setup.variants.map(()=>1));let link=next.item_size_list.find(s=>s.item_id===itemId&&s.size_list_id===size.size_list_id);if(!link){link={id:crypto.randomUUID(),item_id:itemId,size_list_id:size.size_list_id};next.item_size_list.push(link)}const ratio=next.item_cut_ratio.find(r=>r.item_size_list_id===link.id);if(ratio)ratio.pieces=Number(size.pieces);else next.item_cut_ratio.push({id:crypto.randomUUID(),item_size_list_id:link.id,pieces:Number(size.pieces)})}
- for(const variant of setup.variants){const name=variant.name.trim();if(!name||seenNames.has(name.toLowerCase()))throw Error('Give each variant a distinct name.');seenNames.add(name.toLowerCase());if(!variant.parts.length)throw Error('Add at least one part to every variant.');let named=next.variant.find(d=>d.id===variant.variant_id);if(named){named.variant_name=name;named.share_weight=1}else{named={id:crypto.randomUUID(),variant_name:name,share_weight:1};next.variant.push(named)}const seenParts=new Set();for(const entry of variant.parts){if(!next.part_list.some(p=>p.id===entry.part_list_id)||seenParts.has(entry.part_list_id))throw Error('Select each part once per variant.');seenParts.add(entry.part_list_id);const lab=entry.lab_dip_id?next.lab_dip?.find(l=>l.id===entry.lab_dip_id):null;if(entry.lab_dip_id&&!lab)throw Error('Choose an existing lab dip.');if(lab){const brand=next.color_map_by_brand.find(m=>m.id===lab.color_map_by_brand_id)?.brand_list_id;if(brand!==next.item.find(i=>i.id===itemId)?.brand_id)throw Error('Lab dip must match the item brand.')}let part=next.item_part.find(p=>p.item_id===itemId&&p.part_list_id===entry.part_list_id);if(!part){part={id:crypto.randomUUID(),item_id:itemId,part_list_id:entry.part_list_id};next.item_part.push(part)}const mapping=next.variant_item.find(v=>v.item_part_id===part.id&&v.variant_id===named.id);if(mapping)mapping.lab_dip_id=entry.lab_dip_id||null;else next.variant_item.push({id:crypto.randomUUID(),item_part_id:part.id,variant_id:named.id,lab_dip_id:entry.lab_dip_id||null})}}
- const checklist=next.production_checklist.find(c=>c.item_id===itemId)||{id:crypto.randomUUID(),item_id:itemId};for(const [key]of checklistFields){const status=setup.checklist?.[key]||null;if(status&&!next.item_status_list.some(s=>s.id===status))throw Error('Choose an existing checklist status.');checklist[key]=status}checklist.updated_at=new Date().toISOString();if(!next.production_checklist.some(c=>c.id===checklist.id))next.production_checklist.push(checklist);
- return next;
+export function saveItemSetup(data, itemId, setup) {
+  const next = structuredClone(data);
+  next.item_cut_ratio ||= [];
+  next.production_checklist ||= [];
+  if (!setup.sizes.length || !setup.variants.length)
+    throw Error('Add at least one size and variant.');
+  const seenSizes = new Set(),
+    seenNames = new Set();
+  for (const size of setup.sizes) {
+    if (!next.size_list.some((s) => s.id === size.size_list_id) || seenSizes.has(size.size_list_id))
+      throw Error('Choose each size once.');
+    seenSizes.add(size.size_list_id);
+    allocatePieces(
+      size.pieces,
+      setup.variants.map(() => 1),
+    );
+    let link = next.item_size_list.find(
+      (s) => s.item_id === itemId && s.size_list_id === size.size_list_id,
+    );
+    if (!link) {
+      link = { id: crypto.randomUUID(), item_id: itemId, size_list_id: size.size_list_id };
+      next.item_size_list.push(link);
+    }
+    const ratio = next.item_cut_ratio.find((r) => r.item_size_list_id === link.id);
+    if (ratio) ratio.pieces = Number(size.pieces);
+    else
+      next.item_cut_ratio.push({
+        id: crypto.randomUUID(),
+        item_size_list_id: link.id,
+        pieces: Number(size.pieces),
+      });
+  }
+  for (const variant of setup.variants) {
+    const name = variant.name.trim();
+    if (!name || seenNames.has(name.toLowerCase()))
+      throw Error('Give each variant a distinct name.');
+    seenNames.add(name.toLowerCase());
+    if (!variant.parts.length) throw Error('Add at least one part to every variant.');
+    let named = next.variant.find((d) => d.id === variant.variant_id);
+    if (named) {
+      named.variant_name = name;
+      named.share_weight = 1;
+    } else {
+      named = { id: crypto.randomUUID(), variant_name: name, share_weight: 1 };
+      next.variant.push(named);
+    }
+    const seenParts = new Set();
+    for (const entry of variant.parts) {
+      if (
+        !next.part_list.some((p) => p.id === entry.part_list_id) ||
+        seenParts.has(entry.part_list_id)
+      )
+        throw Error('Select each part once per variant.');
+      seenParts.add(entry.part_list_id);
+      const lab = entry.lab_dip_id ? next.lab_dip?.find((l) => l.id === entry.lab_dip_id) : null;
+      if (entry.lab_dip_id && !lab) throw Error('Choose an existing lab dip.');
+      if (lab) {
+        const brand = next.color_map_by_brand.find(
+          (m) => m.id === lab.color_map_by_brand_id,
+        )?.brand_list_id;
+        if (brand !== next.item.find((i) => i.id === itemId)?.brand_id)
+          throw Error('Lab dip must match the item brand.');
+      }
+      let part = next.item_part.find(
+        (p) => p.item_id === itemId && p.part_list_id === entry.part_list_id,
+      );
+      if (!part) {
+        part = { id: crypto.randomUUID(), item_id: itemId, part_list_id: entry.part_list_id };
+        next.item_part.push(part);
+      }
+      const mapping = next.variant_item.find(
+        (v) => v.item_part_id === part.id && v.variant_id === named.id,
+      );
+      if (mapping) mapping.lab_dip_id = entry.lab_dip_id || null;
+      else
+        next.variant_item.push({
+          id: crypto.randomUUID(),
+          item_part_id: part.id,
+          variant_id: named.id,
+          lab_dip_id: entry.lab_dip_id || null,
+        });
+    }
+  }
+  const checklist = next.production_checklist.find((c) => c.item_id === itemId) || {
+    id: crypto.randomUUID(),
+    item_id: itemId,
+  };
+  for (const [key] of checklistFields) {
+    const status = setup.checklist?.[key] || null;
+    if (status && !next.item_status_list.some((s) => s.id === status))
+      throw Error('Choose an existing checklist status.');
+    checklist[key] = status;
+  }
+  checklist.updated_at = new Date().toISOString();
+  if (!next.production_checklist.some((c) => c.id === checklist.id))
+    next.production_checklist.push(checklist);
+  return next;
 }

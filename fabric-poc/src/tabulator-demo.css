@@ -1,1 +1,163 @@
-#tabulator-grid{border:1px solid #d8e5f0;border-top:0;border-radius:0 0 6px 6px;background:white;font:13px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#29445c}#tabulator-grid .tabulator-header{background:#eaf4fc;border-bottom:1px solid #d0e1ee;color:#355974}#tabulator-grid .tabulator-col{background:#eaf4fc;border-right:1px solid #dce9f2}#tabulator-grid .tabulator-col-content{padding:12px 12px 6px}#tabulator-grid .tabulator-header-filter input{background:#fff;border:1px solid #d8e5ef;border-radius:5px;padding:5px 7px;font-size:12px;color:#45657e}#tabulator-grid .tabulator-row{min-height:46px;background:#fff;border-bottom:1px solid #e7edf3}#tabulator-grid .tabulator-row.tabulator-row-even{background:#f9fbfe}#tabulator-grid .tabulator-cell{padding:13px 12px;border-right:1px solid #edf1f5}#tabulator-grid .tabulator-cell.tabulator-editing{padding:3px}#tabulator-grid .tabulator-cell.tabulator-editable{color:#244d70}#tabulator-grid .tabulator-calcs-holder{background:#eaf4fc;border-top:1px solid #c7ddeb}#tabulator-grid .tabulator-calcs{background:#eaf4fc;color:#315e80;font-weight:600}#tabulator-grid .tabulator-cell.tabulator-range-highlight{background:#e4f0fc}#tabulator-grid .tabulator-range-overlay .tabulator-range{border:2px solid #539cd3}#tabulator-grid .tabulator-row .row-number{color:#8b9baa;background:#f0f6fb}#tabulator-grid .tabulator-frozen{border-right:1px solid #c9dcea}.comparison-footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;background:#eaf3fb;border:1px solid #d5e3ef;border-top:0;border-radius:0 0 8px 8px;font-size:12px;color:#50708c}.preview-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}.preview-heading small{color:#6a8092;font-size:11px;letter-spacing:.08em}#print-preview{width:min(1200px,96vw);max-height:90vh;overflow:auto}#printed-table{overflow:auto}#printed-table table{border-collapse:collapse;width:100%;font-size:12px}#printed-table th,#printed-table td{border:1px solid #d8e5ef;padding:9px}#printed-table thead{background:#eaf4fc}.tabulator-menu{background:white;border:1px solid #d5e3ef;border-radius:8px;box-shadow:0 8px 22px #26486420;color:#29445c;font-size:13px}.tabulator-menu-item{padding:9px 14px}.sample a{color:#357eb5}@media print{aside,.toolbar,header,.hint,.rules,.comparison-footer,.views,dialog{display:none!important}.tabulator-print-table{border-collapse:collapse;width:100%;font-size:10px}.tabulator-print-table td,.tabulator-print-table th{padding:5px;border:1px solid #bbb}.tabulator-print-table thead{display:table-header-group}.tabulator-print-table tr{break-inside:avoid}@page{size:A4 landscape;margin:10mm}}
+#tabulator-grid {
+  border: 1px solid #d8e5f0;
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+  background: white;
+  font:
+    13px/1.5 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  color: #29445c;
+}
+#tabulator-grid .tabulator-header {
+  background: #eaf4fc;
+  border-bottom: 1px solid #d0e1ee;
+  color: #355974;
+}
+#tabulator-grid .tabulator-col {
+  background: #eaf4fc;
+  border-right: 1px solid #dce9f2;
+}
+#tabulator-grid .tabulator-col-content {
+  padding: 12px 12px 6px;
+}
+#tabulator-grid .tabulator-header-filter input {
+  background: #fff;
+  border: 1px solid #d8e5ef;
+  border-radius: 5px;
+  padding: 5px 7px;
+  font-size: 12px;
+  color: #45657e;
+}
+#tabulator-grid .tabulator-row {
+  min-height: 46px;
+  background: #fff;
+  border-bottom: 1px solid #e7edf3;
+}
+#tabulator-grid .tabulator-row.tabulator-row-even {
+  background: #f9fbfe;
+}
+#tabulator-grid .tabulator-cell {
+  padding: 13px 12px;
+  border-right: 1px solid #edf1f5;
+}
+#tabulator-grid .tabulator-cell.tabulator-editing {
+  padding: 3px;
+}
+#tabulator-grid .tabulator-cell.tabulator-editable {
+  color: #244d70;
+}
+#tabulator-grid .tabulator-calcs-holder {
+  background: #eaf4fc;
+  border-top: 1px solid #c7ddeb;
+}
+#tabulator-grid .tabulator-calcs {
+  background: #eaf4fc;
+  color: #315e80;
+  font-weight: 600;
+}
+#tabulator-grid .tabulator-cell.tabulator-range-highlight {
+  background: #e4f0fc;
+}
+#tabulator-grid .tabulator-range-overlay .tabulator-range {
+  border: 2px solid #539cd3;
+}
+#tabulator-grid .tabulator-row .row-number {
+  color: #8b9baa;
+  background: #f0f6fb;
+}
+#tabulator-grid .tabulator-frozen {
+  border-right: 1px solid #c9dcea;
+}
+.comparison-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  background: #eaf3fb;
+  border: 1px solid #d5e3ef;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  font-size: 12px;
+  color: #50708c;
+}
+.preview-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.preview-heading small {
+  color: #6a8092;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+#print-preview {
+  width: min(1200px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+}
+#printed-table {
+  overflow: auto;
+}
+#printed-table table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+#printed-table th,
+#printed-table td {
+  border: 1px solid #d8e5ef;
+  padding: 9px;
+}
+#printed-table thead {
+  background: #eaf4fc;
+}
+.tabulator-menu {
+  background: white;
+  border: 1px solid #d5e3ef;
+  border-radius: 8px;
+  box-shadow: 0 8px 22px #26486420;
+  color: #29445c;
+  font-size: 13px;
+}
+.tabulator-menu-item {
+  padding: 9px 14px;
+}
+.sample a {
+  color: #357eb5;
+}
+@media print {
+  aside,
+  .toolbar,
+  header,
+  .hint,
+  .rules,
+  .comparison-footer,
+  .views,
+  dialog {
+    display: none !important;
+  }
+  .tabulator-print-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 10px;
+  }
+  .tabulator-print-table td,
+  .tabulator-print-table th {
+    padding: 5px;
+    border: 1px solid #bbb;
+  }
+  .tabulator-print-table thead {
+    display: table-header-group;
+  }
+  .tabulator-print-table tr {
+    break-inside: avoid;
+  }
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+}

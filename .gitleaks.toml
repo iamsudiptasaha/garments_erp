@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Reviewed false positive: SQL assigns generated UUID variables; this exact statement contains no credential literal. No file, commit, key pattern or directory is exempted."
+condition = "AND"
+paths = ['''(?:^|/)database/(drafts/manage-empty-buckets|applied/20261029185154_manage_private_bucket_lifecycle|ci/baseline)\.sql$''']
+regexTarget = "line"
+regexes = ['''^\s*update garments_erp\.bucket_group set removal_token=token,removal_bucket_id=bid where id=g\.id;\s*$''']
