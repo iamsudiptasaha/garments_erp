@@ -1,0 +1,3 @@
+# Local placeholders only. Use encrypted Worker secrets for production.
+GMAIL_APP_PASSWORD=
+MAILER_SHARED_SECRET=

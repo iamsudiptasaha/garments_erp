@@ -15,9 +15,10 @@ for migration in supabase/migrations/*.sql; do
 done
 docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < /tmp/erp-ci-seed.sql >/tmp/erp-ci-seed.log
 node fabric-poc/integration/database-check.mjs
+node fabric-poc/integration/account-security.mjs
 # Existing contracts run in the isolated database only.
-for sql in database/tests/fabric-reference-contract.sql database/tests/live-fabric-access.sql database/tests/fabric-validation-scope.sql; do
-  docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$sql" >/tmp/erp-ci-contract.log
+for sql in database/tests/fabric-reference-contract.sql database/tests/live-fabric-access.sql database/tests/fabric-validation-scope.sql database/tests/private-file-storage.sql database/tests/bucket-lifecycle.sql database/tests/file-upload-routes.sql; do
+  { echo "select set_config('request.jwt.claims','{\"aal\":\"aal2\",\"session_id\":\"10000000-0000-4000-8000-000000000001\"}',false);"; cat "$sql"; } | docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 >/tmp/erp-ci-contract.log
 done
 # Restore rehearsal for a synthetic application backup; never downloads production backups.
 docker exec "$container" pg_dump -U postgres -d postgres -Fc -n auth -n storage -n garments_erp -n garments_access > /tmp/erp-ci-backup.dump

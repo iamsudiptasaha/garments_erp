@@ -9,7 +9,7 @@ esac
 folder=$(mktemp -d)
 trap 'rm -rf "$folder"' EXIT
 archive="$folder/actionlint.tar.gz"
-curl --fail --silent --show-error --location "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_${platform}.tar.gz" --output "$archive"
+curl --connect-timeout 10 --max-time 60 --retry 2 --fail --silent --show-error --location "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_${platform}.tar.gz" --output "$archive"
 actual=$(shasum -a 256 "$archive" | cut -d' ' -f1)
 test "$actual" = "$checksum" || { echo 'Actionlint checksum mismatch'; exit 1; }
 mkdir -p .ci-tools

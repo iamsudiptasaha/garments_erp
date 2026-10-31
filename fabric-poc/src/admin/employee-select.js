@@ -7,6 +7,7 @@ export function EmployeeSelect({
   onChange,
   disabled = false,
   label = 'Select employee',
+  inputId = 'role-employee-select',
 }) {
   const options = employees.map((e) => ({
     value: e.id,
@@ -16,10 +17,10 @@ export function EmployeeSelect({
   return h(
     'div',
     { className: 'employee-picker' },
-    h('label', { htmlFor: 'role-employee-select' }, label),
+    h('label', { htmlFor: inputId }, label),
     h(Select, {
-      inputId: 'role-employee-select',
-      instanceId: 'role-employee-select',
+      inputId,
+      instanceId: inputId,
       classNamePrefix: 'employee-select',
       options,
       value: options.find((o) => o.value === value) || null,

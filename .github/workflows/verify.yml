@@ -34,6 +34,15 @@ jobs:
       - run: npm --prefix fabric-poc run quality
       - run: node database/test-access-catalogue.mjs
       - run: node --test scripts/ci/security.test.mjs
+      - name: Isolated Gmail mailer adapter checks
+        run: |
+          npm --prefix deploy/cloudflare-mailer ci --ignore-scripts
+          npm --prefix deploy/cloudflare-mailer test
+          npm --prefix deploy/cloudflare-mailer run build
+      - name: Check locked account service types and dependencies
+        run: |
+          npx --yes deno@2.9.6 check --frozen --config supabase/functions/erp-accounts/deno.json supabase/functions/erp-accounts/index.ts scripts/ci/serve-accounts-local.ts
+          npx --yes deno@2.9.6 audit --lock supabase/functions/erp-accounts/deno.lock --level moderate
       - run: bash scripts/ci/install-actionlint.sh
       - run: .ci-tools/actionlint -shellcheck= .github/workflows/*.yml
       - run: node scripts/ci/config-policy.mjs
@@ -69,6 +78,8 @@ jobs:
       - run: npm --prefix fabric-poc audit --audit-level=moderate
       - run: npm --prefix deploy/cloudflare ci --ignore-scripts
       - run: npm --prefix deploy/cloudflare audit --audit-level=moderate
+      - run: npm --prefix deploy/cloudflare-mailer ci --ignore-scripts
+      - run: npm --prefix deploy/cloudflare-mailer audit --audit-level=moderate
       - run: bash scripts/ci/install-gitleaks.sh
       - name: Full-history secret detection with complete redaction
         run: .ci-tools/gitleaks git --redact=100 --no-banner --log-level=error .
@@ -112,9 +123,21 @@ jobs:
           node-version-file: .nvmrc
       - run: npm --prefix fabric-poc ci --ignore-scripts
       - name: Start disposable local database
-        run: npx --yes supabase@2.122.0 db start --workdir database/ci/project > /tmp/erp-ci-db-start.log 2>&1
+        run: npx --yes supabase@2.122.0 start --workdir database/ci/project -x realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor > /tmp/erp-ci-db-start.log 2>&1
       - name: Schema replay, permissions, constraints, atomicity, concurrency and restore
         run: bash scripts/ci/test-database.sh
+      - name: Real local Auth, TOTP and private Storage integration
+        run: |
+          umask 077
+          npx --yes supabase@2.122.0 status --workdir database/ci/project -o json > /tmp/erp-test-runtime.json 2>/tmp/erp-ci-status.log
+          npx --yes deno@2.9.6 run --frozen --config supabase/functions/erp-accounts/deno.json --allow-env --allow-read=/tmp/erp-test-runtime.json --allow-net=127.0.0.1,localhost scripts/ci/serve-accounts-local.ts > /tmp/erp-ci-account-service.log 2>&1 &
+          account_pid=$!
+          trap 'kill "$account_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail -X OPTIONS http://127.0.0.1:55425/ > /dev/null; then break; fi
+            sleep 1
+          done
+          TEST_ACCOUNTS_SERVICE=1 TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55422/postgres node fabric-poc/integration/auth-storage-http.mjs
       - name: Lint database functions in the isolated instance
         run: npx --yes supabase@2.122.0 db lint --local --schema garments_erp,garments_access --fail-on error --workdir database/ci/project
       - name: Stop and discard local database

@@ -7,14 +7,14 @@
     "test": "node --test tests/*.test.js",
     "build": "vite build",
     "dev": "vite --host 127.0.0.1 --port 8766 --strictPort",
-    "lint": "cd .. && node fabric-poc/node_modules/eslint/bin/eslint.js fabric-poc scripts/ci database/ci/seed.mjs",
+    "lint": "cd .. && node fabric-poc/node_modules/eslint/bin/eslint.js fabric-poc scripts/ci database/ci/seed.mjs server/mail deploy/cloudflare-mailer",
     "check:unused": "knip",
     "check:duplicates": "jscpd --config .jscpd.json",
     "quality": "npm run check:coherence && npm run typecheck && npm run lint && npm run format:check && npm run check:unused && npm run check:duplicates && npm test && npm run build",
     "check:coherence": "node ../scripts/check-coherence.mjs && node --test ../scripts/coherence.test.mjs",
     "typecheck": "tsc --noEmit",
-    "format:check": "prettier --check \"src/**/*.{js,ts,tsx,css}\" \"tests/**/*.js\" \"e2e/**/*.js\" \"*.config.js\" \"integration/**/*.mjs\" \"../scripts/ci/*.mjs\" \"../database/ci/seed.mjs\" \"../.github/**/*.{yml,yaml}\" \"../deploy/**/*.json\"",
-    "format": "prettier --write \"src/**/*.{js,ts,tsx,css}\" \"tests/**/*.js\" \"e2e/**/*.js\" \"*.config.js\" \"integration/**/*.mjs\" \"../scripts/ci/*.mjs\" \"../database/ci/seed.mjs\" \"../.github/**/*.{yml,yaml}\" \"../deploy/**/*.json\"",
+    "format:check": "prettier --check \"src/**/*.{js,ts,tsx,css}\" \"tests/**/*.js\" \"e2e/**/*.js\" \"*.config.js\" \"integration/**/*.mjs\" \"../scripts/ci/*.{mjs,ts}\" \"../database/ci/seed.mjs\" \"../.github/**/*.{yml,yaml}\" \"../deploy/**/*.json\" \"../server/mail/*.mjs\" \"../deploy/cloudflare-mailer/**/*.mjs\"",
+    "format": "prettier --write \"src/**/*.{js,ts,tsx,css}\" \"tests/**/*.js\" \"e2e/**/*.js\" \"*.config.js\" \"integration/**/*.mjs\" \"../scripts/ci/*.{mjs,ts}\" \"../database/ci/seed.mjs\" \"../.github/**/*.{yml,yaml}\" \"../deploy/**/*.json\" \"../server/mail/*.mjs\" \"../deploy/cloudflare-mailer/**/*.mjs\"",
     "e2e": "playwright test"
   },
   "dependencies": {

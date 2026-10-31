@@ -14,8 +14,15 @@ for (const file of readdirSync('.github/workflows')) {
   )
     errors.push(file + ': forbidden bypass or production database command');
 }
-const app = JSON.parse(readFileSync('fabric-poc/package.json', 'utf8'));
-for (const [name, version] of Object.entries({ ...app.dependencies, ...app.devDependencies }))
-  if (!/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(version)) errors.push('Unpinned package: ' + name);
+for (const file of [
+  'fabric-poc/package.json',
+  'deploy/cloudflare/package.json',
+  'deploy/cloudflare-mailer/package.json',
+]) {
+  const app = JSON.parse(readFileSync(file, 'utf8'));
+  for (const [name, version] of Object.entries({ ...app.dependencies, ...app.devDependencies }))
+    if (!/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(version))
+      errors.push(file + ': unpinned package ' + name);
+}
 if (errors.length) throw Error(errors.join('\n'));
 console.log('Workflow pinning, forbidden bypass and dependency policies passed');

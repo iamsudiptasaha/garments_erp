@@ -1,0 +1,15 @@
+{
+  "name": "garments-erp-mailer-adapter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "build": "wrangler deploy --dry-run --outdir dist"
+  },
+  "dependencies": {
+    "nodemailer": "10.3.1"
+  },
+  "devDependencies": {
+    "wrangler": "4.156.0"
+  }
+}

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { getAccessClient } from './client.js';
 import { AccessNavigation } from './navigation.js';
+import { Authenticator, RecoveryForm, PasswordSettings } from './security.js';
+import { AccountLifecycle } from '../admin/account-lifecycle.js';
 import {
   assertAccountLinkAvailable,
   accountAccessError,
@@ -30,6 +32,7 @@ function AccessApp() {
   const [user, setUser] = useState(null),
     [ready, setReady] = useState(false),
     [access, setAccess] = useState(null),
+    [security, setSecurity] = useState(null),
     [snapshot, setSnapshot] = useState(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
@@ -70,6 +73,13 @@ function AccessApp() {
     setError('');
     setBusy(true);
     try {
+      const checked = await rpc('erp_account_security');
+      setSecurity(checked);
+      if (checked?.enabled && !checked.ready) {
+        setAccess(null);
+        setSnapshot(null);
+        return;
+      }
       const own = await rpc('erp_access_snapshot');
       setAccess(own);
       setSnapshot(own.administrator ? await rpc('erp_admin_snapshot') : null);
@@ -161,6 +171,7 @@ function AccessApp() {
           ),
       ),
       error && h('p', { className: 'form-error', role: 'alert' }, error),
+      signedIn && h(PasswordSettings),
       !ready
         ? h('p', null, 'Loading session…')
         : !user
@@ -223,107 +234,122 @@ function AccessApp() {
                 },
                 adminEmail ? 'Use phone login' : 'Administrator email sign-in',
               ),
-              h(
-                'details',
-                null,
-                h('summary', null, 'Forgot password?'),
-                h(
-                  'p',
-                  null,
-                  'Recovery codes will be sent to the Administrator, who passes your employee-specific code to you. Email delivery is not configured yet. Password recovery is currently unavailable.',
-                ),
-              ),
+              h(RecoveryForm),
               h(
                 'p',
                 { className: 'editor-note' },
                 'An Administrator must create and enable your account before you can access the portal.',
               ),
             )
-          : !access
-            ? h(
-                'p',
-                null,
-                busy
-                  ? 'Checking account permissions…'
-                  : 'Access could not be loaded. Use Refresh access to retry.',
-              )
-            : !access.enabled
+          : security?.enabled && !security.ready
+            ? security.mustChangePassword
               ? h(
                   'section',
-                  { className: 'access-denied' },
-                  h('h2', null, 'Account awaiting activation'),
-                  h('p', null, access.reason),
+                  null,
+                  h('h2', null, 'Set your password'),
+                  h(
+                    'p',
+                    null,
+                    'Ask your Administrator to send a setup code, sign out, and use Forgot password.',
+                  ),
+                  h('button', { onClick: signOut }, 'Sign out'),
                 )
-              : !access.administrator
+              : h(Authenticator, {
+                  onVerified: async () => {
+                    await refresh();
+                    location.assign('/fabric.html?live=1');
+                  },
+                })
+            : !access
+              ? h(
+                  'p',
+                  null,
+                  busy
+                    ? 'Checking account permissions…'
+                    : 'Access could not be loaded. Use Refresh access to retry.',
+                )
+              : !access.enabled
                 ? h(
                     'section',
-                    null,
-                    h('h2', null, 'Signed in'),
-                    h(
-                      'p',
-                      null,
-                      'Your account is enabled. Administration is restricted to Administrators.',
-                    ),
-                    h(
-                      'p',
-                      { className: 'editor-note' },
-                      'Business-data integration is still separate from this live access panel.',
-                    ),
+                    { className: 'access-denied' },
+                    h('h2', null, 'Account awaiting activation'),
+                    h('p', null, access.reason),
                   )
-                : snapshot &&
-                  h(
-                    React.Fragment,
-                    null,
+                : !access.administrator
+                  ? h(
+                      'section',
+                      null,
+                      h('h2', null, 'Signed in'),
+                      h(
+                        'p',
+                        null,
+                        'Your account is enabled. Administration is restricted to Administrators.',
+                      ),
+                      h(
+                        'p',
+                        { className: 'editor-note' },
+                        'Business-data integration is still separate from this live access panel.',
+                      ),
+                    )
+                  : snapshot &&
                     h(
-                      'div',
-                      { className: 'access-info' },
-                      'Live Supabase account management · changes save to the database',
-                    ),
-                    h(
-                      'div',
-                      { className: 'fabric-view-toggle' },
-                      [
-                        ['roles', 'Roles & permissions'],
-                        ['accounts', 'Account access'],
-                        ['audit', 'Activity log'],
-                      ].map(([key, label]) =>
-                        h(
-                          'button',
-                          { key, 'aria-pressed': tab === key, onClick: () => setTab(key) },
-                          label,
+                      React.Fragment,
+                      null,
+                      h(
+                        'div',
+                        { className: 'access-info' },
+                        'Live Supabase account management · changes save to the database',
+                      ),
+                      h(
+                        'div',
+                        { className: 'fabric-view-toggle' },
+                        [
+                          ['roles', 'Roles & permissions'],
+                          ['accounts', 'Account access'],
+                          ['audit', 'Activity log'],
+                        ].map(([key, label]) =>
+                          h(
+                            'button',
+                            { key, 'aria-pressed': tab === key, onClick: () => setTab(key) },
+                            label,
+                          ),
                         ),
                       ),
+                      tab === 'roles'
+                        ? h(RoleManager, { snapshot, onSaved: refresh })
+                        : tab === 'accounts'
+                          ? h(
+                              React.Fragment,
+                              null,
+                              h(AccountLifecycle, { snapshot, onSaved: refresh }),
+                              h(AccountManager, { snapshot, onSaved: refresh }),
+                            )
+                          : h(
+                              'section',
+                              { className: 'audit-list' },
+                              snapshot.audit.length
+                                ? snapshot.audit.map((a) =>
+                                    h(
+                                      'article',
+                                      { key: a.id },
+                                      h(
+                                        'div',
+                                        null,
+                                        h('strong', null, a.action),
+                                        h('p', null, `${a.target_type} · ${a.target_id || ''}`),
+                                      ),
+                                      h(
+                                        'time',
+                                        null,
+                                        new Date(a.created_at).toLocaleString('en-IN', {
+                                          timeZone: 'Asia/Kolkata',
+                                        }),
+                                      ),
+                                    ),
+                                  )
+                                : h('p', null, 'No access changes recorded.'),
+                            ),
                     ),
-                    tab === 'roles'
-                      ? h(RoleManager, { snapshot, onSaved: refresh })
-                      : tab === 'accounts'
-                        ? h(AccountManager, { snapshot, onSaved: refresh })
-                        : h(
-                            'section',
-                            { className: 'audit-list' },
-                            snapshot.audit.length
-                              ? snapshot.audit.map((a) =>
-                                  h(
-                                    'article',
-                                    { key: a.id },
-                                    h(
-                                      'div',
-                                      null,
-                                      h('strong', null, a.action),
-                                      h('p', null, `${a.target_type} · ${a.target_id || ''}`),
-                                    ),
-                                    h(
-                                      'time',
-                                      null,
-                                      new Date(a.created_at).toLocaleString('en-IN', {
-                                        timeZone: 'Asia/Kolkata',
-                                      }),
-                                    ),
-                                  ),
-                                )
-                              : h('p', null, 'No access changes recorded.'),
-                          ),
-                  ),
     ),
   );
 }

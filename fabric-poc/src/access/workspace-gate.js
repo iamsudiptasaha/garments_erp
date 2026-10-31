@@ -50,6 +50,12 @@ export function WorkspaceGate({ render }) {
           location.replace('/access.html');
           return;
         }
+        const security = await client.rpc('erp_account_security');
+        if (security.error) throw security.error;
+        if (security.data?.enabled && !security.data.ready) {
+          location.replace('/access.html');
+          return;
+        }
         const { data, error } = await client.rpc('erp_access_snapshot');
         if (error) throw error;
         if (active && ticket === revision) {

@@ -12,6 +12,9 @@ async function connect() {
 }
 async function actor(c, id) {
   await c.query('set local role authenticated');
+  await c.query("select set_config('request.jwt.claims',$1,true)", [
+    JSON.stringify({ sub: id, aal: 'aal2', session_id: id.replace(/^00000000/, '10000000') }),
+  ]);
   await c.query("select set_config('request.jwt.claim.sub',$1,true)", [id]);
 }
 async function rpc(c, resource, root, action, changes) {

@@ -77,7 +77,9 @@ test('successful sign-in lands on Overview using a mocked transport, never a rea
           user_metadata: {},
         },
       };
-    else if (url.includes('erp_access_snapshot'))
+    else if (url.includes('erp_account_security'))
+      return route.fulfill({ json: { enabled: true, ready: true, mustChangePassword: false } });
+    if (url.includes('erp_access_snapshot'))
       body = {
         actor: id,
         enabled: true,

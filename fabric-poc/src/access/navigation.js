@@ -101,6 +101,8 @@ export function AccessNavigation({ access, tab, onTab, open, onClose }) {
           h('a', { href: '/files.html' }, 'Saved-record files'),
         ),
       ),
+    access.enabled &&
+      h('a', { href: '/access.html', className: 'live-access-link' }, 'My account and password'),
     h(
       'div',
       { className: 'workspace-mode' },
