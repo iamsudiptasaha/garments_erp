@@ -89,7 +89,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      security-events: write
       actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -105,11 +104,14 @@ jobs:
           output: sarif
           upload: false
       - run: node scripts/ci/check-sarif.mjs sarif
-      - name: Publish trusted security results
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: github/codeql-action/upload-sarif@793b778da9c9275a0f276522b27cb5fc14bba279
+      - name: Retain checked CodeQL report privately
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          sarif_file: sarif
+          name: codeql-results-${{ github.run_id }}
+          path: sarif/
+          retention-days: 7
+          if-no-files-found: error
+
   database:
     name: Isolated database safety
     runs-on: ubuntu-latest

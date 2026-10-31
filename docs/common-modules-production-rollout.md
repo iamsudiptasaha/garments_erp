@@ -42,3 +42,7 @@ No bucket recreation, public bucket conversion, object deletion, phone SMS deliv
 5. During the approved rollout, enroll and verify the first administrator, then verify the second administrator. Keep the first working MFA session until both succeed. Test normal staff denial of Administration, an approved recovery email, a private test attachment round-trip and disabled-account denial before ending maintenance.
 
 If rollout fails, keep the permission boundary closed and use maintenance/roll-forward repair. Do not remove MFA, grant broad table privileges, recreate buckets or restore/delete production data automatically to make smoke tests pass. Retain reviewed previous artifacts and migration checksums with the release record.
+
+## Release gate corrections
+
+The live registry advisory GHSA-g3hv-75wg-m249 required minimatch 11.0.1 in the lint toolchain. The exact override and lockfile patch passed the original audit threshold and full quality checks. GitHub CodeQL analysis and SARIF validation passed, but upload to the disabled repository Security dashboard failed. CI now retains the validated SARIF as a private artifact; scanning and failure enforcement are unchanged. No paid feature was enabled. The existing portal remains on Cloudflare Workers; `deploy/cloudflare/workers.json` is a hosting-only static asset adapter alongside the future Pages adapter.
