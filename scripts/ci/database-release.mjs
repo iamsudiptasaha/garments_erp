@@ -56,7 +56,13 @@ export function migrationConfig(env) {
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
     database: 'postgres',
-    ssl: { rejectUnauthorized: true },
+    ssl: {
+      rejectUnauthorized: true,
+      ca: readFileSync(
+        new URL('../../database/certificates/supabase-prod-ca-2021.crt', import.meta.url),
+        'utf8',
+      ),
+    },
     connectionTimeoutMillis: 15000,
     application_name: 'garments-erp-reviewed-migration',
   };
