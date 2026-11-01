@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { employeeDraft } from '../src/hr/model.js';
 import '../../scripts/ci/assert-test-db.mjs';
@@ -160,7 +161,7 @@ try {
       expected: original.revision,
       draft: employeeDraft(original),
     };
-    update.draft.employee.supporting_document_1_title = 'Synthetic concurrent edit';
+    update.draft.employee.supporting_document_1_title = 'Synthetic concurrent edit ' + randomUUID();
     await save(update, null, a);
     const second = save(update, null, b).then(
       () => null,

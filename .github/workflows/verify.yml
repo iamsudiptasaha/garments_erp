@@ -33,7 +33,7 @@ jobs:
       - run: npm --prefix fabric-poc ci
       - run: npm --prefix fabric-poc run quality
       - run: node database/test-access-catalogue.mjs
-      - run: node --test scripts/ci/security.test.mjs
+      - run: node --test scripts/ci/*.test.mjs
       - name: Isolated Gmail mailer adapter checks
         run: |
           npm --prefix deploy/cloudflare-mailer ci --ignore-scripts

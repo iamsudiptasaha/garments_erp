@@ -54,16 +54,17 @@ revoke all on function garments_access.employee_document(bigint) from public,ano
 
 create function garments_access.employee_snapshot() returns jsonb
 language plpgsql stable security definer set search_path='' as $$
-declare result jsonb; t text; rows jsonb;
+declare result jsonb;
 begin
  if not garments_access.has_screen_permission('employees','view') then raise exception 'Employee access required' using errcode='42501';end if;
  result:=jsonb_build_object('records',(select coalesce(jsonb_agg(garments_access.employee_document(e.id)||jsonb_build_object('revision',md5(garments_access.employee_document(e.id)::text)) order by e.id),'[]') from garments_erp.employee e),
  'contact_choices',(select coalesce(jsonb_agg(jsonb_build_object('id',c.id::text,'company_name',c.company_name) order by c.id),'[]') from garments_erp.contacts c),
  'verifiers',(select coalesce(jsonb_agg(jsonb_build_object('id',e.id::text,'name',c.company_name,'code',e.employee_code,'email',a.email)),'[]') from garments_erp.employee e join garments_access.app_user u on u.employee_id=e.id and u.is_active and not u.must_change_password join auth.users a on a.id=u.user_id join garments_erp.contacts c on c.id=e.contacts_id where a.email is not null));
- foreach t in array array['gender','blood_group','type_of_employment','contact_purpose'] loop
-  execute format('select coalesce(jsonb_agg(garments_access.fabric_json(%L,to_jsonb(x)) order by x.id),''[]''::jsonb) from garments_erp.%I x',t,t) into rows;
-  result:=result||jsonb_build_object(t,rows);
- end loop;
+ result:=result||jsonb_build_object(
+ 'gender',(select coalesce(jsonb_agg(garments_access.fabric_json('gender',to_jsonb(x)) order by x.id),'[]'::jsonb) from garments_erp.gender x),
+ 'blood_group',(select coalesce(jsonb_agg(garments_access.fabric_json('blood_group',to_jsonb(x)) order by x.id),'[]'::jsonb) from garments_erp.blood_group x),
+ 'type_of_employment',(select coalesce(jsonb_agg(garments_access.fabric_json('type_of_employment',to_jsonb(x)) order by x.id),'[]'::jsonb) from garments_erp.type_of_employment x),
+ 'contact_purpose',(select coalesce(jsonb_agg(garments_access.fabric_json('contact_purpose',to_jsonb(x)) order by x.id),'[]'::jsonb) from garments_erp.contact_purpose x));
  return result;
 end $$;
 revoke all on function garments_access.employee_snapshot() from public,anon;
