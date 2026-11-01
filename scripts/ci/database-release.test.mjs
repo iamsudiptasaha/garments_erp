@@ -37,6 +37,14 @@ test('database connection target and TLS cannot be redirected or downgraded', ()
   assert.equal(
     migrationConfig({
       ...env,
+      PRODUCTION_DATABASE_URL:
+        'postgresql://postgres.kidvckaicclqvtlddeyz:fixture@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres',
+    }).port,
+    5432,
+  );
+  assert.equal(
+    migrationConfig({
+      ...env,
       PRODUCTION_DATABASE_URL: env.PRODUCTION_DATABASE_URL + '?sslmode=no-verify',
     }).ssl.rejectUnauthorized,
     true,

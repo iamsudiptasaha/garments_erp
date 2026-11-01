@@ -35,7 +35,7 @@ export function migrationConfig(env) {
   const direct =
     url.hostname === `db.${project}.supabase.co` && decodeURIComponent(url.username) === 'postgres';
   const pooler =
-    /^[a-z0-9-]+\.[a-z0-9-]+\.pooler\.supabase\.com$/.test(url.hostname) &&
+    /^[a-z0-9-]+\.pooler\.supabase\.com$/.test(url.hostname) &&
     decodeURIComponent(url.username) === `postgres.${project}` &&
     url.port === '5432';
   if (
