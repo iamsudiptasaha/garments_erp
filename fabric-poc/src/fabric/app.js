@@ -31,6 +31,8 @@ import './styles.css';
 import { initialAccess, allowed, isAdministrator, upgradeAccess } from '../admin/model.js';
 import { AdminPanel, adminPages } from '../admin/panel.js';
 import { HRPanel } from '../hr/panel.js';
+import { ContactEditor } from '../miscellaneous/contact-editor.js';
+import { hrPages } from '../hr/model.js';
 const h = React.createElement,
   STORE = 'garments-fabric-workspace-v1';
 const fmt = (n) =>
@@ -70,7 +72,7 @@ const pageFromHash = () => {
   const key = location.hash.slice(1);
   if (key === 'fabricOverview') return key;
   if (key === 'adminUsers') return 'employees';
-  return Object.hasOwn(pages, key) || Object.hasOwn(adminPages, key) || key === 'employees'
+  return Object.hasOwn(pages, key) || Object.hasOwn(adminPages, key) || Object.hasOwn(hrPages, key)
     ? key
     : 'home';
 };
@@ -796,13 +798,16 @@ function App({ live }) {
             h(
               'nav',
               { 'aria-label': 'Employee / HR pages' },
-              h(
-                'button',
-                {
-                  'aria-current': page === 'employees' ? 'page' : undefined,
-                  onClick: () => navigate('employees'),
-                },
-                'Employees',
+              Object.entries(hrPages).map(([key, entry]) =>
+                h(
+                  'button',
+                  {
+                    key,
+                    'aria-current': page === key ? 'page' : undefined,
+                    onClick: () => navigate(key),
+                  },
+                  entry.title,
+                ),
               ),
             ),
           ),
@@ -928,8 +933,16 @@ function App({ live }) {
             ),
         live && Object.hasOwn(adminPages, page)
           ? h('section', null, h('a', { href: '/access.html#' + page }, 'Open live Administration'))
-          : page === 'employees' && !live
-            ? h(HRPanel, { access, actor, onSave: saveAccess })
+          : Object.hasOwn(hrPages, page)
+            ? h(HRPanel, {
+                key: page,
+                page,
+                access,
+                actor,
+                live,
+                contactChoices: data.contacts || [],
+                contactItems: data.contact_items || [],
+              })
             : Object.hasOwn(adminPages, page)
               ? h(AdminPanel, { page, access, actor, onSave: saveAccess })
               : live && (!liveReady || liveError)
@@ -1154,11 +1167,13 @@ function App({ live }) {
       h(
         editor.page === 'labDips'
           ? LabEditor
-          : editor.page === 'productionItems'
-            ? ItemEditor
-            : editor.page === 'productionJobs'
-              ? JobEditor
-              : BillEditor,
+          : editor.page === 'materialContacts'
+            ? ContactEditor
+            : editor.page === 'productionItems'
+              ? ItemEditor
+              : editor.page === 'productionJobs'
+                ? JobEditor
+                : BillEditor,
         {
           key: `${editor.page}:${editor.id || 'new'}`,
           page: editor.page,
@@ -1168,6 +1183,7 @@ function App({ live }) {
           receiptId: editor.receiptId,
           reconciliation: editor.reconciliation,
           onSave: saveData,
+          can,
           onClose: () => setEditor(null),
         },
       ),

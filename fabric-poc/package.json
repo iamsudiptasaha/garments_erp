@@ -11,7 +11,7 @@
     "check:unused": "knip",
     "check:duplicates": "jscpd --config .jscpd.json",
     "quality": "npm run check:coherence && npm run typecheck && npm run lint && npm run format:check && npm run check:unused && npm run check:duplicates && npm test && npm run build",
-    "check:coherence": "node ../scripts/check-coherence.mjs && node --test ../scripts/coherence.test.mjs",
+    "check:coherence": "node ../scripts/check-coherence.mjs && node --test ../scripts/coherence*.test.mjs",
     "typecheck": "tsc --noEmit",
     "format:check": "prettier --check \"src/**/*.{js,ts,tsx,css}\" \"tests/**/*.js\" \"e2e/**/*.js\" \"*.config.js\" \"integration/**/*.mjs\" \"../scripts/ci/*.{mjs,ts}\" \"../database/ci/seed.mjs\" \"../.github/**/*.{yml,yaml}\" \"../deploy/**/*.json\" \"../server/mail/*.mjs\" \"../deploy/cloudflare-mailer/**/*.mjs\"",
     "format": "prettier --write \"src/**/*.{js,ts,tsx,css}\" \"tests/**/*.js\" \"e2e/**/*.js\" \"*.config.js\" \"integration/**/*.mjs\" \"../scripts/ci/*.{mjs,ts}\" \"../database/ci/seed.mjs\" \"../.github/**/*.{yml,yaml}\" \"../deploy/**/*.json\" \"../server/mail/*.mjs\" \"../deploy/cloudflare-mailer/**/*.mjs\"",

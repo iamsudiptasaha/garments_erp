@@ -1,5 +1,6 @@
 import React from 'react';
 import { pages } from '../fabric/catalog.js';
+import { hrPages } from '../hr/model.js';
 const h = React.createElement;
 const groups = [
   ['fabric', 'Fabric'],
@@ -66,7 +67,13 @@ export function AccessNavigation({ access, tab, onTab, open, onClose }) {
         'details',
         { open: true },
         h('summary', null, 'Employee / HR'),
-        h('nav', null, h('a', { href: '/fabric.html?live=1#employees' }, 'Employees')),
+        h(
+          'nav',
+          { 'aria-label': 'Employee / HR pages' },
+          Object.entries(hrPages).map(([key, entry]) =>
+            h('a', { key, href: '/fabric.html?live=1#' + key }, entry.title),
+          ),
+        ),
       ),
     access.administrator &&
       h(

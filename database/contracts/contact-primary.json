@@ -1,0 +1,8 @@
+{
+  "migration": "20261031201306_contact_primary_selections.sql",
+  "flags": [
+    {"table": "contact_items", "column": "primary_address", "index": "contact_items_one_primary_address"},
+    {"table": "contact_items", "column": "primary_phone", "index": "contact_items_one_primary_phone"},
+    {"table": "contact_bank_account", "column": "primary_bank_account", "index": "contact_bank_account_one_primary"}
+  ]
+}

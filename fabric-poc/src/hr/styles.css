@@ -1,0 +1,93 @@
+.hr-directory {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+.hr-person-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 20px;
+  text-align: left;
+}
+.hr-initials {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #e4f1fd;
+  color: #2b75ac;
+  font-weight: 600;
+}
+.hr-open {
+  color: #357fb7;
+  border-top: 1px solid #e1eaf2;
+  padding-top: 12px;
+  width: 100%;
+}
+.hr-editor {
+  max-width: 900px;
+}
+.hr-editor .fabric-view-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 18px 0;
+}
+.hr-editor label {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0;
+  min-width: 0;
+}
+.hr-editor textarea {
+  font: inherit;
+  border: 1px solid #d9e4ee;
+  border-radius: 7px;
+  padding: 10px;
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+}
+.hr-child {
+  padding: 12px;
+  margin: 12px 0;
+  background: #f5f9fd;
+  border: 1px solid #dce8f1;
+  border-radius: 9px;
+}
+.hr-verification {
+  border-top: 1px solid #dae5ef;
+  margin-top: 22px;
+  padding-top: 14px;
+}
+.hr-verify-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+.hr-review dl > div {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 15px;
+  padding: 12px 0;
+  border-bottom: 1px solid #e1eaf2;
+}
+.hr-review dt {
+  color: #617b90;
+}
+.hr-review dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .hr-review dl > div {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .hr-directory {
+    grid-template-columns: 1fr;
+  }
+}

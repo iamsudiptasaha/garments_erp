@@ -22,7 +22,7 @@ export const resources = [
     id: 'employees',
     label: 'Employees',
     group: 'Employee / HR',
-    actions: ['view', 'create', 'edit'],
+    actions,
   },
   {
     id: 'adminAccess',
