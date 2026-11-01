@@ -69,3 +69,15 @@ test('a failed second migration rolls back the entire database release', async (
   assert.equal(calls.at(-1), 'rollback');
   assert.equal(calls.includes('commit'), false);
 });
+
+test('explicit owner backup exception is audited separately and cannot waive CI or branch checks', () => {
+  const waived = {
+    ...env,
+    BACKUP_CONFIRMED: 'false',
+    BACKUP_EXCEPTION: 'OWNER APPROVED WITHOUT VERIFIED BACKUP',
+  };
+  assert.equal(migrationConfig(waived).ssl.rejectUnauthorized, true);
+  assert.throws(() => migrationConfig({ ...waived, RELEASE_GATE_RESULT: 'failure' }));
+  assert.throws(() => migrationConfig({ ...waived, GITHUB_REF: 'refs/heads/dev' }));
+  assert.throws(() => migrationConfig({ ...waived, BACKUP_EXCEPTION: 'yes' }));
+});

@@ -18,10 +18,11 @@ export function migrationConfig(env) {
     env.EXPECTED_COMMIT !== env.GITHUB_SHA ||
     !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA || '') ||
     env.CONFIRM_PROJECT !== project ||
-    env.BACKUP_CONFIRMED !== 'true'
+    (env.BACKUP_CONFIRMED !== 'true' &&
+      env.BACKUP_EXCEPTION !== 'OWNER APPROVED WITHOUT VERIFIED BACKUP')
   )
     throw Error(
-      'Requires approved main workflow, exact commit, passing CI, correct project and confirmed backup.',
+      'Requires approved main workflow, exact commit, passing CI, correct project and backup decision.',
     );
   if (!env.PRODUCTION_DATABASE_URL)
     throw Error('Configure PRODUCTION_DATABASE_URL in the production environment.');
@@ -143,7 +144,7 @@ async function run() {
     if (process.env.GITHUB_STEP_SUMMARY)
       appendFileSync(
         process.env.GITHUB_STEP_SUMMARY,
-        `Production database migration verified for commit ${process.env.GITHUB_SHA}.\n\n` +
+        `Production database migration verified for commit ${process.env.GITHUB_SHA}.\n\nBackup decision: ${process.env.BACKUP_CONFIRMED === 'true' ? 'verified backup confirmed' : 'owner explicitly approved proceeding without a verified backup'}.\n\n` +
           migrations.map((m) => `- ${m.version}: ${m.hash}`).join('\n') +
           '\n',
       );
