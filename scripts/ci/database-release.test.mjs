@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { migrationConfig, migrationBody, applyRelease } from './database-release.mjs';
+import {
+  migrationConfig,
+  migrationBody,
+  applyRelease,
+  releaseFailure,
+} from './database-release.mjs';
 const env = {
   GITHUB_ACTIONS: 'true',
   GITHUB_EVENT_NAME: 'workflow_dispatch',
@@ -88,4 +93,15 @@ test('explicit owner backup exception is audited separately and cannot waive CI 
   assert.throws(() => migrationConfig({ ...waived, RELEASE_GATE_RESULT: 'failure' }));
   assert.throws(() => migrationConfig({ ...waived, GITHUB_REF: 'refs/heads/dev' }));
   assert.throws(() => migrationConfig({ ...waived, BACKUP_EXCEPTION: 'yes' }));
+});
+
+test('failure diagnostics expose safe codes, never arbitrary database error contents', () => {
+  const error = new AggregateError([
+    { code: 'ENETUNREACH', message: 'private connection details' },
+  ]);
+  assert.equal(releaseFailure(error), 'Database/connection failure codes: ENETUNREACH');
+  assert.equal(
+    releaseFailure(new Error('private password or row values')),
+    'Unexpected failure; raw error details suppressed.',
+  );
 });

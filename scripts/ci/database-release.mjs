@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from '../../fabric-poc/node_modules/pg/lib/index.js';
+class ReleaseError extends Error {}
 const project = 'kidvckaicclqvtlddeyz';
 const files = [
   '20261031191218_employee_hr_workspace.sql',
@@ -21,16 +22,16 @@ export function migrationConfig(env) {
     (env.BACKUP_CONFIRMED !== 'true' &&
       env.BACKUP_EXCEPTION !== 'OWNER APPROVED WITHOUT VERIFIED BACKUP')
   )
-    throw Error(
+    throw new ReleaseError(
       'Requires approved main workflow, exact commit, passing CI, correct project and backup decision.',
     );
   if (!env.PRODUCTION_DATABASE_URL)
-    throw Error('Configure PRODUCTION_DATABASE_URL in the production environment.');
+    throw new ReleaseError('Configure PRODUCTION_DATABASE_URL in the production environment.');
   let url;
   try {
     url = new URL(env.PRODUCTION_DATABASE_URL);
   } catch {
-    throw Error('Invalid database connection configuration.');
+    throw new ReleaseError('Invalid database connection configuration.');
   }
   const direct =
     url.hostname === `db.${project}.supabase.co` && decodeURIComponent(url.username) === 'postgres';
@@ -45,7 +46,7 @@ export function migrationConfig(env) {
     !url.password ||
     (direct && url.port && url.port !== '5432')
   )
-    throw Error(
+    throw new ReleaseError(
       'Only the approved production project direct/session-pooler connection is permitted.',
     );
   // No URL SSL options may downgrade certificate validation.
@@ -63,7 +64,7 @@ export function migrationConfig(env) {
 export function migrationBody(sql) {
   const start = sql.match(/^(?:\s|--[^\n]*\n)*begin;/i);
   if (!start || !/commit;\s*$/i.test(sql))
-    throw Error('Migration must have an explicit transaction wrapper.');
+    throw new ReleaseError('Migration must have an explicit transaction wrapper.');
   return sql.slice(start[0].length).replace(/commit;\s*$/i, '');
 }
 export async function applyRelease(client, migrations) {
@@ -76,7 +77,7 @@ export async function applyRelease(client, migrations) {
       "select 1 from supabase_migrations.schema_migrations where version='20261031182953'",
     );
     if (anchor.rowCount !== 1)
-      throw Error('Required previously deployed database baseline is missing.');
+      throw new ReleaseError('Required previously deployed database baseline is missing.');
     for (const migration of migrations) {
       const previous = await client.query(
         'select name, statements from supabase_migrations.schema_migrations where version=$1',
@@ -87,7 +88,7 @@ export async function applyRelease(client, migrations) {
           previous.rows[0].name !== migration.name ||
           JSON.stringify(previous.rows[0].statements) !== JSON.stringify([migration.sql])
         )
-          throw Error('Applied migration history differs from this reviewed release.');
+          throw new ReleaseError('Applied migration history differs from this reviewed release.');
         continue;
       }
       await client.query(migrationBody(migration.sql));
@@ -107,7 +108,7 @@ export async function applyRelease(client, migrations) {
       and (select count(*)=3 from pg_indexes where schemaname='garments_erp' and indexname in ('contact_items_one_primary_address','contact_items_one_primary_phone','contact_bank_account_one_primary') and indexdef like 'CREATE UNIQUE INDEX%WHERE%')
       and (select count(*)=3 from information_schema.columns where table_schema='garments_erp' and ((table_name='contact_items' and column_name in ('primary_address','primary_phone')) or (table_name='contact_bank_account' and column_name='primary_bank_account')) and data_type='boolean' and is_nullable='NO' and column_default='false') as valid`);
     if (result.rows[0]?.valid !== true)
-      throw Error('Post-migration schema/security verification failed.');
+      throw new ReleaseError('Post-migration schema/security verification failed.');
     await client.query('commit');
   } catch (error) {
     await client.query('rollback');
@@ -116,6 +117,7 @@ export async function applyRelease(client, migrations) {
 }
 async function run() {
   const config = migrationConfig(process.env);
+  console.log('Release context and production target validated.');
   const current = await fetch(
     'https://api.github.com/repos/iamsudiptasaha/garments_erp/git/ref/heads/main',
     {
@@ -127,7 +129,9 @@ async function run() {
     },
   );
   if (!current.ok || (await current.json()).object?.sha !== process.env.GITHUB_SHA)
-    throw Error('Main advanced or could not be verified; dispatch the latest reviewed commit.');
+    throw new ReleaseError(
+      'Main advanced or could not be verified; dispatch the latest reviewed commit.',
+    );
   const migrations = files.map((file) => {
     const sql = readFileSync('supabase/migrations/' + file, 'utf8');
     return {
@@ -139,7 +143,9 @@ async function run() {
   });
   const client = new pg.Client(config);
   try {
+    console.log('Current main commit verified; connecting to production database.');
     await client.connect();
+    console.log('Production connection established; applying fixed migration transaction.');
     await applyRelease(client, migrations);
     if (process.env.GITHUB_STEP_SUMMARY)
       appendFileSync(
@@ -153,14 +159,20 @@ async function run() {
     await client.end();
   }
 }
+export function releaseFailure(error) {
+  if (error instanceof ReleaseError) return error.message;
+  const codes = [error, ...(Array.isArray(error.errors) ? error.errors : [])]
+    .map((e) => e?.code)
+    .filter((code) => typeof code === 'string' && /^[A-Z0-9_]{3,64}$/.test(code));
+  return codes.length
+    ? 'Database/connection failure codes: ' + [...new Set(codes)].join(', ')
+    : 'Unexpected failure; raw error details suppressed.';
+}
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
   run().catch((error) => {
-    // Database errors may contain connection details or row values. Never print them.
     console.error(
-      'Database release stopped. No successful migration is claimed.',
-      error.code
-        ? `SQLSTATE ${/^[A-Z0-9]{5}$/.test(error.code) ? error.code : 'unavailable'}`
-        : 'Check release configuration and approval.',
+      'Database release stopped; no successful migration is claimed.',
+      releaseFailure(error),
     );
     process.exitCode = 1;
   });
