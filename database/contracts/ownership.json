@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "screens": {
+    "employees": {
+      "root": "employee",
+      "writableTables": [
+        "employee"
+      ],
+      "referenceTables": [
+        "contacts",
+        "contact_purpose",
+        "gender",
+        "blood_group",
+        "type_of_employment",
+        "attachments",
+        "contact_items"
+      ],
+      "saveFunction": "garments_access.save_employee",
+      "links": {
+        "contacts_id": "contacts",
+        "contact_purpose_id": "contact_purpose",
+        "contacts_emergency_id": "contacts",
+        "contact_purpose_emergency_id": "contact_purpose"
+      },
+      "maintenanceTables": [
+        "gender",
+        "blood_group",
+        "type_of_employment"
+      ]
+    }
+  },
+  "ownership": {
+    "contacts": "materialContacts",
+    "contact_items": "contactPeople",
+    "contact_extra": "contactDetails",
+    "contact_bank_account": "contactBankAccounts"
+  },
+  "unreviewedModules": {
+    "fabric-poc/src/production": {
+      "fabric-poc/src/production/cards.js": "a169beb2c5d2cb46c1293e39535059475a3220663f2a42e7e021b800fae5d212",
+      "fabric-poc/src/production/catalog.js": "a7fa1ccbc4d7d9dcf088ad0742886b92bc4531ef1dc69bdc303b7c0868ae719d",
+      "fabric-poc/src/production/domain.js": "2ef25aed0bda7037805844596d8a7b0f74c63f14b8d3126d6913245c947b9662",
+      "fabric-poc/src/production/editor.js": "61501b6fe29735d05f37b67003a023d5cc68712b3a9038fe240a3b1aad9ea787",
+      "fabric-poc/src/production/item-editor.js": "822b9689587d01eeda246a5f1a9ff1d4e76ffc1ba48af8e0c80e81070d761152",
+      "fabric-poc/src/production/item-model.js": "4c20fd119f43f5b5e4be1f0f55b2df6d3580152325a5e677fcf7ee23cf37eb23",
+      "fabric-poc/src/production/schema.js": "e219a720cd73141489f1a11a7e016b29ac92b53a07197d7d6ab83d5cba61e998"
+    },
+    "fabric-poc/src/inventory": {
+      "fabric-poc/src/inventory/cards.js": "4ff1af22fb4eb8bceeb6851b71abe8a4fd73640239928cf91457e65d16002780",
+      "fabric-poc/src/inventory/catalog.js": "423775279288f8f7f125e941bd5963bcc9977b55bca3657c5d01c5a53ceb33cd",
+      "fabric-poc/src/inventory/domain.js": "0e85aa27a6f6c0f5b3db855dc4fb9bbb9d78a75e1074a1957a46976fc94a4455",
+      "fabric-poc/src/inventory/receipts.js": "da2e5d7352d48c91d10b448ce3c7f39207ce8149266727c57bdcd0710a72e905"
+    }
+  },
+  "aggregates": {
+    "materialContacts": {
+      "root": "contacts",
+      "mode": "local-preview",
+      "children": [
+        {
+          "table": "contact_items",
+          "resource": "contactPeople",
+          "foreign": "contact_id",
+          "optional": true
+        },
+        {
+          "table": "contact_bank_account",
+          "resource": "contactBankAccounts",
+          "foreign": "contact_id",
+          "optional": true
+        },
+        {
+          "table": "contact_extra",
+          "resource": "contactDetails",
+          "foreign": "contact_id",
+          "optional": true
+        }
+      ],
+      "selectorSources": {
+        "bankAccountTypes": "bank_account_type",
+        "contactAttachments": "attachments"
+      }
+    }
+  }
+}

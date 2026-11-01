@@ -8,6 +8,6 @@ git archive "$(git write-tree)" | tar -x -C "$snapshot"
 ln -s "$root/fabric-poc/node_modules" "$snapshot/fabric-poc/node_modules"
 cd "$snapshot"
 node scripts/check-coherence.mjs
-node --test scripts/coherence.test.mjs
+node --test scripts/coherence*.test.mjs
 cd fabric-poc
 npm test

@@ -10,6 +10,7 @@ export function FilePanel({
   canRead = true,
   canWrite = false,
   onAttached,
+  onBusyChange,
   targetDefinition,
 }) {
   const target = targetDefinition || targetFor(targetKey),
@@ -56,6 +57,7 @@ export function FilePanel({
     e.preventDefault();
     const epoch = generation.current;
     setBusy(true);
+    onBusyChange?.(true);
     setError('');
     try {
       const attachment = await store.attach({ targetKey, recordId, file });
@@ -70,6 +72,7 @@ export function FilePanel({
       if (epoch === generation.current) setError(e.message);
     } finally {
       if (epoch === generation.current) setBusy(false);
+      onBusyChange?.(false);
     }
   }
   async function open(row) {

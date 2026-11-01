@@ -51,6 +51,20 @@ summary:focus-visible {
 .primary:hover {
   background: #286c9e;
 }
+.contact-entry-row {
+  padding: 14px 0;
+  border-bottom: 1px solid #dce6f0;
+}
+.contact-entry-row dl > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) 2fr;
+  gap: 14px;
+  padding: 5px 0;
+}
+.contact-entry-row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 input,
 select {
   border: 1px solid #d9e4ee;
@@ -113,13 +127,18 @@ select {
   margin: 7px 0 12px 12px;
   padding-left: 10px;
 }
-.fabric-sidebar nav button {
+.fabric-sidebar nav button,
+.fabric-sidebar nav a {
   border: 0;
   background: none;
   text-align: left;
   padding: 8px 10px;
   font-size: 12px;
   border-radius: 7px;
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  font-family: inherit;
 }
 .fabric-sidebar nav button[aria-current='page'] {
   background: #d1e8fa;
@@ -1056,7 +1075,8 @@ select {
     background-color 0.12s ease,
     color 0.12s ease;
 }
-.fabric-sidebar nav button:hover {
+.fabric-sidebar nav button:hover,
+.fabric-sidebar nav a:hover {
   background: #e2eef9;
   color: #2c648e;
 }
@@ -1351,4 +1371,12 @@ select {
 }
 .lab-record-dialog .editor-heading h2 {
   font-size: 22px;
+}
+
+.fabric-fields .contact-primary-toggle {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 }

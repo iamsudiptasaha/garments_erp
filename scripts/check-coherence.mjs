@@ -1,11 +1,18 @@
+import {contactReleaseSchema} from './contact-primary-contract.mjs';
 import {readFileSync} from 'node:fs';
 import {pages} from '../fabric-poc/src/fabric/catalog.js';
 import {FILE_TARGETS} from '../fabric-poc/src/files/model.js';
 import {checklistFields} from '../fabric-poc/src/production/item-model.js';
+import {employeeRelations} from '../fabric-poc/src/hr/model.js';
+import {checkBoundaries} from './coherence-boundaries.mjs';
 export function inspect(schema, catalogue, screens=pages){
  const errors=[]; const tables=new Map();
  for(const c of schema.columns){const key=c.table_schema+'.'+c.table_name;if(!tables.has(key))tables.set(key,new Set());tables.get(key).add(c.column_name)}
  const field=(table,key,where)=>{if(!tables.get(table)?.has(key))errors.push(`${where}: missing database field ${table}.${key}`)};
+ if(tables.has('garments_erp.employee'))for(const [table,fields] of Object.entries(employeeRelations)){
+  for(const key of fields)field('garments_erp.'+table,key,'Employee / HR');
+  if(!catalogue.mappings?.some(m=>m.resource_key==='employees'&&m.table_name===table&&m.can_edit))errors.push('Employee / HR: missing writable mapping for '+table);
+ }
  for(const t of catalogue.tables)if(!tables.has(t.schema_name+'.'+t.table_name))errors.push(`Catalogue: missing database relation ${t.schema_name}.${t.table_name}`);
  for(const [screen,p] of Object.entries(screens)){
   if(!p.entity)continue;
@@ -22,9 +29,10 @@ export function inspect(schema, catalogue, screens=pages){
  return [...new Set(errors)].sort();
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
- const schema=JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url)));
+ const schema=contactReleaseSchema(JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url))));
  const catalogue=JSON.parse(readFileSync(new URL('../database/catalogue/screen-table-map.json',import.meta.url)));
  const errors=inspect(schema,catalogue);
- console.log(`Database/UI coherence: ${schema.captured_at}; ${schema.columns.length} database columns checked.`);
+ try{console.log(checkBoundaries());}catch(e){errors.push(e.message)}
+ console.log(`Database/UI coherence: ${schema.captured_at}; ${schema.columns.length} release columns checked (includes reviewed pending migrations).`);
  if(errors.length){console.error(errors.map(e=>'BLOCKED: '+e).join('\n'));process.exitCode=1}else console.log('No declared form/catalogue drift found. Workflow tests must also pass.');
 }

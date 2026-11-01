@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import { fileURLToPath, URL } from 'node:url';
+import { coherenceGuard } from '../scripts/coherence-vite.mjs';
 export default defineConfig({
+  plugins: [coherenceGuard()],
   envDir: process.env.DEPLOY_BUILD === '1' ? false : undefined,
   build: {
     rollupOptions: {

@@ -1,3 +1,4 @@
+import { validateContactPrimaries } from './primary.js';
 export function initialMiscellaneous() {
   return {
     contact_items: [],
@@ -33,6 +34,8 @@ export function miscellaneousRows(data, page) {
       company: company(r.contact_id),
       phone: dash(r.phone),
       address: dash(r.address),
+      primary_address: r.primary_address ? 'Yes' : 'No',
+      primary_phone: r.primary_phone ? 'Yes' : 'No',
     }));
   if (page === 'contactDetails')
     return data.contact_extra.map((r) => ({
@@ -53,6 +56,7 @@ export function miscellaneousRows(data, page) {
       type: data.bank_account_type.find((t) => t.id === r.bank_account_type_id)?.name || '—',
       address: dash(r.address),
       document: dash(r.supporting_documents),
+      primary_bank_account: r.primary_bank_account ? 'Yes' : 'No',
     }));
   if (page === 'contactCategories')
     return data.contact_purpose.map((r) => ({
@@ -78,6 +82,7 @@ export function miscellaneousOptions(data, source) {
   return null;
 }
 export function validateMiscellaneous(data) {
+  validateContactPrimaries(data);
   for (const table of ['contact_items', 'contact_extra', 'contact_bank_account'])
     for (const r of data[table])
       if (!data.contacts.some((c) => c.id === r.contact_id))
