@@ -20,3 +20,7 @@ Keep the production environment restricted to main and configure its required re
 5. Schema, uniqueness indexes, verification-table RLS and anonymous denial are verified before commit. Actions summary records commit and migration hashes only. Confirm the successful run, then perform read-only production verification of the columns/functions before claiming completion.
 
 This does not deploy Edge Functions, alter Auth configuration or automatically migrate other files. The existing main application deployment remains separate. After a successful migration, use a forward fix for later issues; do not automatically drop columns, proof records or migration history. A database restore requires its own reviewed recovery operation.
+
+## Explicit owner decision on 1 November 2026
+
+The owner authorised proceeding without a verified backup, deferring a paid backup plan. The workflow retains the backup-confirmed input as false and records `OWNER APPROVED WITHOUT VERIFIED BACKUP` in its separate exception input. This exception applies only to these two fixed migrations; it does not waive CI, branch, commit, project, TLS or production-environment protections. Actions records the decision in the successful migration summary. No backup is represented as restore-verified.
