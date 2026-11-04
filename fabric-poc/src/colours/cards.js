@@ -29,7 +29,10 @@ function Edition({ data, lab, onEdit, editable, creatable, index }) {
     closed = labClosed(data, lab.id),
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState(null),
-    detail = versions.find((v) => v.id === selected) || latest;
+    detail = versions.find((v) => v.id === selected) || latest,
+    reviews = (data.lab_dip_version_review || []).filter(
+      (review) => review.lab_dip_version_id === detail?.id,
+    );
   const edit = (mode) => {
     setOpen(false);
     onEdit(lab.id, mode);
@@ -150,21 +153,63 @@ function Edition({ data, lab, onEdit, editable, creatable, index }) {
                 `Version ${detail.version} · ${statusFor(data, detail)?.status || 'Status not recorded'}`,
               ),
               h(
-                'p',
-                null,
-                `Version date: ${detail.date || 'Not recorded'} · Shade card: ${detail.shade_card_no || '—'} / ${detail.shade_card_option || '—'}`,
+                'dl',
+                { className: 'lab-submission-fields' },
+                [
+                  ['Version date', detail.date],
+                  ['Shade Card No.', detail.shade_card_no],
+                  ['Shade Card Option', detail.shade_card_option],
+                ].map(([label, value]) =>
+                  h(
+                    'div',
+                    { key: label },
+                    h('dt', null, label),
+                    h('dd', null, value || 'Not recorded'),
+                  ),
+                ),
               ),
+              h('h4', null, 'Comments'),
               h('p', null, detail.comments || 'No comments'),
+              h('h4', null, 'Shade Card Attachment'),
               h(
                 'p',
                 null,
-                `Shade-card attachment: ${detail.shade_card_image_attachment ? data.attachments.find((a) => a.id === detail.shade_card_image_attachment)?.filename || 'Attached' : 'Not attached'}`,
+                detail.shade_card_image_attachment
+                  ? data.attachments.find((a) => a.id === detail.shade_card_image_attachment)
+                      ?.filename || 'Attached'
+                  : 'Not attached',
               ),
               h(
                 'small',
                 null,
                 `Recorded: ${fmt(detail.created_at)} · Last updated: ${fmt(detail.updated_at)}`,
               ),
+              h('h4', null, 'Review history'),
+              reviews.length
+                ? h(
+                    'ol',
+                    { className: 'lab-review-timeline' },
+                    reviews.map((review) => {
+                      const decision = statusFor(data, review),
+                        order = decision?.sort_order;
+                      return h(
+                        'li',
+                        { key: review.id },
+                        h('time', { dateTime: review.recorded_at }, fmt(review.recorded_at)),
+                        h(
+                          'span',
+                          {
+                            className:
+                              'lab-node ' +
+                              (order === 3 ? 'failed' : order >= 4 ? 'accepted' : 'current'),
+                          },
+                          `Version ${detail.version} · ${decision?.status || 'Status not recorded'}`,
+                        ),
+                        review.comments && h('p', null, review.comments),
+                      );
+                    }),
+                  )
+                : h('p', null, 'No review history recorded for this version.'),
             ),
           h(
             'div',
@@ -185,7 +230,15 @@ function Edition({ data, lab, onEdit, editable, creatable, index }) {
                       { onClick: () => edit('update') },
                       `Update version ${latest?.version || 1}`,
                     ),
-                  editable && h('button', { onClick: () => edit('version') }, '+ Add version'),
+                  editable &&
+                    h(
+                      'button',
+                      { disabled: status?.sort_order !== 3, onClick: () => edit('version') },
+                      '+ Add version',
+                    ),
+                  editable &&
+                    status?.sort_order !== 3 &&
+                    h('small', null, 'The latest version must be Failed to add another.'),
                 ),
           ),
         ),

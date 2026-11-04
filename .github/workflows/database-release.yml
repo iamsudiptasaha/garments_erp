@@ -1,4 +1,4 @@
-name: Approved employee and contacts database release
+name: Approved ERP diagram database release
 on:
   workflow_dispatch:
     inputs:
@@ -49,7 +49,7 @@ jobs:
           cache: npm
           cache-dependency-path: fabric-poc/package-lock.json
       - run: npm --prefix fabric-poc ci --ignore-scripts
-      - name: Apply only the reviewed employee and contact migrations atomically
+      - name: Apply the reviewed ERP diagram migration atomically
         run: node scripts/ci/database-release.mjs
         env:
           PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}

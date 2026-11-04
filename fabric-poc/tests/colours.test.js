@@ -30,6 +30,10 @@ test('edition creation, redo versions and all accepted outcomes follow terminal 
     const lab = d.lab_dip.at(-1);
     assert.equal(lab.edition, 2);
     assert.equal(versionsFor(d, lab.id)[0].version, 1);
+    assert.throws(
+      () => saveLabDip(d, { ...input(), id: lab.id, mode: 'version' }),
+      /must be Failed/,
+    );
     d = saveLabDip(d, { ...input(), id: lab.id, mode: 'update', lab_dip_status_id: 'ld-failed' });
     d = saveLabDip(d, {
       ...input(),
@@ -40,6 +44,10 @@ test('edition creation, redo versions and all accepted outcomes follow terminal 
     assert.equal(
       labRows(d).find((r) => r.id === lab.id).status,
       'Redo 2 · Awaiting buyer comments',
+    );
+    assert.throws(
+      () => saveLabDip(d, { ...input(), id: lab.id, mode: 'version' }),
+      /must be Failed/,
     );
     d = saveLabDip(d, {
       ...input(),
