@@ -1,3 +1,4 @@
+import { latestStatusItem, statusFor } from '../colours/domain.js';
 // Database-shaped relationships. Legacy conversion is local-preview-only.
 export function programContext(data, line) {
   const version = data.lab_dip_version.find((v) => v.id === line?.lab_dip_version_id),
@@ -34,7 +35,9 @@ export function versionsForMapping(data, mappingId, dyerId) {
     )
     .sort(
       (a, b) =>
-        (b.date || '').localeCompare(a.date || '') ||
+        (latestStatusItem(data, b)?.date || '').localeCompare(
+          latestStatusItem(data, a)?.date || '',
+        ) ||
         data.lab_dip.find((l) => l.id === b.lab_dip_id).edition -
           data.lab_dip.find((l) => l.id === a.lab_dip_id).edition ||
         b.version - a.version ||
@@ -44,17 +47,16 @@ export function versionsForMapping(data, mappingId, dyerId) {
 export function defaultVersion(data, mappingId, dyerId) {
   return (
     versionsForMapping(data, mappingId, dyerId).find(
-      (v) =>
-        (data.lab_dip_version_status.find((s) => s.id === v.lab_dip_status_id)?.sort_order || 0) >=
-        4,
+      (v) => (statusFor(data, v)?.sort_order || 0) >= 4,
     )?.id || ''
   );
 }
 export function versionLabel(data, id) {
   const v = data.lab_dip_version.find((v) => v.id === id),
-    l = data.lab_dip.find((l) => l.id === v?.lab_dip_id);
+    l = data.lab_dip.find((l) => l.id === v?.lab_dip_id),
+    date = latestStatusItem(data, v)?.date;
   return v
-    ? `Edition ${l?.edition} · Version ${v.version} · ${data.lab_dip_version_status.find((s) => s.id === v.lab_dip_status_id)?.status || 'Status not recorded'}${v.date ? ' · ' + v.date : ''}`
+    ? `Edition ${l?.edition} · Version ${v.version} · ${statusFor(data, v)?.status || 'Status not recorded'}${date ? ' · ' + date : ''}`
     : 'Choose a lab-dip version';
 }
 export function upgradeFabricRelationships(data) {

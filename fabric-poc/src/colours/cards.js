@@ -30,7 +30,7 @@ function Edition({ data, lab, onEdit, editable, creatable, index }) {
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState(null),
     detail = versions.find((v) => v.id === selected) || latest,
-    reviews = (data.lab_dip_version_item || data.lab_dip_version_review || []).filter(
+    reviews = (data.lab_dip_version_item || []).filter(
       (review) => review.lab_dip_version_id === detail?.id,
     );
   const edit = (mode) => {

@@ -7,7 +7,17 @@ const labStatuses = [
   ['ld-approved', 'Approved', 6],
 ];
 export function upgradeColours(data) {
-  if (data.lab_dip && data.lab_dip_version && data.lab_dip_version_status) return data;
+  if (data.lab_dip && data.lab_dip_version && data.lab_dip_version_status) {
+    if (data.lab_dip_version_item) return data;
+    const next = structuredClone(data);
+    next.lab_dip_version_item = legacyStatusItems(next.lab_dip_version);
+    for (const version of next.lab_dip_version) {
+      delete version.date;
+      delete version.comments;
+      delete version.lab_dip_status_id;
+    }
+    return next;
+  }
   const next = structuredClone(data);
   next.lab_dip ||= [];
   next.lab_dip_version ||= [];
@@ -54,18 +64,31 @@ export function upgradeColours(data) {
       });
     }
   }
-  return next;
+  return upgradeColours(next);
+}
+export function legacyStatusItems(versions) {
+  return versions.map((v) => ({
+    id: v.id,
+    lab_dip_version_id: v.id,
+    date: v.date || null,
+    comments: v.comments ?? null,
+    lab_dip_status_id: v.lab_dip_status_id || null,
+    latest: true,
+  }));
 }
 export function versionsFor(data, id) {
   return (data.lab_dip_version || [])
     .filter((v) => v.lab_dip_id === id)
     .sort((a, b) => a.version - b.version);
 }
-export function statusFor(data, v) {
-  const item = data.lab_dip_version_item?.find(
-    (entry) => entry.lab_dip_version_id === v?.id && entry.latest,
+export function latestStatusItem(data, version) {
+  return data.lab_dip_version_item?.find(
+    (item) => item.lab_dip_version_id === version?.id && item.latest,
   );
-  return data.lab_dip_version_status.find((status) => status.id === (item || v)?.lab_dip_status_id);
+}
+export function statusFor(data, version) {
+  const item = latestStatusItem(data, version);
+  return data.lab_dip_version_status.find((status) => status.id === item?.lab_dip_status_id);
 }
 export function labClosed(data, id) {
   return versionsFor(data, id).some((v) => (statusFor(data, v)?.sort_order || 0) >= 4);
@@ -85,6 +108,7 @@ export function labRows(data) {
   return (data.lab_dip || []).map((l) => {
     const labels = labLabels(data, l),
       latest = versionsFor(data, l.id).at(-1),
+      item = latestStatusItem(data, latest),
       status = statusFor(data, latest),
       display = !latest
         ? 'No versions yet'
@@ -99,11 +123,11 @@ export function labRows(data) {
       ...labels,
       edition: l.edition,
       version: latest?.version || 0,
-      date: latest?.date || '—',
+      date: item?.date || '—',
       status: display,
       shade: latest?.shade_card_no || '—',
       option: latest?.shade_card_option || '—',
-      comments: latest?.comments || '—',
+      comments: item?.comments || '—',
       attachment: latest?.shade_card_image_attachment
         ? data.attachments.find((a) => a.id === latest.shade_card_image_attachment)?.filename ||
           'Attached'
@@ -173,14 +197,15 @@ export function saveLabDip(data, input) {
     };
     next.lab_dip_version.push(version);
   }
-  if (latest?.date && input.mode !== 'update' && input.date < latest.date)
+  const previousDate = latestStatusItem(next, latest)?.date;
+  if (previousDate && input.mode !== 'update' && input.date < previousDate)
     throw Error('A new version cannot be dated before the previous version.');
-  const comments = input.comments?.trim() || '';
+  const comments = input.comments?.trim() || null;
+  const current = latestStatusItem(next, version);
   if (
-    !next._live &&
-    (version.date !== versionDate ||
-      version.lab_dip_status_id !== status.id ||
-      (version.comments || '') !== comments)
+    current?.date !== versionDate ||
+    current?.lab_dip_status_id !== status.id ||
+    (current?.comments || null) !== comments
   ) {
     next.lab_dip_version_item ||= [];
     for (const entry of next.lab_dip_version_item) {
@@ -196,12 +221,9 @@ export function saveLabDip(data, input) {
     });
   }
   Object.assign(version, {
-    date: versionDate,
-    lab_dip_status_id: status.id,
     shade_card_no: swatch ? null : input.shade_card_no?.trim() || null,
     shade_card_option: swatch ? null : input.shade_card_option?.trim() || null,
     shade_card_image_attachment: input.shade_card_image_attachment || null,
-    comments,
     attached_swatch: swatch,
     updated_at: now,
   });

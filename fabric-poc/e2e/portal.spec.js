@@ -43,7 +43,11 @@ test('lab-dip swatch locks status and shade fields while keeping the date editab
   await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeDisabled();
   await expect(page.getByLabel('Shade card number', { exact: true })).toBeDisabled();
   await expect(page.getByLabel('Shade card number', { exact: true })).toHaveValue('');
-  await expect(page.getByLabel('Version date', { exact: true })).toBeEnabled();
+  await expect(page.getByLabel('Shade card option', { exact: true })).toBeDisabled();
+  const date = page.getByLabel('Version date', { exact: true });
+  await expect(date).toBeEnabled();
+  await date.fill('2026-10-30');
+  await expect(date).toHaveValue('2026-10-30');
   await page.getByLabel('Attached swatch', { exact: true }).uncheck();
   await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();

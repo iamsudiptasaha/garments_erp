@@ -19,7 +19,7 @@ const input = () => ({
 test('legacy references gain unknown-status editions without fabric or mapping ID changes', () => {
   const d = initialFabric();
   assert.ok(d.lab_dip.length);
-  assert.ok(d.lab_dip_version.every((v) => v.lab_dip_status_id === null && v.updated_at === null));
+  assert.ok(d.lab_dip_version.every((v) => v.updated_at === null));
   assert.equal(labRows(d)[0].status, 'Status not recorded');
   assert.deepEqual(upgradeColours(d), d);
 });
@@ -100,7 +100,11 @@ test('Attached Swatch retains date and clears shade-card metadata', () => {
     lab = next.lab_dip.at(-1),
     v = versionsFor(next, lab.id)[0];
   assert.equal(lab.date, '2026-10-30');
-  assert.equal(v.date, '2026-10-30');
+  assert.equal(
+    next.lab_dip_version_item.find((item) => item.lab_dip_version_id === v.id).date,
+    '2026-10-30',
+  );
+  assert.equal(Object.hasOwn(v, 'date'), false);
   assert.equal(v.shade_card_no, null);
   assert.equal(v.shade_card_option, null);
   assert.equal(v.version, 1);
@@ -118,5 +122,8 @@ test('attached swatch boolean sets Attached Swatch status and clears shade field
   assert.equal(v.attached_swatch, true);
   assert.equal(v.shade_card_no, null);
   assert.equal(v.shade_card_option, null);
-  assert.equal(v.lab_dip_status_id, 'ld-swatch');
+  assert.equal(
+    d.lab_dip_version_item.find((item) => item.lab_dip_version_id === v.id).lab_dip_status_id,
+    'ld-swatch',
+  );
 });

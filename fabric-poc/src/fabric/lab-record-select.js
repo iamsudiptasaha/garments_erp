@@ -1,3 +1,4 @@
+import { latestStatusItem, statusFor } from '../colours/domain.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { versionsForMapping } from './relationships.js';
@@ -5,13 +6,13 @@ const h = React.createElement;
 export function labRecordRows(data, mappingId, dyerId) {
   return versionsForMapping(data, mappingId, dyerId).map((v) => {
     const lab = data.lab_dip.find((l) => l.id === v.lab_dip_id),
-      status = data.lab_dip_version_status.find((s) => s.id === v.lab_dip_status_id),
+      status = statusFor(data, v),
       swatch = Boolean(v.attached_swatch);
     return {
       id: v.id,
       edition: lab.edition,
       version: v.version,
-      date: v.date || null,
+      date: latestStatusItem(data, v)?.date || null,
       shade: swatch ? null : v.shade_card_no || null,
       option: swatch ? null : v.shade_card_option || null,
       status: status?.status || 'Status not recorded',

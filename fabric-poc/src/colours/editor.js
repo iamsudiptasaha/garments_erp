@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { labLabels, versionsFor, saveLabDip, labClosed } from './domain.js';
+import { labLabels, versionsFor, saveLabDip, labClosed, latestStatusItem } from './domain.js';
 const h = React.createElement;
 export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
   const lab = data.lab_dip.find((l) => l.id === id),
     existing = lab && mode !== 'edition',
     latest = existing ? versionsFor(data, id).at(-1) : null,
+    item = latestStatusItem(data, latest),
     dialog = useRef(null),
     [review, setReview] = useState(false),
     [error, setError] = useState(''),
@@ -26,7 +27,9 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
           ...latest,
           id,
           mode,
-          date: latest.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+          date: item?.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+          comments: item?.comments || '',
+          lab_dip_status_id: item?.lab_dip_status_id || '',
         }
       : {}),
   }));
@@ -278,7 +281,7 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
               h(
                 'label',
                 null,
-                'Date',
+                'Version date',
                 h('input', {
                   type: 'date',
                   required: true,

@@ -1,3 +1,4 @@
+import { latestStatusItem, legacyStatusItems } from '../colours/domain.js';
 import { fabricContract, fabricColumnTypes } from './live-contract.js';
 export const liveFabricPage = (key) => Object.hasOwn(fabricContract, key);
 export function emptyLiveFabric(template) {
@@ -8,6 +9,17 @@ export function emptyLiveFabric(template) {
 function editable(row, fields) {
   return Object.fromEntries(fields.filter((k) => Object.hasOwn(row, k)).map((k) => [k, row[k]]));
 }
+function versionWrite(data, row) {
+  const item = latestStatusItem(data, row);
+  if (!item) throw Error('Lab-dip version is missing its current status item.');
+  // The guarded document RPC writes these fields through the parent and its history trigger.
+  return {
+    ...row,
+    date: item.date,
+    comments: item.comments,
+    lab_dip_status_id: item.lab_dip_status_id,
+  };
+}
 export function fabricChanges(before, after, resource) {
   const contract = fabricContract[resource];
   if (!contract) throw Error('This section is not connected for live saving.');
@@ -17,8 +29,11 @@ export function fabricChanges(before, after, resource) {
       current = new Map((after[table] || []).map((r) => [r.id, r]));
     for (const r of current.values()) {
       const previous = old.get(r.id),
-        values = editable(r, fields);
-      if (!previous || JSON.stringify(values) !== JSON.stringify(editable(previous, fields)))
+        isVersion = table === 'lab_dip_version',
+        values = editable(isVersion ? versionWrite(after, r) : r, fields);
+      const priorValues =
+        previous && editable(isVersion ? versionWrite(before, previous) : previous, fields);
+      if (!previous || JSON.stringify(values) !== JSON.stringify(priorValues))
         changes.push({ table, id: r.id, before: previous || null, values });
     }
     for (const r of old.values())
@@ -30,6 +45,10 @@ export function liveFabricCommands(client) {
   async function rpc(name, args = {}) {
     const { data, error } = await client.rpc(name, args);
     if (error) throw Error(error.message);
+    // Older deployed snapshots have only the parent status fields.
+    if (data?.lab_dip_version && !data.lab_dip_version_item) {
+      return { ...data, lab_dip_version_item: legacyStatusItems(data.lab_dip_version) };
+    }
     return data;
   }
   return {
