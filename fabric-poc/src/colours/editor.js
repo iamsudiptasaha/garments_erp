@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { labLabels, versionsFor, saveLabDip, labClosed } from './domain.js';
+import { labLabels, versionsFor, saveLabDip, labClosed, latestStatusItem } from './domain.js';
 const h = React.createElement;
 export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
   const lab = data.lab_dip.find((l) => l.id === id),
     existing = lab && mode !== 'edition',
     latest = existing ? versionsFor(data, id).at(-1) : null,
+    item = latestStatusItem(data, latest),
     dialog = useRef(null),
     [review, setReview] = useState(false),
     [error, setError] = useState(''),
@@ -26,7 +27,9 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
           ...latest,
           id,
           mode,
-          date: latest.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+          date: item?.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+          comments: item?.comments || '',
+          lab_dip_status_id: item?.lab_dip_status_id || '',
         }
       : {}),
   }));
@@ -68,7 +71,6 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
           .map((l) => l.edition),
       ) + 1;
   const fields = [
-    ['date', 'Version date', 'date'],
     ['shade_card_no', 'Shade card number', 'text'],
     ['shade_card_option', 'Shade card option', 'text'],
   ];
@@ -252,18 +254,11 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
                   title,
                   h('input', {
                     type,
-                    disabled: swatch && type !== 'date',
-                    required: type === 'date',
+                    disabled: swatch,
                     value: draft[key] || '',
                     onChange: (e) => update(key, e.target.value),
                   }),
                 ),
-              ),
-              select(
-                'lab_dip_status_id',
-                'Status',
-                data.lab_dip_version_status.map((s) => [s.id, s.status]),
-                swatch,
               ),
               !data._live &&
                 select(
@@ -273,6 +268,27 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
                   false,
                   false,
                 ),
+            ),
+            h(
+              'div',
+              { className: 'fabric-fields lab-status-fields' },
+              select(
+                'lab_dip_status_id',
+                'Status',
+                data.lab_dip_version_status.map((s) => [s.id, s.status]),
+                swatch,
+              ),
+              h(
+                'label',
+                null,
+                'Version date',
+                h('input', {
+                  type: 'date',
+                  required: true,
+                  value: draft.date,
+                  onChange: (e) => update('date', e.target.value),
+                }),
+              ),
             ),
             h(
               'label',

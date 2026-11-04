@@ -379,6 +379,10 @@ test('default version selects latest accepted, while unapproved versions remain 
     id: 'approved',
     lab_dip_id: lab.id,
     version: 1,
+  });
+  d.lab_dip_version_item.push({
+    lab_dip_version_id: 'approved',
+    latest: true,
     date: '2026-10-29',
     lab_dip_status_id: 'ld-approved',
   });
@@ -388,11 +392,16 @@ test('default version selects latest accepted, while unapproved versions remain 
     id: 'awaiting',
     lab_dip_id: newer.id,
     version: 1,
+  });
+  d.lab_dip_version_item.push({
+    lab_dip_version_id: 'awaiting',
+    latest: true,
     date: '2026-10-30',
     lab_dip_status_id: 'ld-awaiting',
   });
   assert.equal(defaultVersion(d, 'co1', 'dy1'), 'approved');
-  d.lab_dip_version.find((v) => v.id === 'awaiting').lab_dip_status_id = 'ld-comments';
+  d.lab_dip_version_item.find((item) => item.lab_dip_version_id === 'awaiting').lab_dip_status_id =
+    'ld-comments';
   assert.equal(defaultVersion(d, 'co1', 'dy1'), 'awaiting');
 });
 test('older local relationships upgrade without guessing contact links or changing counts', () => {
@@ -450,9 +459,10 @@ test('lab-dip record picker exposes separate metadata columns and swatch blanks'
   const { labRecordRows } = await import('../src/fabric/lab-record-select.js'),
     data = initialFabric(),
     v = data.lab_dip_version[0];
-  v.lab_dip_status_id = 'ld-swatch';
+  const item = data.lab_dip_version_item.find((item) => item.lab_dip_version_id === v.id);
+  item.lab_dip_status_id = 'ld-swatch';
   v.attached_swatch = true;
-  v.date = '2026-10-30';
+  item.date = '2026-10-30';
   v.shade_card_no = 'unused';
   v.shade_card_option = 'unused';
   const row = labRecordRows(data, 'co1', 'dy1').find((r) => r.id === v.id);

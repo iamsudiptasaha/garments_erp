@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { labRows, saveLabDip } from '../src/colours/domain.js';
 import { initialFabric } from '../src/fabric/domain.js';
 import {
   emptyLiveFabric,
@@ -134,4 +135,42 @@ test('editing an unchanged date control preserves the stored program timestamp',
   assert.equal(next.dyeing_program[0].date, '2026-10-23T09:30:00+00:00');
   draft.header.date = '2026-10-24';
   assert.equal(saveDocument(d, 'programs', draft).dyeing_program[0].date, '2026-10-24');
+});
+
+test('Lab Dip reads the latest item and maps edits to the guarded document RPC', () => {
+  const before = initialFabric();
+  const version = before.lab_dip_version[0];
+  Object.assign(version, {
+    date: '2026-10-29',
+    comments: 'Old parent values',
+    lab_dip_status_id: 'ld-failed',
+  });
+  const item = before.lab_dip_version_item.find((row) => row.lab_dip_version_id === version.id);
+  Object.assign(item, {
+    date: '2026-10-30',
+    comments: 'Buyer response',
+    lab_dip_status_id: 'ld-awaiting',
+  });
+  const row = labRows(before).find((entry) => entry.id === version.lab_dip_id);
+  assert.equal(row.date, '2026-10-30');
+  assert.equal(row.comments, 'Buyer response');
+  assert.equal(row.status, 'Awaiting buyer comments');
+  const after = saveLabDip(before, {
+    id: version.lab_dip_id,
+    mode: 'update',
+    date: '2026-10-31',
+    comments: 'Swatch received',
+    attached_swatch: true,
+  });
+  const history = after.lab_dip_version_item.filter((row) => row.lab_dip_version_id === version.id);
+  assert.equal(history.length, 2);
+  assert.equal(history.find((row) => !row.latest).comments, 'Buyer response');
+  const changes = fabricChanges(before, after, 'labDips');
+  assert.equal(changes.length, 1);
+  const [change] = changes;
+  assert.equal(change.table, 'lab_dip_version');
+  assert.equal(change.before, version);
+  assert.equal(change.values.date, '2026-10-31');
+  assert.equal(change.values.comments, 'Swatch received');
+  assert.equal(change.values.lab_dip_status_id, 'ld-swatch');
 });

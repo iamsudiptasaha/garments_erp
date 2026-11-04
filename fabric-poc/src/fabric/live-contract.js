@@ -294,6 +294,11 @@ export const fabricColumnTypes = {
     created_at: 'timestamp with time zone',
     updated_at: 'timestamp with time zone',
   },
+  lab_dip_version_item: {
+    id: 'bigint',
+    lab_dip_version_id: 'bigint',
+    lab_dip_status_id: 'bigint',
+  },
   lab_dip_version_status: {
     id: 'bigint',
     status: 'text',
