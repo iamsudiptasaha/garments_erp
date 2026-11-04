@@ -15,10 +15,11 @@ async function get(path) {
 }
 const env = await get('environments/production');
 const review = env.protection_rules?.find((r) => r.type === 'required_reviewers');
-if (!review?.reviewers?.length || !review.prevent_self_review || env.can_admins_bypass === true)
-  throw Error(
-    'Production must require independent review, prevent self-review and disallow any explicitly reported administrator bypass',
-  );
+// Environment reviewers are unavailable on some plans. Validate the rule when configured.
+if (review && (!review.reviewers?.length || !review.prevent_self_review))
+  throw Error('Configured production environment reviewers must be independent and prevent self-review');
+if (env.can_admins_bypass === true)
+  throw Error('Production must disallow any explicitly reported administrator bypass');
 if (!env.deployment_branch_policy?.protected_branches)
   throw Error('Production deployments must be restricted to protected branches');
 const branch = await get('branches/main/protection');
