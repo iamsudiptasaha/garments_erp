@@ -156,6 +156,8 @@ export function saveLabDip(data, input) {
   )
     throw Error('Choose an existing attachment.');
   const latest = versionsFor(next, lab.id).at(-1);
+  if (latest && input.mode !== 'update' && statusFor(next, latest)?.sort_order !== 3)
+    throw Error('The latest version must be Failed before adding another version.');
   let version;
   if (input.mode === 'update' && latest) {
     version = next.lab_dip_version.find((v) => v.id === latest.id);

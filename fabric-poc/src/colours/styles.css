@@ -95,6 +95,54 @@
 .lab-detail small {
   color: #698294;
 }
+.lab-submission-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 12px;
+}
+.lab-submission-fields div {
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #dce8f1;
+  border-radius: 6px;
+}
+.lab-submission-fields dt {
+  color: #526c81;
+  font-size: 12px;
+  font-weight: 600;
+}
+.lab-submission-fields dd {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+.lab-review-timeline {
+  list-style: none;
+  border-left: 2px solid #c8ddec;
+  margin-left: 6px;
+  padding-left: 16px;
+}
+.lab-review-timeline li {
+  position: relative;
+  padding: 4px 0 12px;
+}
+.lab-review-timeline li::before {
+  content: '';
+  position: absolute;
+  left: -22px;
+  top: 8px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #357fb7;
+}
+.lab-review-timeline time {
+  display: inline-block;
+  margin-right: 10px;
+  color: #526c81;
+}
+.lab-review-timeline p {
+  margin: 8px 0 0;
+}
 .lab-actions {
   display: flex;
   align-items: center;

@@ -5,10 +5,7 @@ import { fileURLToPath } from 'node:url';
 import pg from '../../fabric-poc/node_modules/pg/lib/index.js';
 class ReleaseError extends Error {}
 const project = 'kidvckaicclqvtlddeyz';
-const files = [
-  '20261031191218_employee_hr_workspace.sql',
-  '20261031201306_contact_primary_selections.sql',
-];
+const files = ['20261104172129_align_erp_diagram_relationships.sql'];
 export function migrationConfig(env) {
   if (
     env.GITHUB_ACTIONS !== 'true' ||
@@ -103,7 +100,7 @@ export async function applyRelease(client, migrations) {
         [migration.version, migration.name, [migration.sql]],
       );
     }
-    // Verify schema, indexes and security before committing either migration.
+    // Verify the existing baseline and the new schema before committing.
     const result = await client.query(`select
       to_regprocedure('public.erp_save_employee(jsonb,uuid)') is not null
       and to_regprocedure('public.erp_employee_snapshot()') is not null
@@ -112,7 +109,18 @@ export async function applyRelease(client, migrations) {
       and (select relrowsecurity from pg_class where oid='garments_access.employee_attestation'::regclass)
       and not has_table_privilege('authenticated','garments_access.employee_attestation','select')
       and (select count(*)=3 from pg_indexes where schemaname='garments_erp' and indexname in ('contact_items_one_primary_address','contact_items_one_primary_phone','contact_bank_account_one_primary') and indexdef like 'CREATE UNIQUE INDEX%WHERE%')
-      and (select count(*)=3 from information_schema.columns where table_schema='garments_erp' and ((table_name='contact_items' and column_name in ('primary_address','primary_phone')) or (table_name='contact_bank_account' and column_name='primary_bank_account')) and data_type='boolean' and is_nullable='NO' and column_default='false') as valid`);
+      and (select count(*)=3 from information_schema.columns where table_schema='garments_erp' and ((table_name='contact_items' and column_name in ('primary_address','primary_phone')) or (table_name='contact_bank_account' and column_name='primary_bank_account')) and data_type='boolean' and is_nullable='NO' and column_default='false')
+      and (select count(*)=2 from pg_class where oid in (
+        'garments_erp.job_status_history'::regclass, 'garments_erp.lab_dip_version_review'::regclass
+      ) and relrowsecurity and not has_table_privilege('authenticated',oid,'select')
+        and not has_table_privilege('anon',oid,'select'))
+      and (select count(*)=2 from pg_trigger where tgenabled='O' and (
+        (tgrelid='garments_erp.job'::regclass and tgname='record_job_status_change')
+        or (tgrelid='garments_erp.lab_dip_version'::regclass and tgname='record_lab_dip_review')
+      ))
+      and exists(select 1 from pg_constraint where conrelid='garments_erp.raw_material_check_in'::regclass
+        and conname='raw_material_receipt_line_matches_purchase' and contype='f' and convalidated)
+      as valid`);
     if (result.rows[0]?.valid !== true)
       throw new ReleaseError('Post-migration schema/security verification failed.');
     await client.query('commit');
@@ -160,7 +168,7 @@ async function run() {
           migrations.map((m) => `- ${m.version}: ${m.hash}`).join('\n') +
           '\n',
       );
-    console.log('Approved employee/contact database release committed and verified.');
+    console.log('Approved ERP diagram migration committed and verified.');
   } finally {
     await client.end();
   }
