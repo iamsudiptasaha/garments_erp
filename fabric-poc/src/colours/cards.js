@@ -30,7 +30,7 @@ function Edition({ data, lab, onEdit, editable, creatable, index }) {
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState(null),
     detail = versions.find((v) => v.id === selected) || latest,
-    reviews = (data.lab_dip_version_review || []).filter(
+    reviews = (data.lab_dip_version_item || data.lab_dip_version_review || []).filter(
       (review) => review.lab_dip_version_id === detail?.id,
     );
   const edit = (mode) => {
@@ -156,7 +156,6 @@ function Edition({ data, lab, onEdit, editable, creatable, index }) {
                 'dl',
                 { className: 'lab-submission-fields' },
                 [
-                  ['Version date', detail.date],
                   ['Shade Card No.', detail.shade_card_no],
                   ['Shade Card Option', detail.shade_card_option],
                 ].map(([label, value]) =>
@@ -168,8 +167,6 @@ function Edition({ data, lab, onEdit, editable, creatable, index }) {
                   ),
                 ),
               ),
-              h('h4', null, 'Comments'),
-              h('p', null, detail.comments || 'No comments'),
               h('h4', null, 'Shade Card Attachment'),
               h(
                 'p',
@@ -184,18 +181,27 @@ function Edition({ data, lab, onEdit, editable, creatable, index }) {
                 null,
                 `Recorded: ${fmt(detail.created_at)} · Last updated: ${fmt(detail.updated_at)}`,
               ),
-              h('h4', null, 'Review history'),
+              h('h4', null, 'Status history'),
               reviews.length
                 ? h(
                     'ol',
                     { className: 'lab-review-timeline' },
                     reviews.map((review) => {
-                      const decision = statusFor(data, review),
+                      const decision = data.lab_dip_version_status.find(
+                          (entry) => entry.id === review.lab_dip_status_id,
+                        ),
                         order = decision?.sort_order;
                       return h(
                         'li',
                         { key: review.id },
-                        h('time', { dateTime: review.recorded_at }, fmt(review.recorded_at)),
+                        h(
+                          'time',
+                          { dateTime: review.date || review.recorded_at },
+                          review.date ||
+                            (review.recorded_at
+                              ? `Recorded ${fmt(review.recorded_at)}`
+                              : 'Date not recorded'),
+                        ),
                         h(
                           'span',
                           {
@@ -205,7 +211,7 @@ function Edition({ data, lab, onEdit, editable, creatable, index }) {
                           },
                           `Version ${detail.version} · ${decision?.status || 'Status not recorded'}`,
                         ),
-                        review.comments && h('p', null, review.comments),
+                        review.comments && h('p', null, 'Comments: ', review.comments),
                       );
                     }),
                   )

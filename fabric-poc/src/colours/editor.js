@@ -68,7 +68,6 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
           .map((l) => l.edition),
       ) + 1;
   const fields = [
-    ['date', 'Version date', 'date'],
     ['shade_card_no', 'Shade card number', 'text'],
     ['shade_card_option', 'Shade card option', 'text'],
   ];
@@ -252,18 +251,11 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
                   title,
                   h('input', {
                     type,
-                    disabled: swatch && type !== 'date',
-                    required: type === 'date',
+                    disabled: swatch,
                     value: draft[key] || '',
                     onChange: (e) => update(key, e.target.value),
                   }),
                 ),
-              ),
-              select(
-                'lab_dip_status_id',
-                'Status',
-                data.lab_dip_version_status.map((s) => [s.id, s.status]),
-                swatch,
               ),
               !data._live &&
                 select(
@@ -273,6 +265,27 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
                   false,
                   false,
                 ),
+            ),
+            h(
+              'div',
+              { className: 'fabric-fields lab-status-fields' },
+              select(
+                'lab_dip_status_id',
+                'Status',
+                data.lab_dip_version_status.map((s) => [s.id, s.status]),
+                swatch,
+              ),
+              h(
+                'label',
+                null,
+                'Date',
+                h('input', {
+                  type: 'date',
+                  required: true,
+                  value: draft.date,
+                  onChange: (e) => update('date', e.target.value),
+                }),
+              ),
             ),
             h(
               'label',

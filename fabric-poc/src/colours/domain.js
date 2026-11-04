@@ -62,7 +62,10 @@ export function versionsFor(data, id) {
     .sort((a, b) => a.version - b.version);
 }
 export function statusFor(data, v) {
-  return data.lab_dip_version_status.find((s) => s.id === v?.lab_dip_status_id);
+  const item = data.lab_dip_version_item?.find(
+    (entry) => entry.lab_dip_version_id === v?.id && entry.latest,
+  );
+  return data.lab_dip_version_status.find((status) => status.id === (item || v)?.lab_dip_status_id);
 }
 export function labClosed(data, id) {
   return versionsFor(data, id).some((v) => (statusFor(data, v)?.sort_order || 0) >= 4);
@@ -149,7 +152,7 @@ export function saveLabDip(data, input) {
   }
   if (labClosed(next, lab.id)) throw Error('This edition is completed. Create a new edition.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date || '') || Number.isNaN(Date.parse(input.date)))
-    throw Error('Enter a valid version date.');
+    throw Error('Enter a valid status date.');
   if (
     input.shade_card_image_attachment &&
     !next.attachments.some((a) => a.id === input.shade_card_image_attachment)
@@ -172,13 +175,33 @@ export function saveLabDip(data, input) {
   }
   if (latest?.date && input.mode !== 'update' && input.date < latest.date)
     throw Error('A new version cannot be dated before the previous version.');
+  const comments = input.comments?.trim() || '';
+  if (
+    !next._live &&
+    (version.date !== versionDate ||
+      version.lab_dip_status_id !== status.id ||
+      (version.comments || '') !== comments)
+  ) {
+    next.lab_dip_version_item ||= [];
+    for (const entry of next.lab_dip_version_item) {
+      if (entry.lab_dip_version_id === version.id) entry.latest = false;
+    }
+    next.lab_dip_version_item.unshift({
+      id: crypto.randomUUID(),
+      lab_dip_version_id: version.id,
+      lab_dip_status_id: status.id,
+      date: versionDate,
+      comments,
+      latest: true,
+    });
+  }
   Object.assign(version, {
     date: versionDate,
     lab_dip_status_id: status.id,
     shade_card_no: swatch ? null : input.shade_card_no?.trim() || null,
     shade_card_option: swatch ? null : input.shade_card_option?.trim() || null,
     shade_card_image_attachment: input.shade_card_image_attachment || null,
-    comments: input.comments?.trim() || '',
+    comments,
     attached_swatch: swatch,
     updated_at: now,
   });
