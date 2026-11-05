@@ -10,6 +10,7 @@ const files = [
   '20261104195714_lab_dip_version_status_items.sql',
   '20261105135706_production_hub_and_review_ownership.sql',
   '20261105152128_employee_photo_attachment_and_checklist.sql',
+  '20261105161411_verify_dyed_bills_and_batch_references.sql',
 ];
 export function migrationConfig(env) {
   if (
@@ -145,6 +146,13 @@ export async function applyRelease(client, migrations) {
         and table_name='production_checklist' and column_name='tna_acquired_status_id')
       and exists(select 1 from garments_access.app_file_route where target_key='employeePhoto'
         and allowed_mime_types=array['image/jpeg','image/png','image/webp'] and is_active)
+      and to_regprocedure('public.erp_save_verified_dyed_bill(jsonb,uuid)') is not null
+      and not has_function_privilege('anon','public.erp_save_verified_dyed_bill(jsonb,uuid)','execute')
+      and not has_function_privilege('authenticated','garments_access.save_fabric_document_core(text,jsonb,text,jsonb,bigint)','execute')
+      and (select relrowsecurity from pg_class where oid='garments_access.dyed_bill_attestation'::regclass)
+      and not has_table_privilege('authenticated','garments_access.dyed_bill_attestation','select,insert,update,delete')
+      and exists(select 1 from pg_constraint where conrelid='garments_erp.dyeing_program_item'::regclass and contype='f'
+        and pg_get_constraintdef(oid)='FOREIGN KEY (batch_no) REFERENCES garments_erp.batch_no_lab_dip_version_map(id)')
       as valid`);
     if (result.rows[0]?.valid !== true)
       throw new ReleaseError('Post-migration schema/security verification failed.');

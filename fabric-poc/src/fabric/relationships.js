@@ -12,6 +12,12 @@ export function programContext(data, line) {
 export function batchFor(data, id) {
   return (data.batch_no_lab_dip_version_map || []).find((b) => b.dyed_fabric_item_id === id);
 }
+export function previousBatchLabel(data, id) {
+  return (
+    (data.batch_no_lab_dip_version_map || []).find((b) => b.id === id)?.batch_no ||
+    (id ? 'Batch unavailable' : '—')
+  );
+}
 export function batchesForVersion(data, versionId, excludeProgramId = null) {
   if (!versionId) return [];
   return (data.batch_no_lab_dip_version_map || [])
@@ -22,8 +28,7 @@ export function batchesForVersion(data, versionId, excludeProgramId = null) {
           data.dyed_fabric_item.find((d) => d.id === b.dyed_fabric_item_id)
             ?.dyeing_program_item_id !== excludeProgramId),
     )
-    .map((b) => b.batch_no)
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    .sort((a, b) => a.batch_no.localeCompare(b.batch_no, undefined, { numeric: true }));
 }
 export function versionsForMapping(data, mappingId, dyerId) {
   return data.lab_dip_version
@@ -103,6 +108,11 @@ export function upgradeFabricRelationships(data) {
       });
     }
     delete row.batch_no;
+  }
+  for (const row of next.dyeing_program_item) {
+    const legacy = next.batch_no_lab_dip_version_map.find((b) => b.batch_no === row.batch_no);
+    if (legacy && !next.batch_no_lab_dip_version_map.some((b) => b.id === row.batch_no))
+      row.batch_no = legacy.id;
   }
   return next;
 }

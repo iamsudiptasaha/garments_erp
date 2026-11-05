@@ -269,3 +269,60 @@ test('stale child-review errors surface without retrying through the compatibili
   );
   assert.deepEqual(calls, ['erp_add_lab_dip_review']);
 });
+
+test('unchanged dyed bills still require the verified command and password proof', async () => {
+  const row = { id: '51', invoice_number: 'D1', invoice_date: '2026-11-05' };
+  const before = {
+    dyed_fabric_bill: [row],
+    dyed_fabric_item: [],
+    batch_no_lab_dip_version_map: [],
+    dyed_bill_verifiers: [{ id: '7', email: 'verifier@example.invalid' }],
+  };
+  const calls = [];
+  const verifier = {
+    auth: {
+      signInWithPassword: async () => ({ error: null }),
+      signOut: async () => calls.push('cleanup'),
+    },
+    rpc: async (name, args) => {
+      calls.push({ name, args });
+      return { data: 'proof', error: null };
+    },
+  };
+  const client = {
+    auth: { getUser: async () => ({ data: { user: { id: 'actor' } } }) },
+    rpc: async (name, args) => {
+      calls.push({ name, args });
+      return { data: before, error: null };
+    },
+  };
+  await liveFabricCommands(client, () => verifier).save({
+    resource: 'dyeBills',
+    root: { table: 'dyed_fabric_bill', id: '51', before: row },
+    action: 'edit',
+    before,
+    after: before,
+    verification: { employee: '7', password: 'synthetic-only' },
+  });
+  assert.deepEqual(
+    calls.filter((c) => c.name).map((c) => c.name),
+    ['erp_dyed_bill_attestation', 'erp_save_verified_dyed_bill'],
+  );
+  assert.equal(calls[0].args.p_payload.changes.length, 1);
+  assert.equal(JSON.stringify(calls).includes('synthetic-only'), false);
+  assert.equal(calls.at(-1), 'cleanup');
+});
+
+test('pending verification migration leaves other Fabric reads available without allowing bill saves', async () => {
+  const commands = liveFabricCommands({
+    rpc: async (name) =>
+      name === 'erp_dyed_bill_verifiers'
+        ? { error: { code: 'PGRST202', message: 'not deployed' } }
+        : { data: { _live: true } },
+  });
+  assert.deepEqual((await commands.load()).dyed_bill_verifiers, []);
+  assert.throws(
+    () => commands.save({ resource: 'dyeBills', root: {}, action: 'edit', before: {}, after: {} }),
+    /verification is unavailable/,
+  );
+});

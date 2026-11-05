@@ -1380,3 +1380,113 @@ select {
   justify-content: flex-end;
   gap: 10px;
 }
+
+.fabric-record-picker {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+.fabric-record-picker > label {
+  font-size: 12px;
+  font-weight: 650;
+  color: #526275;
+}
+.fabric-record-details {
+  display: block;
+  margin-top: 5px;
+  line-height: 1.5;
+  color: #64748b;
+  font-weight: 400;
+}
+.fabric-record__control {
+  min-height: 48px !important;
+  border-radius: 8px !important;
+}
+.fabric-record__menu {
+  z-index: 20 !important;
+}
+.fabric-record__option {
+  padding: 12px !important;
+  border-bottom: 1px solid #edf1f5;
+  font-size: 13px !important;
+}
+.fabric-verification {
+  margin: 20px 0;
+  padding: 20px;
+  border: 1px solid #c8d9d7;
+  border-radius: 12px;
+  background: #f5faf9;
+}
+.fabric-verification h3 {
+  margin: 0 0 8px;
+}
+.fabric-record__single-value {
+  white-space: normal !important;
+}
+.fabric-record__value-container {
+  padding: 8px 10px !important;
+}
+.fabric-record__option--is-selected .fabric-record-details {
+  color: #fff;
+}
+
+.dyed-bill-review th:first-child,
+.dyed-bill-review td:first-child {
+  min-width: 320px;
+  line-height: 1.55;
+}
+
+.fabric-rich-editor {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+}
+.fabric-rich-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid #d9e1eb;
+  border-radius: 8px 8px 0 0;
+  background: #f8fafc;
+}
+.fabric-rich-toolbar button {
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.fabric-rich-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.fabric-rich-content p,
+.fabric-rich-content ul,
+.fabric-rich-content ol {
+  margin: 0 0 6px;
+}
+.fabric-rich-input {
+  min-height: 110px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px;
+  margin-top: -7px;
+  background: white;
+  border: 1px solid #d9e1eb;
+  border-radius: 0 0 8px 8px;
+  font-size: 14px;
+}
+.fabric-rich-input:focus {
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
+}
+.fabric-password {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.fabric-password input {
+  min-width: 0;
+  flex: 1;
+}
+.fabric-password button {
+  min-width: 58px;
+}

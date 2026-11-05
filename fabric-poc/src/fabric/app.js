@@ -1,5 +1,5 @@
 import { OverviewPanel } from '../overview/panel.js';
-import { getAccessClient } from '../access/client.js';
+import { getAccessClient, createVerificationClient } from '../access/client.js';
 import {
   liveFabricCommands,
   liveFabricPage,
@@ -169,7 +169,7 @@ function App({ live }) {
   const [liveReady, setLiveReady] = useState(!live),
     [liveError, setLiveError] = useState('');
   const commands = useMemo(
-    () => (live ? liveFabricCommands(getAccessClient()) : null),
+    () => (live ? liveFabricCommands(getAccessClient(), createVerificationClient) : null),
     [Boolean(live)],
   );
   async function refreshLive() {
@@ -187,7 +187,11 @@ function App({ live }) {
       const snapshot = assertLiveIdentifiers(await commands.load());
       setState((previous) => ({
         ...previous,
-        data: { ...emptyLiveFabric(initialFabric()), ...snapshot },
+        data: {
+          ...emptyLiveFabric(initialFabric()),
+          ...snapshot,
+          dyed_bill_verifiers: snapshot.dyed_bill_verifiers || state.data.dyed_bill_verifiers || [],
+        },
       }));
       setLiveReady(true);
       setNotice('Live Supabase records · saved changes are shared');
@@ -269,20 +273,38 @@ function App({ live }) {
     }
     setEditor({ page, id });
   }
-  async function saveData(next) {
+  async function saveData(next, verification) {
     if (!can(editor?.id ? 'edit' : 'create', editor?.page))
       throw Error('Your role no longer allows this change.');
+    if (!live && editor.page === 'dyeBills') {
+      if (!verification?.employee || !verification.password)
+        throw Error('Select an employee and enter their password.');
+      const root = fabricRoot('dyeBills', state.data, next, editor);
+      next.dyed_fabric_bill.find((b) => b.id === root.id).verified_by_employee_id =
+        verification.employee;
+    }
     if (live) {
       if (!liveReady) throw Error('Wait for live data to load.');
       const resource = editor.page,
         root = fabricRoot(resource, state.data, next, editor),
         action = root.before ? 'edit' : 'create';
       const snapshot = assertLiveIdentifiers(
-        await commands.save({ resource, root, action, before: state.data, after: next }),
+        await commands.save({
+          resource,
+          root,
+          action,
+          before: state.data,
+          after: next,
+          verification,
+        }),
       );
       setState((previous) => ({
         ...previous,
-        data: { ...emptyLiveFabric(initialFabric()), ...snapshot },
+        data: {
+          ...emptyLiveFabric(initialFabric()),
+          ...snapshot,
+          dyed_bill_verifiers: snapshot.dyed_bill_verifiers || state.data.dyed_bill_verifiers || [],
+        },
       }));
       setNotice('Saved to Supabase · linked records refreshed');
     } else if (save({ ...state, data: next }))
@@ -1183,6 +1205,15 @@ function App({ live }) {
           receiptId: editor.receiptId,
           reconciliation: editor.reconciliation,
           onSave: saveData,
+          verifiers: live
+            ? (data.dyed_bill_verifiers || []).filter((v) => v[editor.id ? 'edit' : 'create'])
+            : access.users
+                .filter(
+                  (u) =>
+                    u.active !== false &&
+                    allowed(access, u.id, 'dyeBills', editor.id ? 'edit' : 'create'),
+                )
+                .map((u) => ({ id: u.id, label: `${u.name} · ${u.employeeCode || 'Preview'}` })),
           can,
           onClose: () => setEditor(null),
         },
