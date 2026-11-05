@@ -138,6 +138,8 @@ function AccessApp() {
     },
     signedIn &&
       h(AccessNavigation, {
+        accountName: user?.email,
+        onSignOut: signOut,
         access,
         tab,
         onTab: setTab,
@@ -175,7 +177,7 @@ function AccessApp() {
             'div',
             null,
             h('button', { disabled: busy, onClick: refresh }, 'Refresh access'),
-            h('button', { onClick: signOut }, 'Sign out'),
+            !signedIn && h('button', { onClick: signOut }, 'Sign out'),
           ),
       ),
       error && h('p', { className: 'form-error', role: 'alert' }, error),

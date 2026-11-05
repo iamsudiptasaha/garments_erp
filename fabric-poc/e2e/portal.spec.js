@@ -102,6 +102,18 @@ test('successful sign-in lands on Overview using a mocked transport, never a rea
   await page.getByLabel('Password', { exact: true }).fill('synthetic-test-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+  await expect(
+    page.locator('.workspace-toolbar').getByRole('link', { name: 'Account settings' }),
+  ).toHaveCount(0);
+  const account = page.getByLabel('Personal account', { exact: true });
+  await account.click();
+  await expect(page.getByRole('navigation', { name: 'Personal account actions' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Account settings', exact: true })).toHaveAttribute(
+    'href',
+    '/access.html',
+  );
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
 });
 
 test('email password login stops at Authenticator without loading business data', async ({
