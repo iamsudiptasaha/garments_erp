@@ -7,6 +7,13 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
+        ...(process.env.DEPLOY_BUILD === '1'
+          ? {}
+          : {
+              productionPrototype: fileURLToPath(
+                new URL('./production-prototype.html', import.meta.url),
+              ),
+            }),
         fileAdmin: fileURLToPath(new URL('./files-admin.html', import.meta.url)),
         files: fileURLToPath(new URL('./files.html', import.meta.url)),
         access: fileURLToPath(new URL('./access.html', import.meta.url)),

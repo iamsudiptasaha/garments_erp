@@ -1,3 +1,5 @@
+import { PortalTaskBoard } from '../production-task-board/portal';
+import { JobHistory } from '../production-task-board/job-history';
 import { AccountFooter } from '../access/account-footer.js';
 import { OverviewPanel } from '../overview/panel.js';
 import { getAccessClient, createVerificationClient } from '../access/client.js';
@@ -133,7 +135,13 @@ function App({ live }) {
       setActor(live.actor);
     }
   }, [live]);
-  const can = (action, key = page) => allowed(access, actor, key, action);
+  const can = (action, key = page) =>
+    allowed(
+      access,
+      actor,
+      ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(key) ? 'productionJobs' : key,
+      action,
+    );
   function saveAccess(next) {
     try {
       localStorage.setItem('garments-access-preview-v1', JSON.stringify(next));
@@ -633,6 +641,19 @@ function App({ live }) {
       ),
     );
   }
+  if (!live && new URLSearchParams(location.search).get('floor') === '1') {
+    return can('view', 'productionUpdateTaskStatus')
+      ? h(PortalTaskBoard, {
+          data,
+          actor,
+          mode: 'floor',
+          canEdit: can('edit', 'productionUpdateTaskStatus'),
+          onSave: (next) => {
+            if (can('edit', 'productionUpdateTaskStatus')) save({ ...state, data: next });
+          },
+        })
+      : h('section', { className: 'access-denied' }, h('h1', null, 'Access restricted'));
+  }
   return h(
     React.Fragment,
     null,
@@ -736,7 +757,17 @@ function App({ live }) {
                 'nav',
                 { 'aria-label': 'Production pages' },
                 Object.entries(pages)
-                  .filter(([key, p]) => p.section === 'production' && can('view', key))
+                  .filter(
+                    ([key, p]) =>
+                      p.section === 'production' && !p.hiddenNavigation && can('view', key),
+                  )
+                  .sort(([a], [b]) => {
+                    const rank = (key) =>
+                      ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(key)
+                        ? ['productionTaskBoard', 'productionUpdateTaskStatus'].indexOf(key)
+                        : 2;
+                    return rank(a) - rank(b);
+                  })
                   .map(([key, p]) =>
                     h(
                       'button',
@@ -997,179 +1028,213 @@ function App({ live }) {
                               'This page is not available to the selected preview role.',
                             ),
                           )
-                        : h(
-                            React.Fragment,
-                            null,
-                            h(
-                              'header',
-                              { className: 'fabric-page-header' },
-                              h(
-                                'div',
+                        : page === 'productionJobs'
+                          ? h(JobHistory, {
+                              data,
+                              onUpdate: () => navigate('productionUpdateTaskStatus'),
+                              canUpdate: can('edit', 'productionJobs'),
+                            })
+                          : ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(page)
+                            ? h(PortalTaskBoard, {
+                                key: page,
+                                data,
+                                actor,
+                                mode: page === 'productionTaskBoard' ? 'board' : 'update',
+                                canEdit: can('edit'),
+                                canCreate: can('create', 'productionJobs'),
+                                onCreate: (next) => {
+                                  if (live || !can('create', 'productionJobs')) return;
+                                  save({ ...state, data: next });
+                                },
+                                onSave: (next) => {
+                                  if (live || !can('edit')) return;
+                                  save({ ...state, data: next });
+                                },
+                              })
+                            : h(
+                                React.Fragment,
                                 null,
                                 h(
-                                  'p',
-                                  { className: 'eyebrow' },
-                                  (spec.section === 'colours'
-                                    ? 'COLOURS / '
-                                    : spec.section === 'production'
-                                      ? 'PRODUCTION / '
-                                      : spec.section === 'inventory'
-                                        ? 'RAW MATERIAL INVENTORY / '
-                                        : spec.section === 'miscellaneous'
-                                          ? 'MISCELLANEOUS / '
-                                          : 'FABRIC / ') + spec.title.toUpperCase(),
+                                  'header',
+                                  { className: 'fabric-page-header' },
+                                  h(
+                                    'div',
+                                    null,
+                                    h(
+                                      'p',
+                                      { className: 'eyebrow' },
+                                      (spec.section === 'colours'
+                                        ? 'COLOURS / '
+                                        : spec.section === 'production'
+                                          ? 'PRODUCTION / '
+                                          : spec.section === 'inventory'
+                                            ? 'RAW MATERIAL INVENTORY / '
+                                            : spec.section === 'miscellaneous'
+                                              ? 'MISCELLANEOUS / '
+                                              : 'FABRIC / ') + spec.title.toUpperCase(),
+                                    ),
+                                    h('h1', null, spec.title),
+                                    h('p', null, spec.subtitle),
+                                  ),
+                                  h(
+                                    'div',
+                                    { className: 'fabric-view-toggle' },
+                                    ['overview', 'sheet'].map((v) =>
+                                      h(
+                                        'button',
+                                        {
+                                          key: v,
+                                          'aria-pressed': view === v,
+                                          onClick: () => {
+                                            setView(v);
+                                            setSelected(null);
+                                          },
+                                        },
+                                        v === 'overview' ? 'Overview' : 'Sheet',
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                                h('h1', null, spec.title),
-                                h('p', null, spec.subtitle),
-                              ),
-                              h(
-                                'div',
-                                { className: 'fabric-view-toggle' },
-                                ['overview', 'sheet'].map((v) =>
+                                h(
+                                  'div',
+                                  { className: 'fabric-actions' },
+                                  h('input', {
+                                    type: 'search',
+                                    'aria-label': 'Search ' + spec.title,
+                                    placeholder:
+                                      page === 'productionJobs'
+                                        ? 'Scan QR / enter item style code…'
+                                        : page === 'batches'
+                                          ? 'Find a batch, fabric or bill…'
+                                          : 'Search ' + spec.title.toLowerCase() + '…',
+                                    value: query,
+                                    onChange: (e) => {
+                                      setQuery(e.target.value);
+                                      setSelected(null);
+                                    },
+                                  }),
+                                  !spec.readonly &&
+                                    can('create') &&
+                                    h(
+                                      'button',
+                                      { className: 'primary', onClick: () => edit(null) },
+                                      spec.newLabel ||
+                                        (page === 'suppliers'
+                                          ? '+ Add supplier'
+                                          : '+ New document'),
+                                    ),
+                                  !spec.readonly &&
+                                    can('edit') &&
+                                    view === 'sheet' &&
+                                    h(
+                                      'button',
+                                      {
+                                        disabled: !selected,
+                                        onClick: () => edit(selected.documentId),
+                                      },
+                                      spec.master
+                                        ? 'Edit selected record'
+                                        : 'Edit selected document',
+                                    ),
+                                ),
+                                page === 'materialStock' &&
+                                  view === 'sheet' &&
+                                  can('create', 'materialIssues') &&
                                   h(
                                     'button',
                                     {
-                                      key: v,
-                                      'aria-pressed': view === v,
-                                      onClick: () => {
-                                        setView(v);
-                                        setSelected(null);
-                                      },
+                                      className: 'primary',
+                                      disabled: !selected || selected.left <= 0,
+                                      onClick: () => reconcile(selected.id),
                                     },
-                                    v === 'overview' ? 'Overview' : 'Sheet',
+                                    'Reconcile selected stock',
                                   ),
-                                ),
-                              ),
-                            ),
-                            h(
-                              'div',
-                              { className: 'fabric-actions' },
-                              h('input', {
-                                type: 'search',
-                                'aria-label': 'Search ' + spec.title,
-                                placeholder:
-                                  page === 'productionJobs'
-                                    ? 'Scan QR / enter item style code…'
-                                    : page === 'batches'
-                                      ? 'Find a batch, fabric or bill…'
-                                      : 'Search ' + spec.title.toLowerCase() + '…',
-                                value: query,
-                                onChange: (e) => {
-                                  setQuery(e.target.value);
-                                  setSelected(null);
-                                },
-                              }),
-                              !spec.readonly &&
-                                can('create') &&
                                 h(
-                                  'button',
-                                  { className: 'primary', onClick: () => edit(null) },
-                                  spec.newLabel ||
-                                    (page === 'suppliers' ? '+ Add supplier' : '+ New document'),
+                                  'div',
+                                  {
+                                    className: 'fabric-status',
+                                    role: 'status',
+                                    'aria-live': 'polite',
+                                  },
+                                  notice,
+                                  live && h('button', { onClick: refreshLive }, 'Refresh records'),
                                 ),
-                              !spec.readonly &&
-                                can('edit') &&
-                                view === 'sheet' &&
-                                h(
-                                  'button',
-                                  { disabled: !selected, onClick: () => edit(selected.documentId) },
-                                  spec.master ? 'Edit selected record' : 'Edit selected document',
-                                ),
-                            ),
-                            page === 'materialStock' &&
-                              view === 'sheet' &&
-                              can('create', 'materialIssues') &&
-                              h(
-                                'button',
-                                {
-                                  className: 'primary',
-                                  disabled: !selected || selected.left <= 0,
-                                  onClick: () => reconcile(selected.id),
-                                },
-                                'Reconcile selected stock',
-                              ),
-                            h(
-                              'div',
-                              { className: 'fabric-status', role: 'status', 'aria-live': 'polite' },
-                              notice,
-                              live && h('button', { onClick: refreshLive }, 'Refresh records'),
-                            ),
-                            records.length === 0 &&
-                              h(
-                                'div',
-                                { className: 'empty-state' },
-                                h('h2', null, 'Nothing here yet'),
-                                h(
-                                  'p',
-                                  null,
-                                  query
-                                    ? 'Try a different search.'
-                                    : spec.master
-                                      ? 'Add the first record to get started.'
-                                      : 'Add the first document to get started.',
-                                ),
-                              ),
-                            view === 'overview'
-                              ? overview()
-                              : h(
-                                  React.Fragment,
-                                  null,
+                                records.length === 0 &&
                                   h(
                                     'div',
-                                    { className: 'fabric-sort' },
+                                    { className: 'empty-state' },
+                                    h('h2', null, 'Nothing here yet'),
                                     h(
-                                      'label',
+                                      'p',
                                       null,
-                                      'Sort complete rows by ',
-                                      h(
-                                        'select',
-                                        {
-                                          'aria-label': 'Sort column',
-                                          value: preferences.sort?.key || spec.columns[0].key,
-                                          onChange: (e) =>
-                                            sorting(
-                                              e.target.value,
-                                              preferences.sort?.direction || 'asc',
-                                            ),
-                                        },
-                                        spec.columns.map((c) =>
-                                          h('option', { key: c.key, value: c.key }, c.label),
-                                        ),
-                                      ),
+                                      query
+                                        ? 'Try a different search.'
+                                        : spec.master
+                                          ? 'Add the first record to get started.'
+                                          : 'Add the first document to get started.',
                                     ),
-                                    h(
-                                      'select',
-                                      {
-                                        'aria-label': 'Sort direction',
-                                        value: preferences.sort?.direction || 'asc',
-                                        onChange: (e) =>
-                                          sorting(
-                                            preferences.sort?.key || spec.columns[0].key,
-                                            e.target.value,
-                                          ),
-                                      },
-                                      h('option', { value: 'asc' }, 'Ascending'),
-                                      h('option', { value: 'desc' }, 'Descending'),
-                                    ),
-                                    h('span', null, `${records.length} rows`),
                                   ),
-                                  h(FabricSheet, {
-                                    key: `${page}:${preferences.sort?.key}:${preferences.sort?.direction}:${sidebarOpen}`,
-                                    page,
-                                    spec,
-                                    records,
-                                    preferences,
-                                    onPreferences: prefs,
-                                    onSelect: setSelected,
-                                    onNotice: setNotice,
-                                    capabilities: {
-                                      format: can('format'),
-                                      export: can('export'),
-                                      print: can('print'),
-                                    },
-                                  }),
-                                ),
-                          ),
+                                view === 'overview'
+                                  ? overview()
+                                  : h(
+                                      React.Fragment,
+                                      null,
+                                      h(
+                                        'div',
+                                        { className: 'fabric-sort' },
+                                        h(
+                                          'label',
+                                          null,
+                                          'Sort complete rows by ',
+                                          h(
+                                            'select',
+                                            {
+                                              'aria-label': 'Sort column',
+                                              value: preferences.sort?.key || spec.columns[0].key,
+                                              onChange: (e) =>
+                                                sorting(
+                                                  e.target.value,
+                                                  preferences.sort?.direction || 'asc',
+                                                ),
+                                            },
+                                            spec.columns.map((c) =>
+                                              h('option', { key: c.key, value: c.key }, c.label),
+                                            ),
+                                          ),
+                                        ),
+                                        h(
+                                          'select',
+                                          {
+                                            'aria-label': 'Sort direction',
+                                            value: preferences.sort?.direction || 'asc',
+                                            onChange: (e) =>
+                                              sorting(
+                                                preferences.sort?.key || spec.columns[0].key,
+                                                e.target.value,
+                                              ),
+                                          },
+                                          h('option', { value: 'asc' }, 'Ascending'),
+                                          h('option', { value: 'desc' }, 'Descending'),
+                                        ),
+                                        h('span', null, `${records.length} rows`),
+                                      ),
+                                      h(FabricSheet, {
+                                        key: `${page}:${preferences.sort?.key}:${preferences.sort?.direction}:${sidebarOpen}`,
+                                        page,
+                                        spec,
+                                        records,
+                                        preferences,
+                                        onPreferences: prefs,
+                                        onSelect: setSelected,
+                                        onNotice: setNotice,
+                                        capabilities: {
+                                          format: can('format'),
+                                          export: can('export'),
+                                          print: can('print'),
+                                        },
+                                      }),
+                                    ),
+                              ),
       ),
     ),
     editor &&

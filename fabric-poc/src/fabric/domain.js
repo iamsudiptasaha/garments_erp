@@ -40,6 +40,7 @@ export function initialFabric() {
         ...initialInventory(),
         ...initialMiscellaneous(),
         ...initialProduction(),
+        flags_list: [],
         contacts: [
           { id: 's7', company_name: 'Trim House' },
           { id: 's1', company_name: 'Shivam Yarns' },
@@ -329,6 +330,7 @@ export function initialFabric() {
 }
 // Upgrade the earlier local fixture without changing document or mapping IDs.
 export function upgradeFabric(data) {
+  data = { ...data, flags_list: data.flags_list || [] };
   if (data.color_map && data.brand_list)
     return upgradeFabricRelationships(
       upgradeColours(upgradeProduction(upgradeMiscellaneous(upgradeInventory(data)))),
@@ -427,6 +429,13 @@ export function selectors(data) {
 export function fabricRows(data, page) {
   const s = selectors(data),
     { get, supplier, yarn, knit, dyed } = s;
+  if (['productionFlags', 'productionGenders'].includes(page))
+    return (data[pages[page].entity] || []).map((r) => ({ ...r, documentId: r.id }));
+  if (page === 'productionItems')
+    return productionRows(data, page).map((row) => ({
+      ...row,
+      batch_number: data.item.find((item) => item.id === row.documentId)?.batch_number || '—',
+    }));
   if (pages[page]?.production) return productionRows(data, page);
   if (pages[page]?.inventory) return inventoryRows(data, page, s);
   if (pages[page]?.miscellaneous) return miscellaneousRows(data, page);
@@ -832,6 +841,8 @@ export function documentFor(data, page, id) {
   };
 }
 export function saveDocument(data, page, draft) {
+  if (page === 'productionJobs')
+    throw Error('Job history is read-only. Use Update Tasks for production handovers.');
   const spec = pages[page],
     next = copy(data),
     id = draft.header.id || uid(),

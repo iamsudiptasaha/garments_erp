@@ -96,6 +96,25 @@
     }
   },
   "databaseCommands": {
+    "dyedBillVerification": {
+      "reviewedMigration": "20261105161411_verify_dyed_bills_and_batch_references.sql",
+      "root": "dyed_fabric_bill",
+      "command": "garments_access.save_verified_dyed_bill",
+      "ownedTables": [
+        "dyed_fabric_bill",
+        "dyed_fabric_item",
+        "batch_no_lab_dip_version_map"
+      ],
+      "linkedReadOnlyTables": [
+        "employee",
+        "dyeing_program_item",
+        "knitting_bill_item",
+        "lab_dip_version",
+        "lab_dip_version_item"
+      ],
+      "verification": "Selected eligible employee password on every create/edit save; exact-command, 90-second, single-use proof",
+      "previousBatchReference": "dyeing_program_item.batch_no -> batch_no_lab_dip_version_map.id"
+    },
     "production": {
       "reviewedMigration": "20261105135706_production_hub_and_review_ownership.sql",
       "root": "production",
@@ -135,7 +154,9 @@
         "task_board_data_flag.task_board_data_id": "task_board_data.id"
       },
       "movementVerification": "Selected eligible employee password; exact-command, single-use proof; operator may select themselves",
-      "uiStatus": "Existing Production source remains frozen pending the separate UI implementation"
+      "uiStatus": "Existing Production source remains frozen pending the separate UI implementation",
+      "pendingMigration": "20261105173810_production_atomic_employee_handover.sql",
+      "pendingMovement": "Authorized portal actor; active employee selection without extra password; any later stage; complete atomic variant/size outputs; expected transition ID guards a single handover per visit; immutable output snapshot"
     },
     "labDipReviews": {
       "reviewedMigration": "20261105135706_production_hub_and_review_ownership.sql",
@@ -152,25 +173,69 @@
         "lab_dip_status_id"
       ],
       "compatibilityCommand": "garments_access.save_fabric_document"
+    }
+  },
+  "prototypes": {
+    "productionStudio": {
+      "entry": "fabric-poc/production-prototype.html",
+      "source": "fabric-poc/src/production-prototype",
+      "mode": "isolated-local-mock",
+      "root": "production",
+      "reviewedDatabaseContract": "databaseCommands.production",
+      "persistence": "Namespaced browser storage only; no Supabase imports or business writes",
+      "hierarchy": "Production per item part; expandable read-only job attempt history, not arbitrary child tasks",
+      "stageMovement": "Mock stage selection and stage drops open the shared handover form; every variant/size and selected employee required; one handover per job visit; no live writes",
+      "presentationOnlyFields": [
+        "priority",
+        "progress",
+        "displayTitle",
+        "savedViews",
+        "columnPreferences"
+      ],
+      "deployment": "Standalone entry excluded when DEPLOY_BUILD=1; shared components used by portal preview",
+      "sharedImplementation": "fabric-poc/src/production-task-board"
+    }
+  },
+  "localWorkspaces": {
+    "productionTaskBoard": {
+      "root": "production",
+      "mode": "local-preview",
+      "source": "fabric-poc/src/production-task-board",
+      "pages": [
+        "productionTaskBoard",
+        "productionUpdateTaskStatus"
+      ],
+      "permissionResource": "productionJobs",
+      "localWriteTables": [
+        "job",
+        "variant_item_per_job",
+        "stage_pieces",
+        "production_checklist"
+      ],
+      "localAggregate": "production_task_board_preview",
+      "ownership": "Item checklist shared by item_id; task per item_part_id; original jobs and challans retained; variants/sizes selected from linked item records",
+      "movement": "Complete every variant/size output and select existing employee once per current job visit; unequal totals allowed; direct stage selection routes through handover",
+      "liveWrites": "Blocked by existing portal live-page gate; current RPC requires a separately reviewed schema and verification change",
+      "preferences": "Named saved views removed from the portal MVP; transient layout controls remain browser-local",
+      "plannedPieces": "Read-only sum of item_cut_ratio.pieces across the item sizes, refreshed from item setup",
+      "history": "productionJobs is read-only Job history; original job IDs, piece records and challan links preserved",
+      "start": "Task Board create permission starts an existing prepared item part once at the first stage; local job code clearly marked LOCAL; live codes remain database-generated",
+      "itemBatchNumber": {
+        "migration": "20261105192048_add_item_batch_number.sql",
+        "column": "item.batch_number",
+        "type": "nullable text",
+        "owner": "productionItems",
+        "meaning": "Optional manually entered reference; no uniqueness or generation rule"
+      }
     },
-    "dyedBillVerification": {
-      "reviewedMigration": "20261105161411_verify_dyed_bills_and_batch_references.sql",
-      "root": "dyed_fabric_bill",
-      "command": "garments_access.save_verified_dyed_bill",
-      "ownedTables": [
-        "dyed_fabric_bill",
-        "dyed_fabric_item",
-        "batch_no_lab_dip_version_map"
-      ],
-      "linkedReadOnlyTables": [
-        "employee",
-        "dyeing_program_item",
-        "knitting_bill_item",
-        "lab_dip_version",
-        "lab_dip_version_item"
-      ],
-      "verification": "Selected eligible employee password on every create/edit save; exact-command, 90-second, single-use proof",
-      "previousBatchReference": "dyeing_program_item.batch_no -> batch_no_lab_dip_version_map.id"
+    "productionReferences": {
+      "mode": "local-preview",
+      "pages": {
+        "productionFlags": "flags_list",
+        "productionGenders": "gender"
+      },
+      "ownership": "Each page edits only its reference row; linked Production/Employee records are not edited",
+      "liveWrites": "Blocked by existing live-page gate"
     }
   }
 }

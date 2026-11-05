@@ -15,7 +15,7 @@ for (const r of catalogue.resources)
 for (const r of catalogue.resources.filter((r) => r.parent))
   sql += `update garments_access.app_resource set parent_resource_id=(select id from garments_access.app_resource where key=${literal(r.parent)}) where key=${literal(r.key)};\n`;
 for (const t of catalogue.tables)
-  sql += `insert into garments_access.app_db_table(schema_name,table_name) values (${literal(t.schema_name)},${literal(t.table_name)});\n`;
+  sql += `insert into garments_access.app_db_table(schema_name,table_name) values (${literal(t.schema_name)},${literal(t.table_name)}) on conflict(schema_name,table_name) do nothing;\n`;
 for (const m of catalogue.mappings)
   sql += `insert into garments_access.app_resource_table(app_resource_id,app_db_table_id,relation_type,can_view,can_create,can_edit,can_delete) select r.id,t.id,${literal(m.relation_type)},${m.can_view},${m.can_create},${m.can_edit},${m.can_delete} from garments_access.app_resource r,garments_access.app_db_table t where r.key=${literal(m.resource_key)} and t.schema_name=${literal(m.schema_name)} and t.table_name=${literal(m.table_name)};\n`;
 sql += `insert into garments_access.app_role_resource_permission(app_role_id,app_resource_id,can_view) select role.id,r.id,true from garments_access.app_role role,garments_access.app_resource r where role.key='ci_viewer' and r.key='colours';\n`;

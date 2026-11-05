@@ -194,17 +194,17 @@ test('item checklist is saved once per item with independent production statuses
   setup.variants[0].share_weight = 10;
   assert.ok(saveItemSetup(d, 'prod-item-1', setup).variant.every((v) => v.share_weight === 1));
 });
-test('jobs require a verifier on save and stage changes create another job row', () => {
+test('job history rejects independent saves and stage edits', () => {
   const d = initialFabric(),
     header = { ...d.job[0] };
   assert.throws(
     () => saveDocument(d, 'productionJobs', { header: { ...header, verify_employee_id: '' } }),
-    /Verified by employee/,
+    /Job history is read-only/,
   );
   assert.throws(
     () =>
       saveDocument(d, 'productionJobs', { header: { ...header, stage_id: 'prod-stage-print' } }),
-    /new job row/,
+    /Job history is read-only/,
   );
 });
 
@@ -222,4 +222,18 @@ test('checklist documents and Disputed status follow the revised field names', a
   assert.equal(next.production_checklist[0].techpack_aqcuired_status_id, 'prod-status-3');
   assert.equal(next.production_checklist[0].ordersheet_acquired_status_id, 'prod-status-disputed');
   assert.equal(next.production_checklist[0].tna_acquired_status_id, undefined);
+});
+
+test('item batch number saves, displays, and remains optional on legacy items', () => {
+  const data = initialFabric();
+  const header = { ...data.item[0], batch_number: ' BATCH-26-001 ' };
+  const next = saveDocument(data, 'productionItems', { header, lines: [] });
+  assert.equal(next.item[0].batch_number, 'BATCH-26-001');
+  assert.equal(fabricRows(next, 'productionItems')[0].batch_number, 'BATCH-26-001');
+  assert.equal(fabricRows(data, 'productionItems')[0].batch_number, '—');
+  const cleared = saveDocument(next, 'productionItems', {
+    header: { ...next.item[0], batch_number: '' },
+    lines: [],
+  });
+  assert.equal(cleared.item[0].batch_number, '');
 });

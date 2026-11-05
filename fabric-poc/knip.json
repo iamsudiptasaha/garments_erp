@@ -11,7 +11,8 @@
     "../scripts/ci/*.mjs",
     "../database/ci/seed.mjs",
     "e2e/*.js",
-    "integration/*.mjs"
+    "integration/*.mjs",
+    "src/production-prototype/main.tsx"
   ],
   "project": [
     "src/**/*.js",
@@ -20,7 +21,8 @@
     "src/**/*.ts",
     "../scripts/ci/*.mjs",
     "e2e/*.js",
-    "integration/*.mjs"
+    "integration/*.mjs",
+    "src/**/*.tsx"
   ],
   "includeEntryExports": true
 }

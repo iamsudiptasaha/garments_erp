@@ -4,7 +4,12 @@ const fabricChain=['contacts','yarn_supplier','yarn_type','yarn_purchase_order',
 const labChain=['lab_dip','lab_dip_version','lab_dip_version_status','batch_no_lab_dip_version_map'];
 const dyeChain=[...labChain,...fabricChain,'dyer','dyeing_program','dyeing_program_item','color_map','color_map_by_brand','brand_list','dyed_fabric_bill','dyed_fabric_item'];
 const stockChain=['raw_material_check_in','raw_material_check_out','raw_material_item','category_list','unit_of_measure','raw_material_supplier_list','contacts','raw_material_purchase_order','raw_material_purchase_order_item',...dyeChain];
+// These workspace routes remain local previews. Production commands continue
+// to use the existing productionJobs permission resource; no role grants here.
 const definitions={
+ productionTaskBoard:{report:['job','item','item_part','part_list','variant','variant_item','variant_item_per_job','stage_pieces','item_size_list','size_list','item_cut_ratio','production_checklist','stage','employee','flags_list']},
+ productionUpdateTaskStatus:{report:['job','item','item_part','variant','variant_item','variant_item_per_job','stage_pieces','item_size_list','size_list','stage','employee']},
+ productionFlags:{write:['flags_list']},productionGenders:{write:['gender']},
  productionItems:{write:['item','item_part','item_size_list','item_cut_ratio','variant','variant_item','production_checklist'],read:['brand_list','product_type_list','attachments','part_list','size_list','job','item_status_list',...labChain,'color_map','color_map_by_brand','view_variant_item_lab_dip_status']},
  productionJobs:{write:['job','variant_item_per_job','stage_pieces','job_assignees'],read:['item','item_part','part_list','stage','stage_type','item_status_list','job_worker','contacts','employee','variant','item_size_list','size_list','challan_job_item','challan_job_item_pieces']},
  productionWorkers:{write:['job_worker'],read:['contacts','contact_purpose','job']},
@@ -30,7 +35,7 @@ const definitions={
  materialIssues:{write:['raw_material_check_out'],read:[...stockChain,'employee','check_out_type','item','item_part','part_list']},
  materialStock:{report:stockChain},materialMovements:{report:[...stockChain,'employee','check_out_type','item','item_part','part_list']},
  materialContacts:{write:['contacts'],read:['contact_items','contact_extra']},contactPeople:{write:['contact_items'],read:['contacts']},contactDetails:{write:['contact_extra'],read:['contacts']},contactBankAccounts:{write:['contact_bank_account'],read:['contacts','bank_account_type','attachments']},contactCategories:{write:['contact_purpose']},bankAccountTypes:{write:['bank_account_type']},materialCategories:{write:['category_list']},materialUnits:{write:['unit_of_measure']},materialIssueTypes:{write:['check_out_type']},
- employees:{write:['employee','contacts'],read:['contact_purpose','gender','blood_group','type_of_employment','attachments']},
+ employees:{write:['employee','gender','blood_group','type_of_employment'],read:['contacts','contact_purpose','attachments','contact_items']},
  adminAccess:{write:['garments_access.app_user','garments_access.app_user_role'],read:['employee','contacts','garments_access.app_role']},
  adminRoles:{write:['garments_access.app_role','garments_access.app_role_resource_permission'],read:['garments_access.app_resource','garments_access.app_resource_table','garments_access.app_db_table','garments_access.app_user','garments_access.app_user_role']},
  adminAudit:{report:['garments_access.app_activity_log','garments_access.app_user','employee','contacts','garments_access.app_resource']}
