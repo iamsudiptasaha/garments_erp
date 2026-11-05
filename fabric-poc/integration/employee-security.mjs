@@ -59,48 +59,15 @@ try {
   await actor(viewer);
   await deny(() => snapshot(), 'viewer cannot read HR');
   await deny(() => save(payload), 'viewer cannot write HR');
-  await actor(viewer, 'aal1', false);
-  await deny(
-    () =>
-      c.query('select public.erp_employee_attestation($1,900002,$2)', [
-        admin,
-        JSON.stringify(payload),
-      ]),
-    'stale password cannot attest',
-  );
-  await actor(viewer, 'aal1');
-  await deny(
-    () =>
-      c.query('select public.erp_employee_attestation($1,900001,$2)', [
-        admin,
-        JSON.stringify(payload),
-      ]),
-    'cannot impersonate another employee',
-  );
-  const proof = (
-    await c.query('select public.erp_employee_attestation($1,900002,$2) proof', [
-      admin,
-      JSON.stringify(payload),
-    ])
-  ).rows[0].proof;
   await actor(admin);
-  await deny(
-    () =>
-      save(
-        {
-          ...payload,
-          draft: { ...draft, employee: { ...draft.employee, contacts_id: '900001' } },
-        },
-        proof,
-      ),
-    'proof bound to exact data',
-  );
-  const saved = await save(payload, proof),
+  const saved = await save(payload),
     record = saved.records.find(
       (r) => !before.records.some((b) => b.employee.id === r.employee.id),
     );
   assert.match(record.employee.employee_code, /^SCE\/\d{5}$/);
-  assert.equal(record.employee.verified_by_employee_id, '900002');
+  assert.equal(record.employee.verified_by_employee_id, '900001');
+  assert.equal(record.employee.is_active, true);
+  assert.equal(record.employee.is_verified, true);
   assert.equal(record.employee.contacts_id, '900002');
   assert.equal(record.banks, undefined);
   assert.deepEqual(
@@ -120,10 +87,9 @@ try {
         record.employee.id,
       ])
     ).rows[0].verified_by_employee_id,
-    null,
+    '900001',
   );
   await c.query('rollback to savepoint upload_change');
-  await deny(() => save(payload, proof), 'proof is single use');
   const edit = { id: record.employee.id, expected: record.revision, draft: employeeDraft(record) };
   edit.draft.employee.supporting_document_1_title = 'changed';
   await save(edit);
@@ -143,7 +109,7 @@ try {
   await deny(() => snapshot(), 'operator needs MFA');
   await c.query('rollback');
   console.log(
-    'PASS HR role/MFA denial, identity binding, link-only saves, generated code, single-use exact-data proof, stale update and contact-write rejection',
+    'PASS HR role/MFA denial, operator verification, link-only saves, generated code, stale update and contact-write rejection',
   );
   const a = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL }),
     b = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });

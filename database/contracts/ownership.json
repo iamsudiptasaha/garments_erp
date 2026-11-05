@@ -26,7 +26,13 @@
         "gender",
         "blood_group",
         "type_of_employment"
-      ]
+      ],
+      "serverAssignedFields": [
+        "verified_by_employee_id",
+        "is_verified",
+        "activated_by_employee_id"
+      ],
+      "stateCommand": "garments_access.set_employee_active"
     }
   },
   "ownership": {
@@ -80,6 +86,65 @@
         "bankAccountTypes": "bank_account_type",
         "contactAttachments": "attachments"
       }
+    }
+  },
+  "databaseCommands": {
+    "production": {
+      "reviewedMigration": "20261105135706_production_hub_and_review_ownership.sql",
+      "root": "production",
+      "uniqueRootForeignKey": "item_part_id",
+      "commands": [
+        "garments_access.move_production",
+        "garments_access.save_production_board",
+        "garments_access.save_job_status"
+      ],
+      "ownedTables": [
+        "production",
+        "job",
+        "job_assignees",
+        "task_board_data",
+        "task_board_data_flag",
+        "job_item_status_list",
+        "job_transition_log",
+        "variant_item_per_job",
+        "stage_pieces"
+      ],
+      "linkedReadOnlyTables": [
+        "item_part",
+        "item",
+        "item_size_list",
+        "item_cut_ratio",
+        "variant_item",
+        "employee",
+        "stage",
+        "flags_list",
+        "job_worker"
+      ],
+      "relationships": {
+        "job.production_id": "production.id",
+        "job_assignees.production_id": "production.id",
+        "task_board_data.production_id": "production.id",
+        "job_item_status_list.job_id": "job.id",
+        "task_board_data_flag.task_board_data_id": "task_board_data.id"
+      },
+      "movementVerification": "Selected eligible employee password; exact-command, single-use proof; operator may select themselves",
+      "uiStatus": "Existing Production source remains frozen pending the separate UI implementation"
+    },
+    "labDipReviews": {
+      "reviewedMigration": "20261105135706_production_hub_and_review_ownership.sql",
+      "root": "lab_dip",
+      "ownedTables": [
+        "lab_dip_version",
+        "lab_dip_version_item"
+      ],
+      "command": "garments_access.add_lab_dip_review",
+      "reviewFieldsOwner": "lab_dip_version_item",
+      "appendOnlyReviewFields": [
+        "date",
+        "comments",
+        "lab_dip_status_id"
+      ],
+      "compatibilityCommand": "garments_access.save_fabric_document"
     }
   }
 }

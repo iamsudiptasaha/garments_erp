@@ -8,6 +8,7 @@ const project = 'kidvckaicclqvtlddeyz';
 const files = [
   '20261104172129_align_erp_diagram_relationships.sql',
   '20261104195714_lab_dip_version_status_items.sql',
+  '20261105135706_production_hub_and_review_ownership.sql',
 ];
 export function migrationConfig(env) {
   if (
@@ -113,18 +114,28 @@ export async function applyRelease(client, migrations) {
       and not has_table_privilege('authenticated','garments_access.employee_attestation','select')
       and (select count(*)=3 from pg_indexes where schemaname='garments_erp' and indexname in ('contact_items_one_primary_address','contact_items_one_primary_phone','contact_bank_account_one_primary') and indexdef like 'CREATE UNIQUE INDEX%WHERE%')
       and (select count(*)=3 from information_schema.columns where table_schema='garments_erp' and ((table_name='contact_items' and column_name in ('primary_address','primary_phone')) or (table_name='contact_bank_account' and column_name='primary_bank_account')) and data_type='boolean' and is_nullable='NO' and column_default='false')
-      and (select count(*)=2 from pg_class where oid in (
-        'garments_erp.job_status_history'::regclass, 'garments_erp.lab_dip_version_item'::regclass
-      ) and relrowsecurity and not has_table_privilege('authenticated',oid,'select')
-        and not has_table_privilege('anon',oid,'select'))
-      and (select count(*)=2 from pg_trigger where tgenabled='O' and (
-        (tgrelid='garments_erp.job'::regclass and tgname='record_job_status_change')
-        or (tgrelid='garments_erp.lab_dip_version'::regclass and tgname='record_lab_dip_review')
-      ))
+      and to_regclass('garments_erp.job_status_history') is null
+      and (select count(*)=0 from information_schema.columns where table_schema='garments_erp'
+        and table_name='lab_dip_version' and column_name in ('date','comments','lab_dip_status_id'))
+      and (select count(*)=7 from pg_class where oid in (
+        'garments_erp.production'::regclass,'garments_erp.task_board_data'::regclass,
+        'garments_erp.flags_list'::regclass,'garments_erp.task_board_data_flag'::regclass,
+        'garments_erp.job_item_status_list'::regclass,'garments_erp.job_transition_log'::regclass,
+        'garments_erp.lab_dip_version_item'::regclass
+      ) and relrowsecurity and not has_table_privilege('authenticated',oid,'select,insert,update,delete')
+        and not has_table_privilege('anon',oid,'select,insert,update,delete'))
+      and to_regprocedure('public.erp_move_production(jsonb,uuid)') is not null
+      and not has_function_privilege('anon','public.erp_move_production(jsonb,uuid)','execute')
+      and to_regprocedure('public.erp_set_employee_active(bigint,boolean,text)') is not null
       and exists(select 1 from pg_indexes where schemaname='garments_erp'
         and indexname='lab_dip_version_item_one_latest' and indexdef like 'CREATE UNIQUE INDEX%WHERE%')
+      and exists(select 1 from pg_indexes where schemaname='garments_erp'
+        and indexname='job_one_current_per_production' and indexdef like 'CREATE UNIQUE INDEX%WHERE%')
       and exists(select 1 from pg_constraint where conrelid='garments_erp.raw_material_check_in'::regclass
-        and conname='raw_material_receipt_line_matches_purchase' and contype='f' and convalidated)
+        and conname='raw_material_receipt_line_material_identity' and contype='f' and convalidated)
+      and not exists(select 1 from garments_erp.production p where
+        (select count(*) from garments_erp.job j where j.production_id=p.id and latest)<>1
+        or (select count(*) from garments_erp.task_board_data b where b.production_id=p.id)<>1)
       as valid`);
     if (result.rows[0]?.valid !== true)
       throw new ReleaseError('Post-migration schema/security verification failed.');
