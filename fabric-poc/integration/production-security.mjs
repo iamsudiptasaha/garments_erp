@@ -69,21 +69,18 @@ try {
     production_id: production,
     from_job_id: source,
     to_stage_id: stages[1].id,
+    verified_by: '900001',
+    expected_transition_id: '0',
+    pieces: [],
   };
   await a.query('begin');
   await b.query('begin');
   await actor(a);
   await actor(b);
-  const proofA = (
-    await a.query('select public.erp_production_attestation($1,900001,$2) proof', [admin, payload])
-  ).rows[0].proof;
-  const proofB = (
-    await b.query('select public.erp_production_attestation($1,900001,$2) proof', [admin, payload])
-  ).rows[0].proof;
   const pidB = (await b.query('select pg_backend_pid() pid')).rows[0].pid;
   await b.query("set local lock_timeout='5s'");
-  await a.query('select public.erp_move_production($1,$2)', [payload, proofA]);
-  const second = b.query('select public.erp_move_production($1,$2)', [payload, proofB]).then(
+  await a.query('select public.erp_move_production($1,$2)', [payload, null]);
+  const second = b.query('select public.erp_move_production($1,$2)', [payload, null]).then(
     () => null,
     (error) => error.code,
   );

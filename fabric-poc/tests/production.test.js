@@ -194,17 +194,17 @@ test('item checklist is saved once per item with independent production statuses
   setup.variants[0].share_weight = 10;
   assert.ok(saveItemSetup(d, 'prod-item-1', setup).variant.every((v) => v.share_weight === 1));
 });
-test('jobs require a verifier on save and stage changes create another job row', () => {
+test('job history rejects independent saves and stage edits', () => {
   const d = initialFabric(),
     header = { ...d.job[0] };
   assert.throws(
     () => saveDocument(d, 'productionJobs', { header: { ...header, verify_employee_id: '' } }),
-    /Verified by employee/,
+    /Job history is read-only/,
   );
   assert.throws(
     () =>
       saveDocument(d, 'productionJobs', { header: { ...header, stage_id: 'prod-stage-print' } }),
-    /new job row/,
+    /Job history is read-only/,
   );
 });
 

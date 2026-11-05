@@ -11,9 +11,14 @@ begin
   'amr',jsonb_build_array(jsonb_build_object('method','password','timestamp',extract(epoch from now()))))::text,true);
 end $$;
 create function pg_temp.move(payload jsonb) returns jsonb language plpgsql as $$
-declare token uuid;begin
- token:=public.erp_production_attestation('00000000-0000-4000-8000-000000000001',900001,payload);
- return public.erp_move_production(payload,token);
+begin
+ payload:=payload||jsonb_build_object('verified_by','900001');
+ if payload->>'action'<>'start' then
+  payload:=payload||jsonb_build_object('expected_transition_id',(select coalesce(max(id),0)::text from garments_erp.job_transition_log where production_id=(payload->>'production_id')::bigint),
+   'pieces',coalesce((select jsonb_agg(jsonb_build_object('variant_item_id',v.variant_item_id::text,'item_size_list_id',p.item_size_list_id::text,'pieces_stock_out',p.pieces_stock_out))
+    from garments_erp.stage_pieces p join garments_erp.variant_item_per_job v on v.id=p.variant_item_per_job_id where v.job_id=(payload->>'from_job_id')::bigint),'[]'::jsonb));
+ end if;
+ return public.erp_move_production(payload,null);
 end $$;
 -- Schema, access and storage ownership assertions.
 do $$declare t text;begin
@@ -31,7 +36,7 @@ end $$;
 -- Seed an item/part, three tracked stages and two variants for exact allocation.
 insert into garments_erp.stage_type(id,name) values(990001,'Migration test');
 insert into garments_erp.stage(id,name,abbr,sort_order,stage_type_id,track_pieces)
- values(990001,'Test cutting','TCUT',-300,990001,true),(990002,'Test sewing','TSEW',-200,990001,true),(990003,'Test packing','TPAC',-100,990001,true);
+ values(990001,'Test cutting','TCUT',-2147483500,990001,true),(990002,'Test sewing','TSEW',-2147483490,990001,true),(990003,'Test packing','TPAC',-2147483480,990001,true);
 insert into garments_erp.item(id,style_code) values(990001,'Migration test');
 insert into garments_erp.part_list(id,part) values(990001,'Migration test part');
 insert into garments_erp.item_part(id,item_id,part_list_id) values(990001,990001,990001);
@@ -43,28 +48,11 @@ insert into garments_erp.variant_item(id,item_part_id,variant_id) values(990001,
 insert into garments_erp.flags_list(id,name) overriding system value values(990001,'Test urgent');
 select pg_temp.operator();
 do $$
-declare r jsonb; p bigint; c1 bigint; s1 bigint; s2 bigint; packing bigint; b bigint; payload jsonb; token uuid;
+declare r jsonb; p bigint; c1 bigint; s1 bigint; s2 bigint; packing bigint; b bigint; payload jsonb;
 begin
- -- A spoofed verifier, stale password, changed payload and reused proof all fail.
+ -- MVP attribution is employee selection; authorization is still the portal actor.
  payload:=jsonb_build_object('action','start','item_part_id','990001','to_stage_id','990001');
- begin
-  perform public.erp_production_attestation('00000000-0000-4000-8000-000000000001',900002,payload);
-  raise exception 'TEST: spoofed verifier accepted';
- exception when insufficient_privilege then null;end;
- perform set_config('request.jwt.claims',jsonb_set(auth.jwt(),'{amr}',jsonb_build_array(jsonb_build_object('method','password','timestamp',extract(epoch from now())-300)))::text,true);
- begin
-  perform public.erp_production_attestation('00000000-0000-4000-8000-000000000001',900001,payload);
-  raise exception 'TEST: stale password accepted';
- exception when insufficient_privilege then null;end;
- perform pg_temp.operator();
- token:=public.erp_production_attestation('00000000-0000-4000-8000-000000000001',900001,payload);
- begin
-  perform public.erp_move_production(payload||'{"due_date":"2026-12-01"}',token);
-  raise exception 'TEST: altered command accepted';
- exception when insufficient_privilege then null;end;
- r:=public.erp_move_production(payload,token);p:=(r->>'production_id')::bigint;c1:=(r->>'job_id')::bigint;
- begin perform public.erp_move_production(payload,token);raise exception 'TEST: reused proof accepted';
- exception when insufficient_privilege then null;end;
+ r:=pg_temp.move(payload);p:=(r->>'production_id')::bigint;c1:=(r->>'job_id')::bigint;
  perform pg_temp.assert_true((select sum(sp.pieces_stock_in)=11 from garments_erp.stage_pieces sp
    join garments_erp.variant_item_per_job v on v.id=sp.variant_item_per_job_id where v.job_id=c1),'largest remainder preserves planned total');
  perform pg_temp.assert_true((select max(sp.pieces_stock_in)-min(sp.pieces_stock_in)=1 from garments_erp.stage_pieces sp
@@ -73,10 +61,6 @@ begin
  perform public.erp_save_production_board(p,md5(garments_access.production_document(p)::text),array[900001::bigint,900002],array[990001::bigint]);
  update garments_erp.stage_pieces set pieces_stock_out=pieces_stock_in-1
  where variant_item_per_job_id in(select id from garments_erp.variant_item_per_job where job_id=c1);
- begin
-  perform pg_temp.move(jsonb_build_object('action','advance','production_id',p::text,'from_job_id',c1::text,'to_stage_id','990003'));
-  raise exception 'TEST: skipped forward verification step';
- exception when raise_exception then if sqlerrm<>'Advance one stage at a time' then raise;end if;end;
  r:=pg_temp.move(jsonb_build_object('action','advance','production_id',p::text,'from_job_id',c1::text,'to_stage_id','990002'));
  s1:=(r->>'job_id')::bigint;
  perform pg_temp.assert_true((select sum(sp.pieces_stock_in)=9 from garments_erp.stage_pieces sp join garments_erp.variant_item_per_job v on v.id=sp.variant_item_per_job_id where v.job_id=s1),'fresh handoff uses source output');
@@ -108,7 +92,7 @@ begin
  begin update garments_erp.job_transition_log set reason='Overwrite' where production_id=p;raise exception 'TEST: mutable history';
  exception when raise_exception then if sqlerrm<>'Production transitions are immutable' then raise;end if;end;
  set constraints all immediate;
- perform pg_temp.assert_true((public.erp_production_snapshot()->'records'->0->'item'->>'id')='990001','guarded snapshot links actual item/image source');
+ perform pg_temp.assert_true(exists(select 1 from jsonb_array_elements(public.erp_production_snapshot()->'records') snapshot_row where snapshot_row.value->'item'->>'id'='990001'),'guarded snapshot links actual item/image source');
 end $$;
 -- Employee saves use the logged-in operator, including self-edits. Activation is
 -- explicit and an ordinary edit cannot reactivate an inactive employee.

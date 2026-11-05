@@ -16,7 +16,8 @@ export const resources = [
               : p.section === 'miscellaneous'
                 ? 'Miscellaneous'
                 : 'Fabric',
-      actions: p.readonly ? ['view', 'format', 'export', 'print'] : actions,
+      actions:
+        p.permissionActions || (p.readonly ? ['view', 'format', 'export', 'print'] : actions),
     })),
   {
     id: 'employees',
