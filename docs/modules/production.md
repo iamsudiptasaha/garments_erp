@@ -39,3 +39,5 @@ Item image visibility is available as an optional List/Table column and Kanban c
 Tracked stages still require all variant/size outputs. Untracked stages show a simplified no-quantity handover, preserve size dimensions and restore required entry at the next tracked stage. Job History is unchanged by this presentation update.
 
 For the dated live-schema audit, pending migration and commit/release boundaries, see [Production MVP review](../runbooks/production-mvp-review.md).
+
+Items includes an optional editable Batch number and list column, owned by `item.batch_number` (nullable text). Pending migration `20261105192048_add_item_batch_number.sql` adds it without backfill, generation or uniqueness. It is unrelated to Fabric dyeing batch references.

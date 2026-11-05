@@ -10,5 +10,10 @@ export function productionReferenceSchema(snapshot) {
     if (!schema.columns.some(c => c.table_schema==='garments_erp' && c.table_name==='flags_list' && c.column_name===name))
       schema.columns.push({table_schema:'garments_erp',table_name:'flags_list',column_name:name,data_type:type,is_nullable:'NO',is_identity:name==='id'?'YES':'NO'});
   }
+  const batchSql = readFileSync(new URL('../supabase/migrations/20261105192048_add_item_batch_number.sql', import.meta.url), 'utf8');
+  if (!batchSql.includes('alter table garments_erp.item add column batch_number text;'))
+    throw Error('Item batch number differs from the reviewed optional text contract');
+  if (!schema.columns.some(c => c.table_schema==='garments_erp' && c.table_name==='item' && c.column_name==='batch_number'))
+    schema.columns.push({table_schema:'garments_erp',table_name:'item',column_name:'batch_number',data_type:'text',is_nullable:'YES',is_identity:'NO'});
   return schema;
 }

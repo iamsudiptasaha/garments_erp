@@ -219,7 +219,14 @@
       "preferences": "Named saved views removed from the portal MVP; transient layout controls remain browser-local",
       "plannedPieces": "Read-only sum of item_cut_ratio.pieces across the item sizes, refreshed from item setup",
       "history": "productionJobs is read-only Job history; original job IDs, piece records and challan links preserved",
-      "start": "Task Board create permission starts an existing prepared item part once at the first stage; local job code clearly marked LOCAL; live codes remain database-generated"
+      "start": "Task Board create permission starts an existing prepared item part once at the first stage; local job code clearly marked LOCAL; live codes remain database-generated",
+      "itemBatchNumber": {
+        "migration": "20261105192048_add_item_batch_number.sql",
+        "column": "item.batch_number",
+        "type": "nullable text",
+        "owner": "productionItems",
+        "meaning": "Optional manually entered reference; no uniqueness or generation rule"
+      }
     },
     "productionReferences": {
       "mode": "local-preview",

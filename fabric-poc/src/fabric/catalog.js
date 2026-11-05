@@ -14,6 +14,14 @@ const amountFields = [
 const invoiceColumns = [column('bill', 'Bill'), column('date', 'Date')];
 export const pages = {
   ...productionPages,
+  productionItems: {
+    ...productionPages.productionItems,
+    header: [
+      ...productionPages.productionItems.header,
+      field('batch_number', 'Batch number', 'text', { required: false }),
+    ],
+    columns: [...productionPages.productionItems.columns, column('batch_number', 'Batch number')],
+  },
   productionJobs: {
     ...productionPages.productionJobs,
     title: 'Job history',

@@ -223,3 +223,17 @@ test('checklist documents and Disputed status follow the revised field names', a
   assert.equal(next.production_checklist[0].ordersheet_acquired_status_id, 'prod-status-disputed');
   assert.equal(next.production_checklist[0].tna_acquired_status_id, undefined);
 });
+
+test('item batch number saves, displays, and remains optional on legacy items', () => {
+  const data = initialFabric();
+  const header = { ...data.item[0], batch_number: ' BATCH-26-001 ' };
+  const next = saveDocument(data, 'productionItems', { header, lines: [] });
+  assert.equal(next.item[0].batch_number, 'BATCH-26-001');
+  assert.equal(fabricRows(next, 'productionItems')[0].batch_number, 'BATCH-26-001');
+  assert.equal(fabricRows(data, 'productionItems')[0].batch_number, '—');
+  const cleared = saveDocument(next, 'productionItems', {
+    header: { ...next.item[0], batch_number: '' },
+    lines: [],
+  });
+  assert.equal(cleared.item[0].batch_number, '');
+});

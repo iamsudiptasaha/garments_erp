@@ -431,6 +431,11 @@ export function fabricRows(data, page) {
     { get, supplier, yarn, knit, dyed } = s;
   if (['productionFlags', 'productionGenders'].includes(page))
     return (data[pages[page].entity] || []).map((r) => ({ ...r, documentId: r.id }));
+  if (page === 'productionItems')
+    return productionRows(data, page).map((row) => ({
+      ...row,
+      batch_number: data.item.find((item) => item.id === row.documentId)?.batch_number || '—',
+    }));
   if (pages[page]?.production) return productionRows(data, page);
   if (pages[page]?.inventory) return inventoryRows(data, page, s);
   if (pages[page]?.miscellaneous) return miscellaneousRows(data, page);
