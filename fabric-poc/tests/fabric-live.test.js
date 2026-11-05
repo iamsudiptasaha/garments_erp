@@ -174,3 +174,98 @@ test('Lab Dip reads the latest item and maps edits to the guarded document RPC',
   assert.equal(change.values.comments, 'Swatch received');
   assert.equal(change.values.lab_dip_status_id, 'ld-swatch');
 });
+
+test('review-only Lab Dip edits call the child API with the expected latest review', async () => {
+  const before = initialFabric();
+  const version = before.lab_dip_version[0];
+  const current = before.lab_dip_version_item.find(
+    (i) => i.lab_dip_version_id === version.id && i.latest,
+  );
+  const after = saveLabDip(before, {
+    ...version,
+    id: version.lab_dip_id,
+    mode: 'update',
+    date: '2026-11-05',
+    comments: 'Buyer requested a cooler shade',
+    lab_dip_status_id: 'ld-awaiting',
+  });
+  const calls = [];
+  const commands = liveFabricCommands({
+    rpc: async (name, args) => {
+      calls.push({ name, args });
+      return { data: after, error: null };
+    },
+  });
+  await commands.save({
+    resource: 'labDips',
+    root: fabricRoot('labDips', before, after, { id: version.lab_dip_id }),
+    action: 'edit',
+    before,
+    after,
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'erp_add_lab_dip_review');
+  assert.deepEqual(calls[0].args, {
+    p_version: version.id,
+    p_status: 'ld-awaiting',
+    p_date: '2026-11-05',
+    p_comments: 'Buyer requested a cooler shade',
+    p_expected_review: current.id,
+  });
+  assert.equal(before.lab_dip_version_item.find((i) => i.id === current.id).latest, true);
+});
+
+test('mixed Lab Dip metadata and review edits remain one atomic document save', async () => {
+  const before = initialFabric(),
+    version = before.lab_dip_version[0];
+  const after = saveLabDip(before, {
+    ...version,
+    id: version.lab_dip_id,
+    mode: 'update',
+    date: '2026-11-05',
+    shade_card_no: 'SC-UPDATED',
+    comments: 'Review alongside shade correction',
+    lab_dip_status_id: 'ld-awaiting',
+  });
+  const calls = [];
+  await liveFabricCommands({
+    rpc: async (name, args) => {
+      calls.push({ name, args });
+      return { data: after, error: null };
+    },
+  }).save({
+    resource: 'labDips',
+    root: fabricRoot('labDips', before, after, { id: version.lab_dip_id }),
+    action: 'edit',
+    before,
+    after,
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'erp_save_fabric_document');
+  assert.equal(calls[0].args.p_changes[0].values.shade_card_no, 'SC-UPDATED');
+  assert.equal(calls[0].args.p_changes[0].values.comments, 'Review alongside shade correction');
+});
+
+test('stale child-review errors surface without retrying through the compatibility writer', async () => {
+  const before = initialFabric(),
+    version = before.lab_dip_version[0];
+  const after = saveLabDip(before, {
+    ...version,
+    id: version.lab_dip_id,
+    mode: 'update',
+    date: '2026-11-05',
+    comments: 'Stale review',
+    lab_dip_status_id: 'ld-awaiting',
+  });
+  const calls = [];
+  await assert.rejects(
+    liveFabricCommands({
+      rpc: async (name) => {
+        calls.push(name);
+        return { data: null, error: { message: 'Review changed. Reload before saving.' } };
+      },
+    }).save({ resource: 'labDips', root: {}, action: 'edit', before, after }),
+    /Review changed/,
+  );
+  assert.deepEqual(calls, ['erp_add_lab_dip_review']);
+});

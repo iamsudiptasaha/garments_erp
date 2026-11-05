@@ -4,7 +4,6 @@ export const employeeFields = [
   ['gender_id', 'Gender', 'gender'],
   ['blood_group_id', 'Blood group', 'blood_group'],
   ['type_of_employment_id', 'Employment type', 'type_of_employment'],
-  ['employee_photo', 'Photo reference', 'text'],
   ['supporting_document_1_title', 'Document 1 title', 'text'],
   ['supporting_document_2_title', 'Document 2 title', 'text'],
 ];
@@ -75,7 +74,13 @@ export function employeeRows(records, query = '') {
         .filter(Boolean)
         .join(', '),
       joined: record.employee.date_of_joining || '',
-      verified: record.verifier_name || 'Not verified',
+      status:
+        record.employee.is_active === false
+          ? 'Inactive'
+          : record.employee.is_active === true
+            ? 'Active'
+            : 'Unknown',
+      verified: record.verifier_name || 'Not recorded',
       updated: record.employee.updated_at || '',
       record,
     }))

@@ -44,7 +44,7 @@ test('lab-dip swatch locks status and shade fields while keeping the date editab
   await expect(page.getByLabel('Shade card number', { exact: true })).toBeDisabled();
   await expect(page.getByLabel('Shade card number', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('Shade card option', { exact: true })).toBeDisabled();
-  const date = page.getByLabel('Version date', { exact: true });
+  const date = page.getByLabel('Review date', { exact: true });
   await expect(date).toBeEnabled();
   await date.fill('2026-10-30');
   await expect(date).toHaveValue('2026-10-30');
@@ -165,4 +165,57 @@ test('email password login stops at Authenticator without loading business data'
   await expect(page.getByLabel('Authenticator code', { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/access\.html/);
   expect(business).toEqual([]);
+});
+test('employee status actions and automatic verification preserve inactivity on edit', async ({
+  page,
+}) => {
+  test.skip(hosted, 'Hosted smoke tests never change employees');
+  await page.goto('/fabric.html#employees');
+  const card = page.locator('.hr-person-card').first();
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('button', { name: /^Deactivate / })).toHaveCount(0);
+  await card.getByRole('button', { name: 'Open profile →' }).click();
+  const statusDialog = page.getByRole('dialog');
+  await statusDialog.getByRole('button', { name: 'Status', exact: true }).click();
+  await expect(statusDialog.getByLabel('Verified by', { exact: true })).toHaveAttribute(
+    'readonly',
+    '',
+  );
+  await statusDialog
+    .getByRole('combobox', { name: 'Status', exact: true })
+    .selectOption('inactive');
+  await statusDialog.getByRole('button', { name: 'Review status', exact: true }).click();
+  await statusDialog.getByRole('button', { name: 'Confirm & save status', exact: true }).click();
+  await expect(card.locator('.hr-status')).toHaveText('Inactive');
+  await card.getByRole('button', { name: 'Open profile →' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Verified by', { exact: true })).toHaveAttribute('readonly', '');
+  await expect(dialog.locator('input[type=password]')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Contact links', exact: true }).click();
+  await dialog.getByRole('combobox', { name: /Employee contact/ }).click();
+  await page.getByRole('listbox').getByRole('option').first().click();
+  await dialog.getByRole('button', { name: 'Review employee', exact: true }).click();
+  await expect(dialog.getByText('Inactive · unchanged on save', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Confirm & save employee', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('.hr-person-card .hr-status').first()).toHaveText('Inactive');
+  await page
+    .locator('.hr-person-card')
+    .first()
+    .getByRole('button', { name: 'Open profile →' })
+    .click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Status', exact: true }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('combobox', { name: 'Status', exact: true })
+    .selectOption('active');
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Review status', exact: true })
+    .click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Confirm & save status', exact: true })
+    .click();
+  await expect(page.locator('.hr-person-card .hr-status').first()).toHaveText('Active');
 });

@@ -9,6 +9,7 @@ const files = [
   '20261104172129_align_erp_diagram_relationships.sql',
   '20261104195714_lab_dip_version_status_items.sql',
   '20261105135706_production_hub_and_review_ownership.sql',
+  '20261105152128_employee_photo_attachment_and_checklist.sql',
 ];
 export function migrationConfig(env) {
   if (
@@ -136,6 +137,14 @@ export async function applyRelease(client, migrations) {
       and not exists(select 1 from garments_erp.production p where
         (select count(*) from garments_erp.job j where j.production_id=p.id and latest)<>1
         or (select count(*) from garments_erp.task_board_data b where b.production_id=p.id)<>1)
+      and exists(select 1 from pg_constraint where conrelid='garments_erp.employee'::regclass
+        and conname='employee_photo_fkey' and contype='f' and convalidated)
+      and exists(select 1 from information_schema.columns where table_schema='garments_erp'
+        and table_name='employee' and column_name='employee_photo' and data_type='bigint')
+      and not exists(select 1 from information_schema.columns where table_schema='garments_erp'
+        and table_name='production_checklist' and column_name='tna_acquired_status_id')
+      and exists(select 1 from garments_access.app_file_route where target_key='employeePhoto'
+        and allowed_mime_types=array['image/jpeg','image/png','image/webp'] and is_active)
       as valid`);
     if (result.rows[0]?.valid !== true)
       throw new ReleaseError('Post-migration schema/security verification failed.');

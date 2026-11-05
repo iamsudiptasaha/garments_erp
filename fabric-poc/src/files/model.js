@@ -98,6 +98,15 @@ export const FILE_TARGETS = Object.freeze([
     mime: documents,
   },
   {
+    key: 'employeePhoto',
+    group: 'employee',
+    resource: 'employees',
+    table: 'employee',
+    slot: 'employee_photo',
+    label: 'Employee photo',
+    mime: images,
+  },
+  {
     key: 'employeeDocument1',
     group: 'employee',
     resource: 'employees',

@@ -98,6 +98,9 @@ try {
   const forged = { id: fresh.employee.id, expected: fresh.revision, draft: employeeDraft(fresh) };
   forged.draft.employee.verified_by_employee_id = '900001';
   await deny(() => save(forged), 'cannot forge verification field');
+  const photo = { id: fresh.employee.id, expected: fresh.revision, draft: employeeDraft(fresh) };
+  photo.draft.employee.employee_photo = '900001';
+  await deny(() => save(photo), 'photo assignment must use the guarded file route');
   const cross = { id: fresh.employee.id, expected: fresh.revision, draft: employeeDraft(fresh) };
   cross.draft.contact = { company_name: 'Forbidden contact edit' };
   await deny(() => save(cross), 'nested contact write blocked');

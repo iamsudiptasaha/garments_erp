@@ -6,7 +6,7 @@ import {
   employeeRelations,
   validateEmployeeDraft,
 } from '../src/hr/model.js';
-import { verifyEmployeePassword } from '../src/hr/live.js';
+import { employeeCommands } from '../src/hr/live.js';
 test('employee draft contains only employee fields and FK links, never contact-owned details', () => {
   assert.deepEqual(Object.keys(employeeRelations), ['employee']);
   const record = {
@@ -41,33 +41,38 @@ test('employee validation requires contact links, not duplicated contact input',
   draft.employee.contact_purpose_emergency_id = '1';
   assert.throws(() => validateEmployeeDraft(draft), /emergency contact/);
 });
-test('immediate verification isolates the verifier and signs out its session on success or failure', async () => {
+test('employee commands use operator attribution and revision-checked activation without password proof', async () => {
   const calls = [];
-  const client = {
-    auth: {
-      signInWithPassword: async () => ({ error: null }),
-      signOut: async (args) => calls.push(['signOut', args]),
-    },
+  const commands = employeeCommands({
     rpc: async (name, args) => {
       calls.push([name, args]);
-      return { data: 'one-use-proof', error: null };
+      return { data: { records: [] }, error: null };
     },
-  };
-  const input = {
-    email: 'synthetic@example.invalid',
-    password: 'synthetic fixture only',
-    employeeId: '2',
-    actor: 'operator',
-    payload: { draft: {} },
-  };
-  assert.equal(await verifyEmployeePassword(input, () => client), 'one-use-proof');
-  assert.equal(calls[0][1].p_employee, '2');
-  assert.deepEqual(calls.at(-1), ['signOut', { scope: 'local' }]);
-  client.auth.signInWithPassword = async () => ({ error: { message: 'fixture' } });
-  calls.length = 0;
+  });
+  const payload = { id: '9007199254740993', draft: { employee: {} } };
+  await commands.save(payload);
+  await commands.setActive(payload.id, false, 'revision');
+  assert.deepEqual(calls, [
+    ['erp_save_employee', { p_payload: payload, p_proof: null }],
+    ['erp_set_employee_active', { p_id: payload.id, p_active: false, p_expected: 'revision' }],
+  ]);
   await assert.rejects(
-    () => verifyEmployeePassword(input, () => client),
-    /password could not be verified/,
+    () =>
+      employeeCommands({
+        rpc: async () => ({ error: { message: 'Employee changed. Reload before saving.' } }),
+      }).setActive('1', true, 'stale'),
+    /Employee changed/,
   );
-  assert.deepEqual(calls, [['signOut', { scope: 'local' }]]);
+});
+test('inactive employee projections retain status while editable drafts exclude server-owned state', () => {
+  const record = {
+    employee: { id: '1', is_active: false, is_verified: true, activated_by_employee_id: '2' },
+    contact: { company_name: 'Test' },
+    contacts: [],
+  };
+  assert.equal(employeeRows([record])[0].status, 'Inactive');
+  const draft = employeeDraft(record).employee;
+  assert.equal(draft.is_active, undefined);
+  assert.equal(draft.is_verified, undefined);
+  assert.equal(draft.activated_by_employee_id, undefined);
 });
