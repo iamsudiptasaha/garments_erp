@@ -296,6 +296,7 @@ export const pages = {
     ],
     columns: [
       ...invoiceColumns,
+      column('verified', 'Verified by', false, 210),
       column('batch', 'Batch'),
       column('name', 'Fabric name', false, 190),
       column('color', 'Colour'),

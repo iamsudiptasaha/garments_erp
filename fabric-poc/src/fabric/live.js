@@ -1,3 +1,4 @@
+import { saveVerifiedDyedBill } from './bill-verification.js';
 import { latestStatusItem, legacyStatusItems } from '../colours/domain.js';
 import { fabricContract, fabricColumnTypes } from './live-contract.js';
 export const liveFabricPage = (key) => Object.hasOwn(fabricContract, key);
@@ -42,20 +43,50 @@ export function fabricChanges(before, after, resource) {
   }
   return changes;
 }
-export function liveFabricCommands(client) {
+function reviewSnapshot(data) {
+  // Compatibility projection for roles whose snapshot omits review-history rows.
+  return data?.lab_dip_version && !data.lab_dip_version_item
+    ? { ...data, lab_dip_version_item: legacyStatusItems(data.lab_dip_version) }
+    : data;
+}
+export function liveFabricCommands(client, createVerifierClient) {
   async function rpc(name, args = {}) {
     const { data, error } = await client.rpc(name, args);
     if (error) throw Error(error.message);
-    // Older deployed snapshots have only the parent status fields.
-    if (data?.lab_dip_version && !data.lab_dip_version_item) {
-      return { ...data, lab_dip_version_item: legacyStatusItems(data.lab_dip_version) };
-    }
-    return data;
+    return reviewSnapshot(data);
   }
   return {
-    load: () => rpc('erp_fabric_snapshot'),
-    save: ({ resource, root, action, before, after }) => {
+    load: async () => {
+      const snapshot = await rpc('erp_fabric_snapshot');
+      const verifiers = await client.rpc('erp_dyed_bill_verifiers');
+      // Existing Fabric pages remain usable while the reviewed migration is pending.
+      // Bill saves stay blocked when no verification service is available.
+      if (verifiers.error && verifiers.error.code !== 'PGRST202')
+        throw Error(verifiers.error.message);
+      return {
+        ...snapshot,
+        dyed_bill_verifiers: Array.isArray(verifiers.data) ? verifiers.data : [],
+      };
+    },
+    save: ({ resource, root, action, before, after, verification }) => {
       const changes = fabricChanges(before, after, resource);
+      if (resource === 'dyeBills') {
+        if (!createVerifierClient) throw Error('Employee verification is unavailable.');
+        if (!changes.length)
+          changes.push({
+            table: root.table,
+            id: root.id,
+            before: root.before,
+            values: editable(root.before, fabricContract.dyeBills.dyed_fabric_bill),
+          });
+        return saveVerifiedDyedBill(
+          client,
+          createVerifierClient,
+          { resource, root, action, changes },
+          verification,
+          before.dyed_bill_verifiers || [],
+        ).then(reviewSnapshot);
+      }
       // A single review-only edit uses the owning child API and its revision check.
       // New versions and mixed metadata/review edits stay in one document transaction.
       if (resource === 'labDips' && action === 'edit' && changes.length === 1) {

@@ -233,12 +233,18 @@ test('legacy local colours upgrade preserves all existing document and mapping I
 test('batch choices follow exact lab-dip versions, even for the same colour', () => {
   const data = initialFabric(),
     v = data.dyeing_program_item.find((r) => r.id === 'di1').lab_dip_version_id;
-  assert.deepEqual(batchesForVersion(data, v), ['B-104', 'B-106']);
+  assert.deepEqual(
+    batchesForVersion(data, v).map((b) => b.batch_no),
+    ['B-104', 'B-106'],
+  );
   assert.deepEqual(batchesForVersion(data, ''), []);
   const old = data.lab_dip_version.find((r) => r.id === v);
   data.lab_dip_version.push({ ...old, id: 'redo-v2', version: 2 });
   assert.deepEqual(batchesForVersion(data, 'redo-v2'), []);
-  assert.deepEqual(batchesForVersion(data, v, 'di1'), ['B-106']);
+  assert.deepEqual(
+    batchesForVersion(data, v, 'di1').map((b) => b.batch_no),
+    ['B-106'],
+  );
 });
 test('program requires a version, permits null previous batch and rejects wrong-version or own output', () => {
   const data = initialFabric(),
@@ -250,7 +256,7 @@ test('program requires a version, permits null previous batch and rejects wrong-
           fabric_type_id: 'ft1',
           quantity: 1,
           lab_dip_version_id: version,
-          batch_no: 'B-104',
+          batch_no: 'seed-batch-1',
           comments: '',
         },
       ],
@@ -258,14 +264,14 @@ test('program requires a version, permits null previous batch and rejects wrong-
   const saved = saveDocument(data, 'programs', draft);
   assert.equal(saved.dyeing_program_item.at(-1).lab_dip_version_id, version);
   assert.equal(saved.dyeing_program_item.at(-1).color_map_by_brand_id, undefined);
-  draft.lines[0].batch_no = 'B-105';
+  draft.lines[0].batch_no = 'seed-batch-3';
   assert.throws(() => saveDocument(data, 'programs', draft), /exact selected lab-dip version/);
   draft.lines[0].batch_no = null;
   assert.equal(saveDocument(data, 'programs', draft).dyeing_program_item.at(-1).batch_no, null);
   draft.lines[0].lab_dip_version_id = '';
   assert.throws(() => saveDocument(data, 'programs', draft), /Lab-dip version is required/);
   const own = documentFor(data, 'programs', 'dp1');
-  own.lines[0].batch_no = 'B-104';
+  own.lines[0].batch_no = 'seed-batch-1';
   assert.throws(() => saveDocument(data, 'programs', own), /own output/);
 });
 test('colour master and mapping forms do not expose obsolete swatch or shade fields', () => {

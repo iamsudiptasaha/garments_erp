@@ -1,5 +1,12 @@
+import { RichCommentEditor, RichComment } from './rich-comment.js';
 import { LabRecordSelect } from './lab-record-select.js';
-import { defaultVersion, versionLabel, batchesForVersion } from './relationships.js';
+import { RecordSelect, programOptions } from './record-select.js';
+import {
+  defaultVersion,
+  versionLabel,
+  batchesForVersion,
+  previousBatchLabel,
+} from './relationships.js';
 import {
   receiptModeFor,
   switchReceiptMode,
@@ -18,7 +25,16 @@ const today = () =>
     day: '2-digit',
   }).format(new Date());
 const fresh = (spec) => Object.fromEntries(spec.lineFields.map((f) => [f.key, '']));
-export function BillEditor({ page, data, id, receiptId, reconciliation = false, onSave, onClose }) {
+export function BillEditor({
+  page,
+  data,
+  id,
+  receiptId,
+  reconciliation = false,
+  onSave,
+  onClose,
+  verifiers = [],
+}) {
   const baseSpec = pages[page],
     entrySpec = reconciliation
       ? {
@@ -83,7 +99,10 @@ export function BillEditor({ page, data, id, receiptId, reconciliation = false, 
       : entrySpec;
   const [error, setError] = useState(''),
     [review, setReview] = useState(false),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [verifier, setVerifier] = useState(''),
+    [password, setPassword] = useState(''),
+    [showPassword, setShowPassword] = useState(false);
   const [supplier, setSupplier] = useState(() => {
     if (page !== 'suppliers' || !id)
       return {
@@ -132,6 +151,14 @@ export function BillEditor({ page, data, id, receiptId, reconciliation = false, 
     }));
   }
   function field(f, value, onChange, prefix) {
+    if (page === 'dyeBills' && f.key === 'dyeing_program_item_id')
+      return h(RecordSelect, {
+        key: f.key,
+        label: `${prefix}${f.label}`,
+        options: programOptions(data),
+        value,
+        onChange,
+      });
     return h(
       'label',
       { key: f.key },
@@ -290,11 +317,16 @@ export function BillEditor({ page, data, id, receiptId, reconciliation = false, 
     try {
       const next =
         page === 'suppliers' ? saveSupplier(data, supplier) : saveDocument(data, page, draft);
-      await onSave(next);
+      if (page === 'dyeBills' && (!verifier || !password))
+        throw Error('Select an employee and enter their password to verify this save.');
+      await onSave(next, page === 'dyeBills' ? { employee: verifier, password } : undefined);
       onClose();
     } catch (e) {
       setError(e.message);
       setBusy(false);
+    } finally {
+      setPassword('');
+      setShowPassword(false);
     }
   }
   const totals =
@@ -456,7 +488,9 @@ export function BillEditor({ page, data, id, receiptId, reconciliation = false, 
           spec.lines &&
             h(
               'div',
-              { className: 'review-scroll' },
+              {
+                className: page === 'dyeBills' ? 'review-scroll dyed-bill-review' : 'review-scroll',
+              },
               h(
                 'table',
                 null,
@@ -473,6 +507,7 @@ export function BillEditor({ page, data, id, receiptId, reconciliation = false, 
                         h('th', null, 'Colour mapping'),
                         h('th', null, 'Lab-dip version'),
                         h('th', null, 'Previous batch'),
+                        h('th', null, 'Colour comments'),
                       ),
                     spec.lineFields.map((f) => h('th', { key: f.key }, f.label)),
                   ),
@@ -496,14 +531,17 @@ export function BillEditor({ page, data, id, receiptId, reconciliation = false, 
                             )?.[1],
                           ),
                           h('td', null, versionLabel(data, line.lab_dip_version_id)),
-                          h('td', null, line.batch_no || 'Not selected'),
+                          h('td', null, previousBatchLabel(data, line.batch_no)),
+                          h('td', null, h(RichComment, { value: line.comments })),
                         ),
                       spec.lineFields.map((f) =>
                         h(
                           'td',
                           { key: f.key },
                           f.type === 'select'
-                            ? optionsFor(data, f.source).find(([v]) => v === line[f.key])?.[1]
+                            ? f.key === 'dyeing_program_item_id'
+                              ? programOptions(data).find((o) => o.value === line[f.key])?.label
+                              : optionsFor(data, f.source).find(([v]) => v === line[f.key])?.[1]
                             : line[f.key],
                         ),
                       ),
@@ -513,13 +551,89 @@ export function BillEditor({ page, data, id, receiptId, reconciliation = false, 
               ),
             ),
           totalsView,
+          page === 'dyeBills' &&
+            h(
+              'section',
+              { className: 'fabric-verification' },
+              h('h3', null, 'Verify this bill'),
+              h(
+                'p',
+                { className: 'editor-note' },
+                data._live
+                  ? 'Every save requires the selected employee’s password. Verification applies only to this bill and these changes.'
+                  : 'Local preview only. Use any non-empty demo password; no credentials are checked or stored.',
+              ),
+              h(
+                'div',
+                { className: 'fabric-fields' },
+                field(
+                  {
+                    key: 'verifier',
+                    label: 'Verifying employee',
+                    type: 'select',
+                    options: verifiers.map((v) => [v.id, v.label]),
+                  },
+                  verifier,
+                  (value) => {
+                    setVerifier(value);
+                    setPassword('');
+                    setShowPassword(false);
+                  },
+                  '',
+                ),
+                h(
+                  'label',
+                  null,
+                  h('span', null, 'Verification password'),
+                  h(
+                    'div',
+                    { className: 'fabric-password' },
+                    h('input', {
+                      type: showPassword ? 'text' : 'password',
+                      value: password,
+                      autoComplete: 'off',
+                      'aria-label': 'Verification password',
+                      onChange: (e) => setPassword(e.target.value),
+                    }),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        'aria-label': showPassword
+                          ? 'Hide verification password'
+                          : 'Show verification password',
+                        'aria-pressed': showPassword,
+                        onClick: () => setShowPassword((visible) => !visible),
+                      },
+                      showPassword ? 'Hide' : 'Show',
+                    ),
+                  ),
+                ),
+              ),
+              !verifiers.length &&
+                h('p', { role: 'status' }, 'No eligible verifying employees are available.'),
+            ),
           h(
             'div',
             { className: 'editor-actions' },
-            h('button', { onClick: () => setReview(false) }, 'Back to edit'),
             h(
               'button',
-              { className: 'primary', disabled: busy, onClick: commit },
+              {
+                onClick: () => {
+                  setReview(false);
+                  setPassword('');
+                  setShowPassword(false);
+                },
+              },
+              'Back to edit',
+            ),
+            h(
+              'button',
+              {
+                className: 'primary',
+                disabled: busy || (page === 'dyeBills' && (!verifier || !password)),
+                onClick: commit,
+              },
               spec.master ? 'Confirm & save' : 'Confirm & save document',
             ),
           ),
@@ -636,32 +750,23 @@ export function BillEditor({ page, data, id, receiptId, reconciliation = false, 
                         options: batchesForVersion(data, group.version)
                           .filter(
                             (batch) =>
-                              !data.batch_no_lab_dip_version_map.some(
-                                (b) =>
-                                  b.batch_no === batch &&
-                                  group.indices.some(
-                                    (i) =>
-                                      data.dyed_fabric_item.find(
-                                        (d) => d.id === b.dyed_fabric_item_id,
-                                      )?.dyeing_program_item_id === draft.lines[i].id,
-                                  ),
+                              !group.indices.some(
+                                (i) =>
+                                  data.dyed_fabric_item.find(
+                                    (d) => d.id === batch.dyed_fabric_item_id,
+                                  )?.dyeing_program_item_id === draft.lines[i].id,
                               ),
                           )
-                          .map((batch) => [batch, batch]),
+                          .map((batch) => [batch.id, batch.batch_no]),
                       },
                       group.batch,
                       (v) => groupChange(group, 'batch_no', v || null),
                       `Section ${gi + 1} `,
                     ),
-                    h(
-                      'label',
-                      null,
-                      h('span', null, 'Comments for this colour'),
-                      h('input', {
-                        value: group.comments,
-                        onChange: (e) => groupChange(group, 'comments', e.target.value),
-                      }),
-                    ),
+                    h(RichCommentEditor, {
+                      value: group.comments,
+                      onChange: (value) => groupChange(group, 'comments', value),
+                    }),
                   ),
                   h(
                     'p',

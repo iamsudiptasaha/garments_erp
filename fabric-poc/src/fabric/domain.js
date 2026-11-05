@@ -1,4 +1,10 @@
-import { programContext, batchFor, upgradeFabricRelationships } from './relationships.js';
+import { commentText } from './rich-comment.js';
+import {
+  programContext,
+  batchFor,
+  previousBatchLabel,
+  upgradeFabricRelationships,
+} from './relationships.js';
 import { upgradeColours, labRows } from '../colours/domain.js';
 import {
   initialProduction,
@@ -563,10 +569,10 @@ export function fabricRows(data, page) {
             ([id]) => id === programContext(data, r).mappingId,
           )?.[1] || '—',
         labDip: versionLabelForRow(data, r),
-        batch: r.batch_no || '—',
+        batch: previousBatchLabel(data, r.batch_no),
         name: get('fabric_type', r.fabric_type_id).name,
         quantity: r.quantity,
-        comments: r.comments || '',
+        comments: commentText(r.comments || ''),
       };
     });
   if (['dyeBills', 'dyed', 'batches'].includes(page))
@@ -578,6 +584,12 @@ export function fabricRows(data, page) {
         bill: d.bill.invoice_number,
         date: d.bill.invoice_date,
         batch: d.batch,
+        verified:
+          (data.dyed_bill_verifiers || []).find((v) => v.id === d.bill.verified_by_employee_id)
+            ?.label ||
+          (d.bill.verified_by_employee_id
+            ? `Employee ${d.bill.verified_by_employee_id}`
+            : 'Not recorded'),
         name: d.k.name,
         color: d.color.name,
         hex: d.color.hex,
@@ -764,7 +776,7 @@ export function validateFabric(data) {
     if (lab && lab.dyer_id !== program.dyer_id)
       throw Error('The selected lab-dip version belongs to another dyer.');
     if (line.batch_no) {
-      const batch = data.batch_no_lab_dip_version_map.find((b) => b.batch_no === line.batch_no);
+      const batch = data.batch_no_lab_dip_version_map.find((b) => b.id === line.batch_no);
       if (!batch || batch.lab_dip_version_id !== line.lab_dip_version_id)
         throw Error('Previous batch must use the exact selected lab-dip version.');
       if (

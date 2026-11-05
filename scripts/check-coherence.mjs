@@ -1,3 +1,4 @@
+import {fabricBatchReleaseSchema,inspectFabricBatch} from './fabric-batch-contract.mjs';
 import {employeePhotoReleaseSchema} from './employee-photo-contract.mjs';
 import {contactReleaseSchema} from './contact-primary-contract.mjs';
 import {readFileSync} from 'node:fs';
@@ -30,9 +31,9 @@ export function inspect(schema, catalogue, screens=pages){
  return [...new Set(errors)].sort();
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
- const schema=employeePhotoReleaseSchema(contactReleaseSchema(JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url)))));
+ const schema=fabricBatchReleaseSchema(employeePhotoReleaseSchema(contactReleaseSchema(JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url))))));
  const catalogue=JSON.parse(readFileSync(new URL('../database/catalogue/screen-table-map.json',import.meta.url)));
- const errors=inspect(schema,catalogue);
+ const errors=[...inspect(schema,catalogue),...inspectFabricBatch(schema)];
  try{console.log(checkBoundaries());}catch(e){errors.push(e.message)}
  console.log(`Database/UI coherence: ${schema.captured_at}; ${schema.columns.length} release columns checked (includes reviewed pending migrations).`);
  if(errors.length){console.error(errors.map(e=>'BLOCKED: '+e).join('\n'));process.exitCode=1}else console.log('No declared form/catalogue drift found. Workflow tests must also pass.');

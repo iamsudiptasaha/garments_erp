@@ -152,6 +152,25 @@
         "lab_dip_status_id"
       ],
       "compatibilityCommand": "garments_access.save_fabric_document"
+    },
+    "dyedBillVerification": {
+      "reviewedMigration": "20261105161411_verify_dyed_bills_and_batch_references.sql",
+      "root": "dyed_fabric_bill",
+      "command": "garments_access.save_verified_dyed_bill",
+      "ownedTables": [
+        "dyed_fabric_bill",
+        "dyed_fabric_item",
+        "batch_no_lab_dip_version_map"
+      ],
+      "linkedReadOnlyTables": [
+        "employee",
+        "dyeing_program_item",
+        "knitting_bill_item",
+        "lab_dip_version",
+        "lab_dip_version_item"
+      ],
+      "verification": "Selected eligible employee password on every create/edit save; exact-command, 90-second, single-use proof",
+      "previousBatchReference": "dyeing_program_item.batch_no -> batch_no_lab_dip_version_map.id"
     }
   }
 }

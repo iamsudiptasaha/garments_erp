@@ -18,3 +18,15 @@ export async function getLoginMethods() {
   const settings = await response.json();
   return { phone: settings.external?.phone === true, email: settings.external?.email === true };
 }
+
+export function createVerificationClient() {
+  const env = readEnvironment({ ...import.meta.env, VITE_DATA_MODE: 'supabase' });
+  return createClient(env.url, env.publishableKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: 'garments-verifier-' + crypto.randomUUID(),
+    },
+  });
+}
