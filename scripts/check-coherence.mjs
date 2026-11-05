@@ -1,3 +1,4 @@
+import {employeePhotoReleaseSchema} from './employee-photo-contract.mjs';
 import {contactReleaseSchema} from './contact-primary-contract.mjs';
 import {readFileSync} from 'node:fs';
 import {pages} from '../fabric-poc/src/fabric/catalog.js';
@@ -29,7 +30,7 @@ export function inspect(schema, catalogue, screens=pages){
  return [...new Set(errors)].sort();
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
- const schema=contactReleaseSchema(JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url))));
+ const schema=employeePhotoReleaseSchema(contactReleaseSchema(JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url)))));
  const catalogue=JSON.parse(readFileSync(new URL('../database/catalogue/screen-table-map.json',import.meta.url)));
  const errors=inspect(schema,catalogue);
  try{console.log(checkBoundaries());}catch(e){errors.push(e.message)}

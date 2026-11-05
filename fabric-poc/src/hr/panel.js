@@ -13,6 +13,7 @@ const spec = {
     ['code', 'Employee code'],
     ['phone', 'Phone'],
     ['joined', 'Joined'],
+    ['status', 'Status'],
     ['verified', 'Verified by'],
     ['updated', 'Updated at'],
   ].map(([key, label]) => ({ key, label, width: 200 })),
@@ -29,6 +30,8 @@ function preview(access, contactChoices, contactItems) {
       employee: {
         id: u.id,
         employee_code: u.employeeCode,
+        is_active: true,
+        is_verified: true,
         contacts_id: contactChoices.find((c) => c.company_name === u.name)?.id || '',
       },
       contact: { company_name: u.name },
@@ -99,8 +102,11 @@ export function HRPanel({
       }
     }
   }
-  async function save(payload, proof) {
-    if (live) updated(await commands.save(payload, proof));
+  const operator = live
+    ? snapshot?.verifiers?.[0]?.name || 'Logged-in operator'
+    : access.users.find((u) => u.id === actor)?.name || 'Preview operator';
+  async function save(payload) {
+    if (live) updated(await commands.save(payload));
     else {
       const old = snapshot.records.find((r) => r.employee.id === payload.id);
       const row = {
@@ -111,8 +117,12 @@ export function HRPanel({
           id: payload.id || crypto.randomUUID(),
           employee_code: old?.employee.employee_code || 'Preview · assigned on live save',
           updated_at: new Date().toISOString(),
-          verified_by_employee_id: null,
+          verified_by_employee_id: live ? null : actor,
+          is_verified: true,
+          is_active: old?.employee.is_active ?? true,
+          activated_by_employee_id: old?.employee.activated_by_employee_id || actor,
         },
+        verifier_name: operator,
         contact: snapshot.contact_choices.find((c) => c.id === payload.draft.employee.contacts_id),
         contacts: (snapshot.contact_people || []).filter(
           (c) => c.contact_id === payload.draft.employee.contacts_id,
@@ -131,6 +141,43 @@ export function HRPanel({
     }
     setNotice(live ? 'Employee saved.' : 'Employee saved in this browser preview only.');
     setEditor(null);
+  }
+  async function saveStatus(record, active, revision) {
+    setBusy(true);
+    setError('');
+    try {
+      if (live) {
+        await commands.setActive(record.employee.id, active, revision);
+        const next = await reload();
+        if (!next) throw Error('Status saved. Reload or sign in again to refresh employee access.');
+      } else {
+        updated({
+          ...snapshot,
+          records: snapshot.records.map((r) =>
+            r === record
+              ? {
+                  ...r,
+                  verifier_name: operator,
+                  employee: {
+                    ...r.employee,
+                    is_active: active,
+                    is_verified: true,
+                    verified_by_employee_id: actor,
+                    activated_by_employee_id: actor,
+                    updated_at: new Date().toISOString(),
+                  },
+                }
+              : r,
+          ),
+        });
+      }
+      setEditor(null);
+      setNotice(
+        active ? 'Employee activated.' : 'Employee deactivated. Portal access is disabled.',
+      );
+    } finally {
+      setBusy(false);
+    }
   }
   async function saveReference(e) {
     e.preventDefault();
@@ -334,11 +381,10 @@ export function HRPanel({
                   { className: 'hr-directory' },
                   rows.map((r) =>
                     h(
-                      'button',
+                      'article',
                       {
                         key: r.id,
                         className: 'hr-person-card',
-                        onClick: () => setEditor({ record: r.record }),
                       },
                       h(
                         'span',
@@ -352,8 +398,28 @@ export function HRPanel({
                       h('strong', null, r.name),
                       h('span', null, r.code),
                       h('span', null, r.phone || 'Phone not set'),
-                      h('small', null, r.verified),
-                      h('span', { className: 'hr-open' }, 'Open profile →'),
+                      h(
+                        'span',
+                        {
+                          className: 'hr-status',
+                          'data-active': r.record.employee.is_active !== false,
+                        },
+                        r.status,
+                      ),
+                      h('small', null, 'Verified by ' + r.verified),
+                      h(
+                        'div',
+                        { className: 'hr-card-actions' },
+                        h(
+                          'button',
+                          {
+                            className: 'hr-open',
+                            disabled: busy,
+                            onClick: () => setEditor({ record: r.record }),
+                          },
+                          'Open profile →',
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -364,9 +430,11 @@ export function HRPanel({
                 record: editor.record,
                 draft: employeeDraft(editor.record),
                 snapshot,
+                operator,
                 live,
                 canEdit: can(editor.record ? 'edit' : 'create'),
                 onSave: save,
+                onStatus: saveStatus,
                 onClose: () => setEditor(null),
                 onReload: reload,
               }),

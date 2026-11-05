@@ -132,7 +132,7 @@ export function labRows(data) {
         ? data.attachments.find((a) => a.id === latest.shade_card_image_attachment)?.filename ||
           'Attached'
         : '—',
-      updated: latest?.updated_at || 'Unknown',
+      updated: item?.recorded_at || latest?.updated_at || 'Unknown',
     };
   });
 }
@@ -218,6 +218,7 @@ export function saveLabDip(data, input) {
       date: versionDate,
       comments,
       latest: true,
+      recorded_at: now,
     });
   }
   Object.assign(version, {

@@ -12,7 +12,8 @@ function editable(row, fields) {
 function versionWrite(data, row) {
   const item = latestStatusItem(data, row);
   if (!item) throw Error('Lab-dip version is missing its current status item.');
-  // The guarded document RPC writes these fields through the parent and its history trigger.
+  // Compatibility transport only: the document RPC atomically writes review fields
+  // into lab_dip_version_item; these are not physical version columns.
   return {
     ...row,
     date: item.date,
@@ -55,6 +56,29 @@ export function liveFabricCommands(client) {
     load: () => rpc('erp_fabric_snapshot'),
     save: ({ resource, root, action, before, after }) => {
       const changes = fabricChanges(before, after, resource);
+      // A single review-only edit uses the owning child API and its revision check.
+      // New versions and mixed metadata/review edits stay in one document transaction.
+      if (resource === 'labDips' && action === 'edit' && changes.length === 1) {
+        const change = changes[0];
+        if (change.table === 'lab_dip_version' && change.before && change.values) {
+          const metadata = fabricContract.labDips.lab_dip_version.filter(
+            (key) => !['date', 'comments', 'lab_dip_status_id'].includes(key),
+          );
+          if (
+            metadata.every((key) => (change.before[key] ?? null) === (change.values[key] ?? null))
+          ) {
+            const previous = latestStatusItem(before, change.before);
+            if (!previous?.id) throw Error('Reload the current Lab Dip review before saving.');
+            return rpc('erp_add_lab_dip_review', {
+              p_version: change.id,
+              p_status: change.values.lab_dip_status_id,
+              p_date: change.values.date,
+              p_comments: change.values.comments,
+              p_expected_review: previous.id,
+            });
+          }
+        }
+      }
       return changes.length
         ? rpc('erp_save_fabric_document', {
             p_resource: resource,

@@ -32,7 +32,14 @@
         "is_verified",
         "activated_by_employee_id"
       ],
-      "stateCommand": "garments_access.set_employee_active"
+      "stateCommand": "garments_access.set_employee_active",
+      "attachmentSlots": {
+        "employee_photo": {
+          "target": "employeePhoto",
+          "references": "attachments.id",
+          "writeBoundary": "guarded private file service"
+        }
+      }
     }
   },
   "ownership": {

@@ -1,11 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { EmployeeSelect } from '../admin/employee-select.js';
 import { ContactSelect } from './contact-select.js';
 import { FilePanel } from '../files/panel.js';
 import { liveFileCommands } from '../files/live.js';
 import { getAccessClient } from '../access/client.js';
 import { employeeFields, employeeDraft, employeeLinks, validateEmployeeDraft } from './model.js';
-import { verifyEmployeePassword } from './live.js';
 import '../files/styles.css';
 const h = React.createElement;
 export function EmployeeEditor({
@@ -14,7 +12,9 @@ export function EmployeeEditor({
   snapshot,
   live,
   canEdit,
+  operator,
   onSave,
+  onStatus,
   onClose,
   onReload,
 }) {
@@ -31,14 +31,12 @@ export function EmployeeEditor({
     })),
     [tab, setTab] = useState('profile'),
     [review, setReview] = useState(false),
+    [active, setActive] = useState(record?.employee.is_active !== false),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
-    [verifier, setVerifier] = useState(null),
-    [password, setPassword] = useState(''),
-    [proof, setProof] = useState(null),
     [files, setFiles] = useState(null);
   const [revision, setRevision] = useState(record?.revision || null);
-  const [savedDraft, setSavedDraft] = useState(JSON.stringify(initial));
+  const [savedDraft, setSavedDraft] = useState(() => JSON.stringify(draft));
   const dirty = JSON.stringify(draft) !== savedDraft;
   const payload = { id: record?.employee.id || null, expected: revision, draft };
   useEffect(() => {
@@ -62,7 +60,6 @@ export function EmployeeEditor({
   function change(update) {
     if (busy) return;
     setDraft((d) => update(d));
-    setProof(null);
     setReview(false);
   }
   function field(obj, key, label, type = 'text', set) {
@@ -100,38 +97,14 @@ export function EmployeeEditor({
       ),
     );
   }
-  async function verify() {
-    setBusy(true);
-    setError('');
-    try {
-      validateEmployeeDraft(draft);
-      const person = snapshot.verifiers.find((e) => e.id === verifier);
-      setProof(
-        await verifyEmployeePassword({
-          email: person.email,
-          password,
-          employeeId: verifier,
-          actor: live.actor,
-          payload,
-        }),
-      );
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setPassword('');
-      setBusy(false);
-    }
-  }
   async function save() {
     setBusy(true);
     setError('');
     try {
-      if (verifier && !proof)
-        throw Error('The selected employee must verify their password before saving.');
-      await onSave(payload, proof);
+      if (tab === 'status') await onStatus(record, active, revision);
+      else await onSave(payload);
     } catch (e) {
       setError(e.message);
-      setProof(null);
     } finally {
       setBusy(false);
     }
@@ -163,7 +136,7 @@ export function EmployeeEditor({
       h(
         'div',
         { className: 'fabric-view-toggle' },
-        ['profile', 'contacts', 'documents'].map((key) =>
+        ['profile', 'contacts', 'documents', 'status'].map((key) =>
           h(
             'button',
             { key, 'aria-pressed': tab === key, onClick: () => setTab(key) },
@@ -171,6 +144,7 @@ export function EmployeeEditor({
               profile: 'Profile',
               contacts: 'Contact links',
               documents: 'Documents',
+              status: 'Status',
             }[key],
           ),
         ),
@@ -179,7 +153,7 @@ export function EmployeeEditor({
       ? h(
           'section',
           { className: 'hr-review' },
-          h('h3', null, 'Review employee'),
+          h('h3', null, tab === 'status' ? 'Review employee status' : 'Review employee'),
           h(
             'dl',
             null,
@@ -195,13 +169,16 @@ export function EmployeeEditor({
                 snapshot.contact_choices.find((c) => c.id === draft.employee.contacts_emergency_id)
                   ?.company_name || 'Not set',
               ],
+              ['Verification', 'Automatically verified by ' + operator],
               [
-                'Verification',
-                proof
-                  ? 'Password verified for this exact record'
-                  : verifier
-                    ? 'Password verification required'
-                    : 'Will save as unverified',
+                'Status',
+                tab === 'status'
+                  ? active
+                    ? 'Active'
+                    : 'Inactive'
+                  : record?.employee.is_active === false
+                    ? 'Inactive · unchanged on save'
+                    : 'Active',
               ],
             ].map(([a, b]) => h('div', { key: a }, h('dt', null, a), h('dd', null, b))),
           ),
@@ -209,6 +186,51 @@ export function EmployeeEditor({
       : h(
           'div',
           null,
+          tab === 'status' &&
+            h(
+              'section',
+              { className: 'hr-status-panel' },
+              h('h3', null, 'Employee status'),
+              record
+                ? h(
+                    React.Fragment,
+                    null,
+                    h(
+                      'label',
+                      null,
+                      'Status',
+                      h(
+                        'select',
+                        {
+                          value: active ? 'active' : 'inactive',
+                          disabled: !canEdit || busy || dirty,
+                          onChange: (e) => {
+                            setActive(e.target.value === 'active');
+                            setReview(false);
+                          },
+                        },
+                        h('option', { value: 'active' }, 'Active'),
+                        h('option', { value: 'inactive' }, 'Inactive'),
+                      ),
+                    ),
+                    h(
+                      'p',
+                      { className: 'editor-note' },
+                      'Inactive employees cannot access their portal.',
+                    ),
+                    dirty &&
+                      h(
+                        'p',
+                        { className: 'editor-note' },
+                        'Save profile changes before changing employee status.',
+                      ),
+                  )
+                : h(
+                    'p',
+                    null,
+                    'New employees are active by default. Save the employee before changing their status.',
+                  ),
+            ),
           tab === 'profile' &&
             h(
               React.Fragment,
@@ -297,7 +319,7 @@ export function EmployeeEditor({
                             { className: 'editor-note' },
                             'Save profile changes before uploading documents.',
                           ),
-                        ['employeeDocument1', 'employeeDocument2'].map((key) =>
+                        ['employeePhoto', 'employeeDocument1', 'employeeDocument2'].map((key) =>
                           h(FilePanel, {
                             key,
                             targetKey: key,
@@ -309,7 +331,6 @@ export function EmployeeEditor({
                             canWrite: canEdit && !dirty && !busy,
                             onBusyChange: setBusy,
                             onAttached: async () => {
-                              setProof(null);
                               const next = await onReload();
                               if (!next)
                                 throw Error(
@@ -333,50 +354,18 @@ export function EmployeeEditor({
       h(
         'section',
         { className: 'hr-verification' },
-        h('h3', null, 'Verified by employee'),
-        !live
-          ? h('p', null, 'Password verification is available only in the live workspace.')
-          : h(
-              React.Fragment,
-              null,
-              h(EmployeeSelect, {
-                employees: snapshot.verifiers,
-                value: verifier,
-                inputId: 'hr-verifier',
-                onChange: (id) => {
-                  setVerifier(id);
-                  setProof(null);
-                  setPassword('');
-                },
-                disabled: busy,
-                label: 'Select verifying employee',
-              }),
-              verifier &&
-                !proof &&
-                h(
-                  'div',
-                  { className: 'hr-verify-fields' },
-                  h(
-                    'label',
-                    null,
-                    'Selected employee’s password',
-                    h('input', {
-                      type: 'password',
-                      autoComplete: 'off',
-                      value: password,
-                      onChange: (e) => setPassword(e.target.value),
-                      disabled: busy,
-                    }),
-                  ),
-                  h('button', { disabled: busy || !password, onClick: verify }, 'Verify password'),
-                ),
-              proof &&
-                h(
-                  'p',
-                  { role: 'status' },
-                  'Password verified. Changing any form data will require verification again.',
-                ),
-            ),
+        h('h3', null, 'Verification'),
+        h('label', null, 'Verified by', h('input', { value: operator, readOnly: true })),
+        h(
+          'p',
+          { className: 'editor-note' },
+          'Saving automatically verifies this record using the logged-in operator. ' +
+            (tab === 'status'
+              ? 'Status changes are attributed to the same operator.'
+              : record
+                ? 'The current active/inactive status stays unchanged.'
+                : 'New employees are active by default.'),
+        ),
       ),
     h(
       'div',
@@ -390,18 +379,25 @@ export function EmployeeEditor({
               h('button', { disabled: busy, onClick: () => setReview(false) }, 'Back to edit'),
               h(
                 'button',
-                { className: 'primary', disabled: busy || (!!verifier && !proof), onClick: save },
-                busy ? 'Saving…' : 'Confirm & save employee',
+                { className: 'primary', disabled: busy, onClick: save },
+                busy
+                  ? 'Saving…'
+                  : tab === 'status'
+                    ? 'Confirm & save status'
+                    : 'Confirm & save employee',
               ),
             )
           : h(
               'button',
               {
                 className: 'primary',
-                disabled: busy,
+                disabled:
+                  busy ||
+                  (tab === 'status' &&
+                    (!record || dirty || active === (record.employee.is_active !== false))),
                 onClick: () => {
                   try {
-                    validateEmployeeDraft(draft);
+                    if (tab !== 'status') validateEmployeeDraft(draft);
                     setError('');
                     setReview(true);
                   } catch (e) {
@@ -409,7 +405,7 @@ export function EmployeeEditor({
                   }
                 },
               },
-              'Review employee',
+              tab === 'status' ? 'Review status' : 'Review employee',
             )),
     ),
   );

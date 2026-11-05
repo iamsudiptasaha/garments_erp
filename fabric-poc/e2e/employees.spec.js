@@ -31,7 +31,7 @@ test('employee details, references and review use the same protected form', asyn
       .getByText(emergencyName, { exact: true }),
   ).toBeVisible();
   await dialog.getByRole('button', { name: 'Confirm & save employee', exact: true }).click();
-  await expect(page.getByRole('button').filter({ hasText: name })).toBeVisible();
+  await expect(page.getByRole('article').filter({ hasText: name })).toBeVisible();
   await page.getByRole('button', { name: 'Employment types', exact: true }).click();
   await expect(page).toHaveURL(/#employeeEmploymentTypes$/);
   await expect(page.locator('.hr-workspace > .fabric-view-toggle')).toHaveCount(0);

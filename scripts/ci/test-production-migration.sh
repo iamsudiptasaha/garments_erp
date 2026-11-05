@@ -29,7 +29,7 @@ for prior in supabase/migrations/*.sql; do
   fi
 done
 node database/ci/seed.mjs "$work/seed.sql"
-for sql in "$work/seed.sql" database/tests/production-hub-backfill-before.sql "$migration" database/tests/production-hub-backfill-after.sql; do
+for sql in "$work/seed.sql" database/tests/production-hub-backfill-before.sql "$migration" database/tests/production-hub-backfill-after.sql database/tests/employee-photo-backfill-before.sql supabase/migrations/20261105152128_employee_photo_attachment_and_checklist.sql database/tests/employee-photo-attachment.sql; do
   docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 < "$sql" >> "$work/replay.log" 2>&1
 done
-echo 'PASS populated production, assignee, Lab Dip and receipt migration backfill'
+echo 'PASS populated production, assignee, Lab Dip, receipt and employee-photo migration backfill'

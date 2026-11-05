@@ -362,3 +362,17 @@ test('bucket lifecycle commands send administrator inputs without exposing stora
   assert.equal(calls[1].args.body.groupId, '9223372036854775807');
   assert.equal(calls[1].args.body.confirmation, 'lab_dip_files');
 });
+
+test('employee photos use the private employee image route and reject documents', () => {
+  const target = targetFor('employeePhoto');
+  assert.equal(target.table, 'employee');
+  assert.equal(target.slot, 'employee_photo');
+  assert.equal(target.group, 'employee');
+  const group = resolveGroup(initialBucketRegistry(), 'employee');
+  assert.throws(() => validateFile(file(), target, group), /supported/);
+  assert.equal(
+    validateFile(new File(['image'], 'portrait.png', { type: 'image/png' }), target, group)
+      .mime_type,
+    'image/png',
+  );
+});

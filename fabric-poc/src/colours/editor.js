@@ -281,7 +281,7 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
               h(
                 'label',
                 null,
-                'Version date',
+                'Review date',
                 h('input', {
                   type: 'date',
                   required: true,
@@ -293,7 +293,7 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
             h(
               'label',
               null,
-              'Comments',
+              'Review comments',
               h('textarea', {
                 value: draft.comments,
                 onChange: (e) => update('comments', e.target.value),
@@ -302,7 +302,7 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
             h(
               'p',
               { className: 'editor-note' },
-              'When Attached swatch is checked, shade card number and option are cleared and unavailable.',
+              'Each status, review date or comment change adds a review entry. Previous reviews are preserved. Attached swatch clears shade card number and option.',
             ),
             h(
               'div',
