@@ -22,7 +22,7 @@ export function TaskHandover({
   tasks?: Task[];
   destination?: string;
   onTask?: (id: string) => void;
-  onSubmit: (task: Task) => void;
+  onSubmit: (task: Task) => void | Promise<void>;
   readOnly?: boolean;
 }) {
   const stages = task.stageOptions || defaultStages;
@@ -33,6 +33,7 @@ export function TaskHandover({
   const [employee, setEmployee] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const submitted = useRef(false);
   const priorStages = task.path
@@ -66,16 +67,20 @@ export function TaskHandover({
   return (
     <form
       className="handover-form"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
         if (readOnly || !ready || submitted.current) return;
         try {
           const updated = completeHandover(task, rows, next, employee, reason);
           submitted.current = true;
+          setBusy(true);
+          await onSubmit(updated);
           setDone(true);
-          onSubmit(updated);
         } catch (cause) {
+          submitted.current = false;
           setError((cause as Error).message);
+        } finally {
+          setBusy(false);
         }
       }}
     >
@@ -242,7 +247,7 @@ export function TaskHandover({
             ? 'One handover only. Complete every variant before moving.'
             : 'One handover only. Select your name before moving.'}
         </p>
-        <button className="primary-button" type="submit" disabled={readOnly || !ready}>
+        <button className="primary-button" type="submit" disabled={readOnly || !ready || busy}>
           Hand over{next && ` to ${next}`}
           <ArrowRight size={18} />
         </button>

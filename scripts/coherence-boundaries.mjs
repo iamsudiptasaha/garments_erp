@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {employeeLinks,employeeFields,employeeRelations} from '../fabric-poc/src/hr/model.js';
+import {productionContract} from '../fabric-poc/src/production-task-board/live-contract.js';
 import {fabricContract} from '../fabric-poc/src/fabric/live-contract.js';
 import {contactSections} from '../fabric-poc/src/miscellaneous/contact-model.js';
 const root=fileURLToPath(new URL('../',import.meta.url));
@@ -60,6 +61,8 @@ export function inspectBoundaries({schema,catalogue,policy,functions,links=emplo
  }
  const fabric=functions.get('garments_access.fabric_contract');
  if(fabric){const literal=fabric.match(/select\s+'((?:[^']|'')*)'::jsonb/i);if(!literal)errors.push('Fabric: SQL contract is not inspectable');else if(JSON.stringify(JSON.parse(literal[1].replaceAll("''","'")))!==JSON.stringify(fabricContract))errors.push('Fabric: backend writable contract differs from UI contract');}
+ const production=functions.get('garments_access.production_setup_contract');
+ if(production){const literal=production.match(/select\s+'((?:[^']|'')*)'::jsonb/i);if(!literal)errors.push('Production: SQL contract is not inspectable');else if(JSON.stringify(JSON.parse(literal[1].replaceAll("''","'")))!==JSON.stringify(productionContract))errors.push('Production: backend writable contract differs from UI contract');}
  return [...new Set(errors)];
 }
 export function checkBoundaries(){

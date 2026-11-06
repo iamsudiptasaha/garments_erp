@@ -551,15 +551,15 @@
     },
     {
       "schema_name": "garments_erp",
-      "table_name": "variant"
-    },
-    {
-      "schema_name": "garments_erp",
       "table_name": "variant_item"
     },
     {
       "schema_name": "garments_erp",
       "table_name": "production_checklist"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "variant"
     },
     {
       "schema_name": "garments_erp",
@@ -882,16 +882,6 @@
     {
       "resource_key": "productionItems",
       "schema_name": "garments_erp",
-      "table_name": "variant",
-      "relation_type": "detail",
-      "can_view": true,
-      "can_create": true,
-      "can_edit": true,
-      "can_delete": false
-    },
-    {
-      "resource_key": "productionItems",
-      "schema_name": "garments_erp",
       "table_name": "variant_item",
       "relation_type": "detail",
       "can_view": true,
@@ -907,6 +897,16 @@
       "can_view": true,
       "can_create": true,
       "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "productionItems",
+      "schema_name": "garments_erp",
+      "table_name": "variant",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
       "can_delete": false
     },
     {

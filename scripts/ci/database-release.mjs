@@ -13,6 +13,7 @@ const files = [
   '20261105161411_verify_dyed_bills_and_batch_references.sql',
   '20261105173810_production_atomic_employee_handover.sql',
   '20261105192048_add_item_batch_number.sql',
+  '20261106054224_connect_production_workspace.sql',
 ];
 export function migrationConfig(env) {
   if (

@@ -6,18 +6,24 @@ type Props = {
   data: Parameters<typeof startPortalProduction>[0];
   onSave: (data: Props['data']) => void;
   onClose: () => void;
+  onStart?: (part: string, employee: string) => Promise<void>;
 };
-export function StartProduction({ data, onSave, onClose }: Props) {
+export function StartProduction({ data, onSave, onClose, onStart }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [part, setPart] = useState('');
   const [employee, setEmployee] = useState('');
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
     dialog.current?.showModal();
   }, []);
   const stage = [...data.stage].sort((a, b) => a.sort_order - b.sort_order)[0];
   const options = data.item_part
-    .filter((p) => !data.job.some((j) => j.item_part_id === p.id))
+    .filter(
+      (p) =>
+        !(data.production || []).some((r) => r.item_part_id === p.id) &&
+        !data.job.some((j) => j.item_part_id === p.id),
+    )
     .map((p) => ({
       value: p.id,
       label: `${data.item.find((i) => i.id === p.item_id)?.style_code || 'Item'} / ${data.part_list.find((n) => n.id === p.part_list_id)?.part || 'Part'}`,
@@ -31,12 +37,16 @@ export function StartProduction({ data, onSave, onClose }: Props) {
       style={{ width: 'min(540px,94vw)', padding: 28, borderRadius: 16 }}
     >
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
           try {
-            onSave(startPortalProduction(data, part, employee));
+            setBusy(true);
+            if (onStart) await onStart(part, employee);
+            else onSave(startPortalProduction(data, part, employee));
           } catch (cause) {
             setError((cause as Error).message);
+          } finally {
+            setBusy(false);
           }
         }}
       >
@@ -84,7 +94,11 @@ export function StartProduction({ data, onSave, onClose }: Props) {
           <button type="button" className="outline-button" onClick={onClose}>
             Cancel
           </button>
-          <button className="primary-button" disabled={!part || !employee || !stage} type="submit">
+          <button
+            className="primary-button"
+            disabled={busy || !part || !employee || !stage}
+            type="submit"
+          >
             Start at {stage?.name || 'first stage'}
           </button>
         </footer>

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ProductionStudio, type PortalBoardOptions } from './studio';
 import { portalTasks, savePortalTasks } from './portal-data';
 import styles from './studio.css?inline';
+import type { Task } from './model';
 import { StartProduction } from './start-production';
 
 // Keep isolated component styles, using the portal palette in portal/floor modes.
@@ -48,6 +49,11 @@ type Props = {
   canCreate?: boolean;
   onCreate?: (data: Parameters<typeof portalTasks>[0]) => void;
   onSave: (data: Parameters<typeof portalTasks>[0]) => void;
+  live?: boolean;
+  liveTasks?: Task[];
+  onImage?: (id: string) => Promise<string>;
+  onCommit?: (before: Task[], after: Task[]) => Promise<Task[]>;
+  onStart?: (part: string, employee: string) => Promise<void>;
 };
 export function PortalTaskBoard({
   data,
@@ -57,6 +63,11 @@ export function PortalTaskBoard({
   canCreate = false,
   onCreate,
   onSave,
+  live,
+  liveTasks,
+  onCommit,
+  onStart,
+  onImage,
 }: Props) {
   const [starting, setStarting] = useState(false);
   const [generation, setGeneration] = useState(0);
@@ -67,7 +78,15 @@ export function PortalTaskBoard({
       setShadow(host.current.shadowRoot || host.current.attachShadow({ mode: 'open' }));
   }, []);
   const portal: PortalBoardOptions = {
-    tasks: portalTasks(data),
+    tasks: live
+      ? (liveTasks || []).map((t) => ({
+          ...t,
+          resolveImage:
+            t.imageAttachmentId && onImage ? () => onImage(t.imageAttachmentId!) : undefined,
+        }))
+      : portalTasks(data),
+    live,
+    onCommit,
     actor,
     mode,
     canEdit,
@@ -122,6 +141,15 @@ export function PortalTaskBoard({
             {starting && (
               <StartProduction
                 data={data}
+                onStart={
+                  onStart
+                    ? async (part, employee) => {
+                        await onStart(part, employee);
+                        setStarting(false);
+                        setGeneration((v) => v + 1);
+                      }
+                    : undefined
+                }
                 onClose={() => setStarting(false)}
                 onSave={(next) => {
                   if (!canCreate || !onCreate) return;

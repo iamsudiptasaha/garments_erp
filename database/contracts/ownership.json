@@ -215,7 +215,7 @@
       "localAggregate": "production_task_board_preview",
       "ownership": "Item checklist shared by item_id; task per item_part_id; original jobs and challans retained; variants/sizes selected from linked item records",
       "movement": "Complete every variant/size output and select existing employee once per current job visit; unequal totals allowed; direct stage selection routes through handover",
-      "liveWrites": "Blocked by existing portal live-page gate; current RPC requires a separately reviewed schema and verification change",
+      "liveWrites": "Local adapter never handles live writes; live mode uses liveProductionWorkspace commands.",
       "preferences": "Named saved views removed from the portal MVP; transient layout controls remain browser-local",
       "plannedPieces": "Read-only sum of item_cut_ratio.pieces across the item sizes, refreshed from item setup",
       "history": "productionJobs is read-only Job history; original job IDs, piece records and challan links preserved",
@@ -235,7 +235,43 @@
         "productionGenders": "gender"
       },
       "ownership": "Each page edits only its reference row; linked Production/Employee records are not edited",
-      "liveWrites": "Blocked by existing live-page gate"
+      "liveWrites": "Local reference adapter stays separate; live mode uses the reviewed production setup contract."
     }
+  },
+  "liveProductionWorkspace": {
+    "migration": "20261106054224_connect_production_workspace.sql",
+    "source": "fabric-poc/src/production-task-board",
+    "pages": [
+      "productionTaskBoard",
+      "productionUpdateTaskStatus",
+      "productionItems",
+      "productionWorkers",
+      "productionDesigns",
+      "productionStages",
+      "productionStageTypes",
+      "productionPartTypes",
+      "productionSizes",
+      "productionProductTypes",
+      "productionStatuses",
+      "productionFlags",
+      "productionGenders"
+    ],
+    "taskPermissionResource": "productionJobs",
+    "readFunction": "garments_access.production_workspace",
+    "writeFunctions": [
+      "garments_access.save_production_setup",
+      "garments_access.edit_production_task",
+      "garments_access.move_production"
+    ],
+    "setupContract": "fabric-poc/src/production-task-board/live-contract.js",
+    "itemOwnership": "Item owns parts, size allocations, variant links and checklist. Shared variant metadata is selected and edited only in Variants. Attachments are read through private Files, not edited by setup command.",
+    "concurrency": "Expected source job and transition for movement; production-document revision for task edits; expected item checklist and setup row snapshots; all writes transactional.",
+    "unsupportedFields": "Priority unavailable; progress derived from configured stage position. No named saved views.",
+    "floor": "Signed-in portal session and Production permissions required. No anonymous QR endpoint.",
+    "excluded": [
+      "productionJobs Job History page"
+    ],
+    "release": "Migration and portal release through reviewed main Actions workflows; no direct live SQL.",
+    "imageAccess": "Existing private Files read path; Production viewers can read itemImage only for items linked to Production. No upload permission added."
   }
 }

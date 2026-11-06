@@ -435,6 +435,21 @@ export function fabricRows(data, page) {
     return productionRows(data, page).map((row) => ({
       ...row,
       batch_number: data.item.find((item) => item.id === row.documentId)?.batch_number || '—',
+      ...(data._live
+        ? {
+            jobs: (data.production_job_counts || [])
+              .filter((c) =>
+                data.item_part.some((p) => p.id === c.item_part_id && p.item_id === row.documentId),
+              )
+              .reduce((n, c) => n + c.jobs, 0),
+          }
+        : {}),
+    }));
+  if (data._live && page === 'productionWorkers')
+    return productionRows(data, page).map((row) => ({
+      ...row,
+      jobs:
+        data.production_worker_counts?.find((c) => c.job_worker_id === row.documentId)?.jobs || 0,
     }));
   if (pages[page]?.production) return productionRows(data, page);
   if (pages[page]?.inventory) return inventoryRows(data, page, s);

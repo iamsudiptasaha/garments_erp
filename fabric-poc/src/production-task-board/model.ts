@@ -104,6 +104,10 @@ export type Task = {
   untrackedStages?: string[];
   stageTypes?: Record<string, string>;
   imageAttachmentId?: string;
+  imageUrl?: string;
+  resolveImage?: () => Promise<string>;
+  statusOptions?: string[];
+  rectifyReason?: string;
   flagOptions?: string[];
   employeeNames?: string[];
   visitId?: string;
@@ -328,7 +332,14 @@ function moveTask(task: Task, action: 'advance' | 'rectify', target: string, rea
   };
 }
 
-export type PieceEntry = { variant: string; size: string; incoming: number; output: string };
+export type PieceEntry = {
+  variant: string;
+  size: string;
+  incoming: number;
+  output: string;
+  variantItemId?: string;
+  itemSizeId?: string;
+};
 type Handover = {
   visit: string;
   job: string;
@@ -397,6 +408,7 @@ export function completeHandover(
   const reopened = action === 'rectify' ? jobInputs[updated.currentJobId] : undefined;
   return {
     ...updated,
+    rectifyReason: reason,
     visitId: crypto.randomUUID(),
     jobInputs,
     incomingPieces: pieces.length ? pieces.map((row) => ({ ...row })) : task.incomingPieces,
