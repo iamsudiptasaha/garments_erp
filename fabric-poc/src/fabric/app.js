@@ -1,3 +1,10 @@
+import { ProductionItemEditor } from '../production-task-board/item-editor.js';
+import {
+  productionCommands,
+  productionTasks,
+  mergeProductionSnapshot,
+} from '../production-task-board/live.js';
+import { liveProductionPage } from '../production-task-board/live-contract.js';
 import { PortalTaskBoard } from '../production-task-board/portal';
 import { JobHistory } from '../production-task-board/job-history';
 import { AccountFooter } from '../access/account-footer.js';
@@ -176,24 +183,91 @@ function App({ live }) {
     return () => window.removeEventListener('hashchange', handle);
   }, []);
   const [liveReady, setLiveReady] = useState(!live),
-    [liveError, setLiveError] = useState('');
+    [liveError, setLiveError] = useState(''),
+    [productionError, setProductionError] = useState('');
   const commands = useMemo(
     () => (live ? liveFabricCommands(getAccessClient(), createVerificationClient) : null),
     [Boolean(live)],
   );
+  const production = useMemo(
+    () => (live ? productionCommands(getAccessClient()) : null),
+    [Boolean(live)],
+  );
+  const connectedPage = (key) => liveFabricPage(key) || liveProductionPage(key);
+  const allowedModule = (check) =>
+    live &&
+    (live.administrator ||
+      Object.entries(live.permissions || {}).some(([key, p]) => check(key) && p.view));
+  async function loadLive() {
+    const [fabricResult, productionResult] = await Promise.allSettled([
+      allowedModule(liveFabricPage) ? commands.load() : {},
+      allowedModule(liveProductionPage) || can('view', 'productionJobs') ? production.load() : {},
+    ]);
+    setLiveError(fabricResult.status === 'rejected' ? fabricResult.reason.message : '');
+    setProductionError(
+      productionResult.status === 'rejected' ? productionResult.reason.message : '',
+    );
+    const fabric = fabricResult.status === 'fulfilled' ? fabricResult.value : {};
+    const workspace = productionResult.status === 'fulfilled' ? productionResult.value : {};
+    return mergeProductionSnapshot(fabric, workspace);
+  }
+  async function applyProduction(
+    snapshot,
+    message = 'Saved to Supabase · Production records refreshed',
+  ) {
+    setState((previous) => ({
+      ...previous,
+      data: mergeProductionSnapshot(previous.data, snapshot),
+    }));
+    setNotice(message);
+  }
+  async function commitProduction(before, after) {
+    let snapshot = state.data;
+    try {
+      for (const task of after) {
+        const old = before.find((r) => r.id === task.id);
+        if (old && JSON.stringify(old) !== JSON.stringify(task)) {
+          const expected = state.data.production_records.find(
+            (r) => r.production.id === task.id,
+          )?.revision;
+          const current = snapshot.production_records.find(
+            (r) => r.production.id === task.id,
+          )?.revision;
+          if (expected !== current)
+            throw Error('A selected task changed. Reload and review it before saving.');
+          snapshot = await production.saveTask(snapshot, old, task);
+        }
+      }
+      await applyProduction(snapshot);
+      return productionTasks(snapshot);
+    } catch (error) {
+      // Reload canonical rows after a failed or partially completed bulk operation.
+      try {
+        await applyProduction(
+          await production.load(),
+          'Records reloaded. Review the save error before trying again.',
+        );
+      } catch {
+        /* Keep original error. */
+      }
+      throw error;
+    }
+  }
   async function refreshLive() {
     setLiveError('');
     if (
       live &&
       !live.administrator &&
-      !Object.entries(live.permissions || {}).some(([key, p]) => liveFabricPage(key) && p.view)
+      !Object.entries(live.permissions || {}).some(
+        ([key, p]) => (connectedPage(key) || key === 'productionJobs') && p.view,
+      )
     ) {
       setLiveReady(true);
       setNotice('No data sections assigned yet');
       return;
     }
     try {
-      const snapshot = assertLiveIdentifiers(await commands.load());
+      const snapshot = assertLiveIdentifiers(await loadLive());
       setState((previous) => ({
         ...previous,
         data: {
@@ -211,7 +285,7 @@ function App({ live }) {
   }
   useEffect(() => {
     if (commands) void refreshLive();
-  }, [commands]);
+  }, [commands, live]);
   const data = useMemo(
     () => ({
       ...state.data,
@@ -275,7 +349,7 @@ function App({ live }) {
     );
   }
   function edit(id) {
-    if (live && (!liveReady || !liveFabricPage(page))) return;
+    if (live && (!liveReady || !connectedPage(page))) return;
     if (!can(id ? 'edit' : 'create')) {
       setNotice('Your role does not allow this action.');
       return;
@@ -294,6 +368,18 @@ function App({ live }) {
     }
     if (live) {
       if (!liveReady) throw Error('Wait for live data to load.');
+      if (liveProductionPage(editor.page)) {
+        await applyProduction(
+          await production.saveSetup({
+            resource: editor.page,
+            before: state.data,
+            after: next,
+            id: editor.id,
+          }),
+        );
+        setSelected(null);
+        return;
+      }
       const resource = editor.page,
         root = fabricRoot(resource, state.data, next, editor),
         action = root.before ? 'edit' : 'create';
@@ -310,8 +396,7 @@ function App({ live }) {
       setState((previous) => ({
         ...previous,
         data: {
-          ...emptyLiveFabric(initialFabric()),
-          ...snapshot,
+          ...mergeProductionSnapshot(previous.data, snapshot),
           dyed_bill_verifiers: snapshot.dyed_bill_verifiers || state.data.dyed_bill_verifiers || [],
         },
       }));
@@ -641,12 +726,28 @@ function App({ live }) {
       ),
     );
   }
-  if (!live && new URLSearchParams(location.search).get('floor') === '1') {
+  const activeLiveError = liveProductionPage(page) ? productionError : liveError;
+  if (new URLSearchParams(location.search).get('floor') === '1') {
+    if (live && (!liveReady || productionError))
+      return h(
+        'section',
+        null,
+        h(
+          'p',
+          { role: productionError ? 'alert' : 'status' },
+          productionError || 'Loading Production…',
+        ),
+        productionError && h('button', { onClick: refreshLive }, 'Retry'),
+      );
     return can('view', 'productionUpdateTaskStatus')
       ? h(PortalTaskBoard, {
           data,
           actor,
           mode: 'floor',
+          live: !!live,
+          liveTasks: live ? productionTasks(data) : undefined,
+          onCommit: live ? commitProduction : undefined,
+          onImage: live ? production.image : undefined,
           canEdit: can('edit', 'productionUpdateTaskStatus'),
           onSave: (next) => {
             if (can('edit', 'productionUpdateTaskStatus')) save({ ...state, data: next });
@@ -934,8 +1035,8 @@ function App({ live }) {
               'div',
               { className: 'access-info' },
               liveReady
-                ? 'Signed in · Fabrics and Colours connected to Supabase'
-                : 'Signed in · loading Fabric and Colours',
+                ? 'Signed in · Fabric, Colours and Production connected to Supabase'
+                : 'Signed in · loading database records',
             )
           : h(
               'div',
@@ -985,28 +1086,24 @@ function App({ live }) {
               })
             : Object.hasOwn(adminPages, page)
               ? h(AdminPanel, { page, access, actor, onSave: saveAccess })
-              : live && (!liveReady || liveError)
+              : live && (!liveReady || activeLiveError)
                 ? h(
                     'section',
                     null,
                     h(
                       'h2',
                       null,
-                      liveError ? 'Unable to load live records' : 'Loading database records…',
+                      activeLiveError ? 'Unable to load live records' : 'Loading database records…',
                     ),
-                    liveError && h('p', { role: 'alert' }, liveError),
-                    liveError && h('button', { onClick: refreshLive }, 'Retry'),
+                    activeLiveError && h('p', { role: 'alert' }, activeLiveError),
+                    activeLiveError && h('button', { onClick: refreshLive }, 'Retry'),
                   )
-                : live && page !== 'home' && page !== 'fabricOverview' && !liveFabricPage(page)
+                : live && page !== 'home' && page !== 'fabricOverview' && !connectedPage(page)
                   ? h(
                       'section',
                       null,
                       h('h2', null, 'This section is not connected yet'),
-                      h(
-                        'p',
-                        null,
-                        'Fabrics, Colours and Brands are connected. Other modules remain in the preview workspace.',
-                      ),
+                      h('p', null, 'This module is awaiting its live backend connection.'),
                     )
                   : page === 'home'
                     ? h(OverviewPanel, {
@@ -1038,6 +1135,14 @@ function App({ live }) {
                             ? h(PortalTaskBoard, {
                                 key: page,
                                 data,
+                                live: !!live,
+                                liveTasks: live ? productionTasks(data) : undefined,
+                                onCommit: live ? commitProduction : undefined,
+                                onImage: live ? production.image : undefined,
+                                onStart: live
+                                  ? async (part, employee) =>
+                                      applyProduction(await production.start(data, part, employee))
+                                  : undefined,
                                 actor,
                                 mode: page === 'productionTaskBoard' ? 'board' : 'update',
                                 canEdit: can('edit'),
@@ -1244,7 +1349,9 @@ function App({ live }) {
           : editor.page === 'materialContacts'
             ? ContactEditor
             : editor.page === 'productionItems'
-              ? ItemEditor
+              ? live
+                ? ProductionItemEditor
+                : ItemEditor
               : editor.page === 'productionJobs'
                 ? JobEditor
                 : BillEditor,

@@ -10,7 +10,7 @@ const definitions={
  productionTaskBoard:{report:['job','item','item_part','part_list','variant','variant_item','variant_item_per_job','stage_pieces','item_size_list','size_list','item_cut_ratio','production_checklist','stage','employee','flags_list']},
  productionUpdateTaskStatus:{report:['job','item','item_part','variant','variant_item','variant_item_per_job','stage_pieces','item_size_list','size_list','stage','employee']},
  productionFlags:{write:['flags_list']},productionGenders:{write:['gender']},
- productionItems:{write:['item','item_part','item_size_list','item_cut_ratio','variant','variant_item','production_checklist'],read:['brand_list','product_type_list','attachments','part_list','size_list','job','item_status_list',...labChain,'color_map','color_map_by_brand','view_variant_item_lab_dip_status']},
+ productionItems:{write:['item','item_part','item_size_list','item_cut_ratio','variant_item','production_checklist'],read:['variant','brand_list','product_type_list','attachments','part_list','size_list','job','item_status_list',...labChain,'color_map','color_map_by_brand','view_variant_item_lab_dip_status']},
  productionJobs:{write:['job','variant_item_per_job','stage_pieces','job_assignees'],read:['item','item_part','part_list','stage','stage_type','item_status_list','job_worker','contacts','employee','variant','item_size_list','size_list','challan_job_item','challan_job_item_pieces']},
  productionWorkers:{write:['job_worker'],read:['contacts','contact_purpose','job']},
  productionParts:{write:['item_part'],read:['item','part_list','job']},

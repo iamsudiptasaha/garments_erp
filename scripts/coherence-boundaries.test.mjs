@@ -37,3 +37,9 @@ test('contact primary migration cannot lose its database uniqueness guarantee',(
  const migration=readFileSync(new URL('../supabase/migrations/20261031201306_contact_primary_selections.sql',import.meta.url),'utf8');
  assert.throws(()=>contactReleaseSchema(json('database/schema/live-schema.json'),migration.replace('create unique index contact_items_one_primary_phone','create index contact_items_one_primary_phone')),/unique-index contract/);
 });
+
+test('Production setup fields cannot drift from the reviewed backend contract',()=>{
+ const f=fixture();const migration=readFileSync(new URL('../supabase/migrations/20261106054224_connect_production_workspace.sql',import.meta.url),'utf8');
+ const functions=sqlFunctions(migration);f.functions.set('garments_access.production_setup_contract',functions.get('garments_access.production_setup_contract').replace('"batch_number"','"invented_field"'));
+ assert.ok(inspectBoundaries(f).some(e=>e.includes('Production: backend writable contract differs')));
+});

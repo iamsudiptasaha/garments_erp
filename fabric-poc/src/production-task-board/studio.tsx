@@ -60,13 +60,13 @@ import {
   fieldLabels,
   filterTasks,
   flagOptions,
-  groupFields,
+  groupFields as defaultGroupFields,
   groupValue,
   mockTasks,
   people as defaultPeople,
   priorities,
   stages as defaultStages,
-  statuses,
+  statuses as defaultStatuses,
   type Filter,
   type GroupField,
   type Task,
@@ -135,6 +135,35 @@ const statusColors: Record<string, string> = {
   Disputed: '#df637d',
 };
 function ItemImage({ task }: { task: Task }) {
+  const [url, setUrl] = useState(task.imageUrl);
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      if (task.resolveImage)
+        void task
+          .resolveImage()
+          .then((value) => {
+            if (active) setUrl(value);
+          })
+          .catch(() => {
+            if (active) setUrl(undefined);
+          });
+    };
+    load();
+    const timer = setInterval(load, 50000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [task.resolveImage]);
+  if (url)
+    return (
+      <img
+        src={url}
+        alt={`${task.style} item`}
+        style={{ width: 80, height: 64, objectFit: 'contain' }}
+      />
+    );
   return (
     <div
       className="item-image-placeholder"
@@ -298,6 +327,8 @@ export type PortalBoardOptions = {
   mode: 'board' | 'update' | 'floor';
   canEdit: boolean;
   onSave: (tasks: Task[]) => void;
+  live?: boolean;
+  onCommit?: (before: Task[], after: Task[]) => Promise<Task[]>;
 };
 export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {}) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
@@ -314,7 +345,9 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
     }
     return { tasks: portal.tasks, config: initialConfig, views: [] };
   });
-  const stages = portal?.tasks[0]?.stageOptions || defaultStages;
+  const groupFields = defaultGroupFields.filter((f) => !portal?.live || f.id !== 'priority');
+  const stages = portal?.tasks[0]?.stageOptions || (portal?.live ? [] : defaultStages);
+  const statuses = portal?.tasks[0]?.statusOptions || defaultStatuses;
   const availableFlags = portal ? portal.tasks[0]?.flagOptions || [] : flagOptions;
   const people = (portal?.tasks[0]?.employeeNames || defaultPeople.map((p) => p.name)).map(
     (name) => ({
@@ -328,16 +361,44 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
     }),
   );
   const [tasks, setTasksState] = useState<Task[]>(loaded.tasks);
+  const saving = useRef(false);
+  const [busy, setBusy] = useState(false);
+  async function commitTasks(next: Task[]) {
+    if (portal && !portal.canEdit) throw Error('Your role does not allow production edits.');
+    if (saving.current) throw Error('Wait for the current save to finish.');
+    if (portal?.onCommit) {
+      saving.current = true;
+      setBusy(true);
+      try {
+        const saved = await portal.onCommit(tasks, next);
+        setTasksState(saved);
+        return;
+      } finally {
+        saving.current = false;
+        setBusy(false);
+      }
+    }
+    setTasksState(next);
+  }
   const setTasks: typeof setTasksState = (action) => {
-    if (portal && !portal.canEdit) {
-      setToast('Your role does not allow production edits.');
+    if (!portal?.onCommit) {
+      if (portal && !portal.canEdit) {
+        setToast('Your role does not allow production edits.');
+        return;
+      }
+      setTasksState(action);
       return;
     }
-    setTasksState(action);
+    const next = typeof action === 'function' ? action(tasks) : action;
+    void commitTasks(next).catch((e) => setToast(e.message));
   };
+  useEffect(() => {
+    if (portal?.live) setTasksState(portal.tasks);
+  }, [portal?.tasks]);
   const previousTasks = useRef(tasks);
   const [config, setConfig] = useState<Config>({
     ...loaded.config,
+    visibility: { ...loaded.config.visibility, ...(portal?.live ? { priority: false } : {}) },
     order: [
       ...loaded.config.order,
       ...defaultOrder.filter((id) => !loaded.config.order.includes(id)),
@@ -373,7 +434,7 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
         storageKey,
         JSON.stringify({ version: 1, ...(portal ? {} : { tasks }), config, views }),
       );
-      if (portal && previousTasks.current !== tasks) {
+      if (portal && !portal.live && previousTasks.current !== tasks) {
         previousTasks.current = tasks;
         portal.onSave(tasks);
       }
@@ -393,6 +454,10 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
   const changeConfig = (patch: Partial<Config>) => setConfig((c) => ({ ...c, ...patch }));
   const notify = (message: string) => setToast(message);
   const patchTask = (id: string, patch: Partial<Task>) => {
+    if (portal?.live && patch.priority) {
+      notify('Priority is unavailable in the live database.');
+      return;
+    }
     if (portal && patch.due) {
       const t = tasks.find((t) => t.id === id);
       const started = t?.attempts.find((a) => a.id === t.currentJobId)?.started;
@@ -472,6 +537,7 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
           </select>
         </span>
       );
+    if (key === 'priority' && portal?.live) return <span>—</span>;
     if (key === 'priority')
       return (
         <span className="priority-edit">
@@ -801,6 +867,7 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
         });
       else patchTask(t.id, { [kanbanField]: destination } as Partial<Task>);
     }
+    if (portal?.live) return;
     if (config.sorting.length) {
       notify('Field updated. Clear sorting to keep a manual card order.');
       return;
@@ -842,8 +909,13 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
   const updateFilter = (id: string, patch: Partial<Filter>) =>
     changeConfig({ filters: config.filters.map((f) => (f.id === id ? { ...f, ...patch } : f)) });
   const bulkPatch = (patch: Partial<Task>) => {
-    selectedIds.forEach((id) => patchTask(id, patch));
-    notify(`Updated ${selectedIds.length} productions`);
+    if (portal?.live && patch.priority) {
+      notify('Priority is unavailable in the live database.');
+      return;
+    }
+    void commitTasks(tasks.map((t) => (selectedIds.includes(t.id) ? { ...t, ...patch } : t)))
+      .then(() => notify(`Updated ${selectedIds.length} productions`))
+      .catch((e) => notify(e.message));
   };
   const chooseStage = (destination: string) => {
     if (!current || destination === current.stage) return;
@@ -856,19 +928,28 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
       stages.indexOf(destination) > stages.indexOf(current.stage) ? 'advance' : 'rectify',
     );
   };
-  const saveHandover = (updated: Task) => {
-    setTasks((all) => all.map((t) => (t.id === updated.id ? updated : t)));
-    notify('Handover recorded locally. All views updated.');
+  const saveHandover = async (updated: Task) => {
+    await commitTasks(tasks.map((t) => (t.id === updated.id ? updated : t)));
+    notify(
+      portal?.live
+        ? 'Handover saved to the database.'
+        : 'Handover recorded locally. All views updated.',
+    );
   };
-  const operatorCurrent = tasks.find((t) => t.id === operatorTask) || tasks[0];
+  const operatorCurrent =
+    tasks.find((t) => t.id === operatorTask) || (standalone ? undefined : tasks[0]);
   if ((screen === 'update' || standalone) && !operatorCurrent)
     return (
       <section>
-        <h2>No production tasks yet</h2>
-        <p>Create an item and job in Production to get started.</p>
+        <h2>{standalone && tasks.length ? 'Task unavailable' : 'No production tasks yet'}</h2>
+        <p>
+          {standalone && tasks.length
+            ? 'Check the task link before entering quantities.'
+            : 'Set up an item and stages, then use Start production.'}
+        </p>
       </section>
     );
-  if (screen === 'update' || standalone)
+  if ((screen === 'update' || standalone) && operatorCurrent)
     return (
       <div className="operator-page">
         {!standalone && (
@@ -887,7 +968,9 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
         <main className="operator-page-main">
           <div className="operator-page-label">
             {standalone ? 'SAHA · Production handover' : 'Production / Update Task Status'}
-            <span>{portal ? 'LOCAL WORKSPACE' : 'LOCAL MOCKUP'}</span>
+            <span>
+              {portal?.live ? 'LIVE PRODUCTION' : portal ? 'LOCAL WORKSPACE' : 'LOCAL MOCKUP'}
+            </span>
           </div>
           <TaskHandover
             key={operatorCurrent.id}
@@ -905,7 +988,7 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
     ? Math.round(tasks.reduce((n, t) => n + t.progress, 0) / tasks.length)
     : 0;
   return (
-    <div className="studio-shell">
+    <div aria-busy={busy} className="studio-shell">
       <aside className="studio-sidebar">
         <a href="/production-prototype.html" className="studio-brand">
           <span>
@@ -1242,19 +1325,21 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
                 <option key={s}>{s}</option>
               ))}
             </select>
-            <select
-              aria-label="Bulk priority"
-              defaultValue=""
-              onChange={(e) => {
-                if (e.target.value) bulkPatch({ priority: e.target.value as Task['priority'] });
-                e.target.value = '';
-              }}
-            >
-              <option value="">Set priority…</option>
-              {priorities.map((p) => (
-                <option key={p}>{p}</option>
-              ))}
-            </select>
+            {!portal?.live && (
+              <select
+                aria-label="Bulk priority"
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) bulkPatch({ priority: e.target.value as Task['priority'] });
+                  e.target.value = '';
+                }}
+              >
+                <option value="">Set priority…</option>
+                {priorities.map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </select>
+            )}
             <button onClick={() => setSelection({})}>
               Clear selection
               <X size={12} />
@@ -1459,7 +1544,7 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
                                     <Avatars names={task.assignees} />
                                   )}
                                   <span className="card-footer-spacer" />
-                                  {config.cardFields.includes('priority') && (
+                                  {!portal?.live && config.cardFields.includes('priority') && (
                                     <Priority value={task.priority} />
                                   )}
                                 </div>
@@ -1686,7 +1771,11 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
                       }
                     >
                       {Object.entries(fieldLabels)
-                        .filter(([id]) => id === s.id || !config.sorting.some((s) => s.id === id))
+                        .filter(
+                          ([id]) =>
+                            (!portal?.live || id !== 'priority') &&
+                            (id === s.id || !config.sorting.some((s) => s.id === id)),
+                        )
                         .map(([id, label]) => (
                           <option key={id} value={id}>
                             {label}
@@ -1760,58 +1849,62 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
                         'progress',
                       ]
                     : config.order.filter((id) => id !== 'select')
-                  ).map((id, i) => (
-                    <div className="field-option" key={id}>
-                      <label>
-                        <input
-                          type="checkbox"
-                          aria-label={fieldLabels[id]}
-                          disabled={id === 'name'}
-                          checked={
-                            config.mode === 'kanban'
-                              ? config.cardFields.includes(id)
-                              : config.visibility[id] !== false
-                          }
-                          onChange={(e) =>
-                            config.mode === 'kanban'
-                              ? changeConfig({
-                                  cardFields: e.target.checked
-                                    ? [...config.cardFields, id]
-                                    : config.cardFields.filter((x) => x !== id),
-                                })
-                              : changeConfig({
-                                  visibility: { ...config.visibility, [id]: e.target.checked },
-                                })
-                          }
-                        />
-                        {fieldLabels[id]}
-                        {['priority', 'progress'].includes(id) && <small>Preview</small>}
-                      </label>
-                      {config.mode !== 'kanban' && (
-                        <span>
-                          <button
-                            disabled={i === 0}
-                            aria-label={`Move ${id} left`}
-                            onClick={() => reorder(id, config.order[config.order.indexOf(id) - 1])}
-                          >
-                            ↑
-                          </button>
-                          <button
-                            disabled={i === config.order.length - 2}
-                            aria-label={`Move ${id} right`}
-                            onClick={() => {
-                              const order = [...config.order];
-                              const ix = order.indexOf(id);
-                              [order[ix], order[ix + 1]] = [order[ix + 1], order[ix]];
-                              changeConfig({ order });
-                            }}
-                          >
-                            ↓
-                          </button>
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                  )
+                    .filter((id) => !portal?.live || id !== 'priority')
+                    .map((id, i) => (
+                      <div className="field-option" key={id}>
+                        <label>
+                          <input
+                            type="checkbox"
+                            aria-label={fieldLabels[id]}
+                            disabled={id === 'name'}
+                            checked={
+                              config.mode === 'kanban'
+                                ? config.cardFields.includes(id)
+                                : config.visibility[id] !== false
+                            }
+                            onChange={(e) =>
+                              config.mode === 'kanban'
+                                ? changeConfig({
+                                    cardFields: e.target.checked
+                                      ? [...config.cardFields, id]
+                                      : config.cardFields.filter((x) => x !== id),
+                                  })
+                                : changeConfig({
+                                    visibility: { ...config.visibility, [id]: e.target.checked },
+                                  })
+                            }
+                          />
+                          {fieldLabels[id]}
+                          {['priority', 'progress'].includes(id) && <small>Preview</small>}
+                        </label>
+                        {config.mode !== 'kanban' && (
+                          <span>
+                            <button
+                              disabled={i === 0}
+                              aria-label={`Move ${id} left`}
+                              onClick={() =>
+                                reorder(id, config.order[config.order.indexOf(id) - 1])
+                              }
+                            >
+                              ↑
+                            </button>
+                            <button
+                              disabled={i === config.order.length - 2}
+                              aria-label={`Move ${id} right`}
+                              onClick={() => {
+                                const order = [...config.order];
+                                const ix = order.indexOf(id);
+                                [order[ix], order[ix + 1]] = [order[ix + 1], order[ix]];
+                                changeConfig({ order });
+                              }}
+                            >
+                              ↓
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                    ))}
                 </div>
               </>
             )}
@@ -2099,20 +2192,22 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
                     PRODUCTION BOARD <small>Persists across stages</small>
                   </div>
                   <div className="detail-fields">
-                    <label>
-                      Priority
-                      <span className="preview-field">
-                        Preview only
-                        <EditCell
-                          label="Detail priority"
-                          value={current.priority}
-                          options={priorities}
-                          onChange={(v) =>
-                            patchTask(current.id, { priority: v as Task['priority'] })
-                          }
-                        />
-                      </span>
-                    </label>
+                    {!portal?.live && (
+                      <label>
+                        Priority
+                        <span className="preview-field">
+                          Preview only
+                          <EditCell
+                            label="Detail priority"
+                            value={current.priority}
+                            options={priorities}
+                            onChange={(v) =>
+                              patchTask(current.id, { priority: v as Task['priority'] })
+                            }
+                          />
+                        </span>
+                      </label>
+                    )}
                     <label>
                       Planned pieces
                       <input aria-label="Planned pieces" value={current.pieces} readOnly />
@@ -2123,7 +2218,9 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
                       <span>
                         <Progress value={current.progress} />
                         <small className="fine-print">
-                          Illustrative, not live piece completion
+                          {portal?.live
+                            ? 'Position in the configured stage sequence'
+                            : 'Illustrative, not live piece completion'}
                         </small>
                       </span>
                     </label>
@@ -2178,6 +2275,7 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
                             )
                           }
                         >
+                          <option value="">Not set</option>
                           {statuses.map((status) => (
                             <option key={status}>{status}</option>
                           ))}
