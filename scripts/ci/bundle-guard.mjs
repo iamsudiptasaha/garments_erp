@@ -18,7 +18,9 @@ function visit(dir) {
       continue;
     }
     if (stat.size > maxAssetBytes)
-      errors.push(`${relative(root, file)}: ${stat.size} bytes exceeds the 25 MiB static asset limit`);
+      errors.push(
+        `${relative(root, file)}: ${stat.size} bytes exceeds the 25 MiB static asset limit`,
+      );
     if (/(?:^\.env|\.sql$|\.map$|\.pem$|\.key$|\.dump$|\.csv$)/i.test(name))
       errors.push(relative(root, file) + ': forbidden release file');
     if (!/\.(?:js|html|css|json|txt)$/.test(name)) continue;
@@ -43,7 +45,4 @@ visit(root);
 if (errors.length) {
   console.error([...new Set(errors)].join('\n'));
   process.exitCode = 1;
-} else
-  console.log(
-    'Release bundle passed asset size, credential and forbidden file checks.',
-  );
+} else console.log('Release bundle passed asset size, credential and forbidden file checks.');
