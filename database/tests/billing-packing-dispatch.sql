@@ -19,16 +19,14 @@ insert into garments_erp.item_produced_pieces (item_produced_id, item_size_list_
 values (982001, 982001, 10);
 update garments_erp.item set is_locked = true where id = 982001;
 
-insert into garments_erp.item_in_store (id, sku, verified_by_employee_id)
-values (982001, 'BILLING-TEST', 900002);
-insert into garments_erp.item_in_store_variation (id, item_in_store_id, name)
-values (982001, 982001, 'Test set');
-insert into garments_erp.sellable_unit (item_in_store_variation_id, item_id, item_size_list_id, share_weight)
+insert into garments_erp.sellable_product (id, sku, name)
+values (982001, 'BILLING-TEST', 'Test set');
+insert into garments_erp.sellable_unit (sellable_product_id, item_id, item_size_list_id, share_weight)
 values (982001, 982001, 982001, 2);
-update garments_erp.item_in_store_variation set verified_by_employee_id = 900002 where id = 982001;
+update garments_erp.sellable_product set verified_by_employee_id = 900002 where id = 982001;
 insert into garments_erp.price_type (id, name) values (982001, 'Billing test price');
 insert into garments_erp.item_in_store_price
-  (id, item_in_store_variation_id, price_type_id, version, price)
+  (id, sellable_product_id, price_type_id, version, price)
 values (982001, 982001, 982001, 'Billing v1', 120);
 
 insert into garments_erp.buyer_list (id, buyer_name) values (982001, 'Billing test buyer');
