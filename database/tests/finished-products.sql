@@ -75,13 +75,11 @@ end;
 $$;
 reset role;
 
-insert into garments_erp.item_in_store (sku, verified_by_employee_id) values ('FINISHED-TEST',900002)
-returning id as product_id \gset
-insert into garments_erp.item_in_store_variation (item_in_store_id,name) values (:product_id,'Finished test set')
+insert into garments_erp.sellable_product (sku,name) values ('FINISHED-TEST','Finished test set')
 returning id as variation_id \gset
-insert into garments_erp.sellable_unit (item_in_store_variation_id,item_id,item_size_list_id,share_weight)
+insert into garments_erp.sellable_unit (sellable_product_id,item_id,item_size_list_id,share_weight)
 values (:variation_id,981001,981001,2);
-update garments_erp.item_in_store_variation set verified_by_employee_id = 900002 where id = :variation_id;
+update garments_erp.sellable_product set verified_by_employee_id = 900002 where id = :variation_id;
 
 do $$
 begin

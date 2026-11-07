@@ -10,7 +10,18 @@ docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < da
 for migration in supabase/migrations/*.sql; do
   version=$(basename "$migration" | cut -d_ -f1)
   if [[ "$version" > 20261029201439 ]]; then
-    docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$migration" >/tmp/erp-ci-migration.log
+    if [[ "$version" == 20261108090000 ]]; then
+      while IFS= read -r line; do
+        if [[ "$line" == '\ir ../../supabase/migrations/20261108090000_sellable_product.sql' ]]; then
+          cat "$migration"
+        else
+          printf '%s\n' "$line"
+        fi
+      done < database/tests/sellable-product-backfill.sql |
+        docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 >/tmp/erp-ci-migration.log
+    else
+      docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$migration" >/tmp/erp-ci-migration.log
+    fi
   fi
 done
 docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < /tmp/erp-ci-seed.sql >/tmp/erp-ci-seed.log

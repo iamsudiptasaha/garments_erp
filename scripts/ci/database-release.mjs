@@ -17,6 +17,7 @@ const files = [
   '20261107132756_finished_products.sql',
   '20261107175500_transport_docket_ownership.sql',
   '20261107181537_billing_packing_dispatch.sql',
+  '20261108090000_sellable_product.sql',
 ];
 export function migrationConfig(env) {
   if (
