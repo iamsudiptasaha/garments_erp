@@ -499,58 +499,5 @@ begin
 end;
 $$;
 
-alter table garments_erp.knitting_bill_item add column fabric_name text;
-
-create function garments_access.set_knitting_fabric_name()
-returns trigger language plpgsql security definer set search_path = '' as $$
-begin
-  select nullif(btrim(yarn.yarn_count), '') || ' ' || nullif(btrim(fabric.name), '')
-  into new.fabric_name
-  from garments_erp.yarn_bill_item bill
-  join garments_erp.yarn_purchase_order_item po on po.id = bill.yarn_purchase_order_item_id
-  join garments_erp.yarn_type yarn on yarn.id = po.yarn_type_id
-  join garments_erp.fabric_type fabric on fabric.id = new.fabric_type_id
-  where bill.id = new.yarn_bill_item_id;
-  return new;
-end;
-$$;
-
-create trigger set_knitting_fabric_name
-before insert or update of fabric_type_id, yarn_bill_item_id, fabric_name
-on garments_erp.knitting_bill_item
-for each row execute function garments_access.set_knitting_fabric_name();
-
-update garments_erp.knitting_bill_item set fabric_name = null;
-
-create function garments_access.refresh_knitting_fabric_name()
-returns trigger language plpgsql security definer set search_path = '' as $$
-begin
-  update garments_erp.knitting_bill_item k
-  set fabric_name = derived.fabric_name
-  from garments_erp.view_knitted_fabric_name derived
-  where derived.id = k.id and k.fabric_name is distinct from derived.fabric_name
-    and case tg_table_name
-      when 'fabric_type' then k.fabric_type_id = new.id
-      when 'yarn_type' then derived.yarn_type_id = new.id
-      when 'yarn_bill_item' then k.yarn_bill_item_id = new.id
-      when 'yarn_purchase_order_item' then exists (
-        select 1 from garments_erp.yarn_bill_item bill
-        where bill.id = k.yarn_bill_item_id and bill.yarn_purchase_order_item_id = new.id
-      )
-    end;
-  return new;
-end;
-$$;
-create trigger refresh_knitting_fabric_name after update of name on garments_erp.fabric_type
-for each row execute function garments_access.refresh_knitting_fabric_name();
-create trigger refresh_knitting_fabric_name after update of yarn_count on garments_erp.yarn_type
-for each row execute function garments_access.refresh_knitting_fabric_name();
-create trigger refresh_knitting_fabric_name after update of yarn_purchase_order_item_id on garments_erp.yarn_bill_item
-for each row execute function garments_access.refresh_knitting_fabric_name();
-create trigger refresh_knitting_fabric_name after update of yarn_type_id on garments_erp.yarn_purchase_order_item
-for each row execute function garments_access.refresh_knitting_fabric_name();
-revoke all on function garments_access.set_knitting_fabric_name(),
-  garments_access.refresh_knitting_fabric_name() from public, anon, authenticated, service_role;
-
 notify pgrst, 'reload schema';
 commit;
