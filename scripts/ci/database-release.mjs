@@ -18,6 +18,7 @@ const files = [
   '20261107175500_transport_docket_ownership.sql',
   '20261107181537_billing_packing_dispatch.sql',
   '20261108090000_sellable_product.sql',
+  '20261108100000_po_billing_alignment.sql',
 ];
 export function migrationConfig(env) {
   if (
