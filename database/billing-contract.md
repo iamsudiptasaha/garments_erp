@@ -14,3 +14,41 @@ Each invoice uses a single sale mode. Each billing line has one PO item. Several
 The pickup command dispatches the transport and validates complete packing in the same transaction. A shipped carton freezes its billed lines. The invoice becomes dispatched once every carton has shipped. Returns reference billed size rows, restore inventory upon employee verification and leave PO allowance unchanged.
 
 The service uses `erp_billing_command`, `erp_pack_billing_carton`, `erp_dispatch_transport` and `erp_verify_billing_return` for writes. Read operations use `erp_billing_stock` and `erp_billing_po_allowance`. Billing commands record employee, request and before/after state. Stock checks reuse the Finished Products calculation and lock manufactured item rows. PO allocations additionally lock the affected PO items. Existing invoices and returns require explicit lifecycle reconciliation before this migration can run.
+
+## Sellable product catalogue
+
+`sellable_product` replaces the commercial parent and variation tables. Its ID
+is the former variation ID. Composition, PO lines, billing lines and
+`item_in_store_price` reference it through `sellable_product_id`. The pricing
+table and historical prices retain their existing identities.
+
+The catalogue owns its text SKU, style code, date, verification and activity.
+The migration preserves original parent values in read-only `legacy_parent`
+metadata and carries forward effective activity. It stops on unmapped records,
+duplicate copied SKUs or an active verified variation with an unverified parent.
+Existing RPC payload keys such as `variation_id` continue to identify the same
+sellable product.
+
+
+## PO–Billing redesign pricing
+
+For both formal PO and ad-hoc standard billing, the operator must type the final
+unit price. A selected price version can provide a suggestion. The invoice
+stores the explicitly entered price and may retain the selected version as
+provenance. Formal PO prices and invoice prices are independent. The billing
+command requires an explicit price even when a version is selected. The future
+billing UI enforces manual entry, since the database cannot distinguish typing
+from an autofilled value.
+
+For ad-hoc billing, the generated PO mirrors the invoice price, quantities and
+composition. The billing transaction writes the PO first and the invoice second.
+Cancellation preserves both records and prevents reuse of the PO. Line removal
+removes the corresponding generated PO line in the same transaction and retains
+its prior state in the audit history.
+
+
+Ad-hoc line saves require `product_type_list_id` and an `hsn_by_size` object
+keyed by `item_size_list.id`. HSN values are nonblank strings so leading zeroes
+are preserved. The command stores the product type on the generated PO line
+and the HSN on each corresponding PO size row. The existing product type
+lookup must be populated before ad-hoc billing is used.

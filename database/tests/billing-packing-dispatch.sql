@@ -29,15 +29,23 @@ insert into garments_erp.item_in_store_price
   (id, sellable_product_id, price_type_id, version, price)
 values (982001, 982001, 982001, 'Billing v1', 120);
 
+insert into garments_erp.gender (id, name) values (982001, 'Billing test gender');
+insert into garments_erp.product_type_list (id, product_type, gender_id)
+values (982001, 'Billing test product type', 982001);
 insert into garments_erp.buyer_list (id, buyer_name) values (982001, 'Billing test buyer');
 insert into garments_erp.buyer_po (id, po_number, buyer_list_id) values (982001, 'BILL-TEST-PO', 982001);
-insert into garments_erp.po_item (id, buyer_po_id) values (982001, 982001), (982002, 982001);
-insert into garments_erp.po_item_piece_per_size (po_item_id, item_size_list_id, pieces_ordered)
-values (982001, 982001, 6), (982002, 982001, 20);
+insert into garments_erp.po_item (id, buyer_po_id) values (982001, 982001), (982002, 982001), (982003, 982001);
+update garments_erp.po_item set sellable_product_id = 982001, ordered_units = 3, unit_price = 115
+where id = 982001;
+insert into garments_erp.po_item_piece_per_size (po_item_id, item_size_list_id, pieces_ordered, share_weight)
+values (982001, 982001, 6, 2), (982002, 982001, 20, null), (982003, 982001, 2, null);
 insert into garments_erp.transporter (id, contact_purpose_id, contacts_id) values (982001, 900001, 900002);
 
 do $$
 declare
+  adhoc_id bigint;
+  adhoc_line bigint;
+  adhoc_order bigint;
   standard_id bigint;
   exception_id bigint;
   cancelled_id bigint;
@@ -53,16 +61,62 @@ declare
   request_id uuid := gen_random_uuid();
   line jsonb;
 begin
+  adhoc_id := public.erp_billing_command(gen_random_uuid(), 900002,
+    '{"action":"create","buyer_list_id":982001,"invoice_number":"BILL-ADHOC","mode":"standard","adhoc":true}');
+  select adhoc_po_id into strict adhoc_order from garments_erp.billing where id = adhoc_id;
+  line := jsonb_build_object('action','save_line','billing_id',adhoc_id,
+    'variation_id',982001,'sets',2,'unit_price',135,
+    'product_type_list_id',982001,'hsn_by_size','{"982001":"06109"}'::jsonb);
+  begin
+    perform public.erp_billing_command(gen_random_uuid(), 900002, line - 'product_type_list_id');
+    raise exception 'TEST: ad-hoc PO accepted a missing product type';
+  exception when raise_exception then
+    if sqlerrm <> 'Ad-hoc PO product type required' then raise; end if;
+  end;
+  begin
+    perform public.erp_billing_command(gen_random_uuid(), 900002, line - 'hsn_by_size');
+    raise exception 'TEST: ad-hoc PO accepted a missing HSN';
+  exception when raise_exception then
+    if sqlerrm <> 'Ad-hoc PO HSN code required for each size' then raise; end if;
+  end;
+  perform public.erp_billing_command(gen_random_uuid(), 900002, line);
+  select id into strict adhoc_line from garments_erp.billing_item where billing_id = adhoc_id;
+  perform public.erp_billing_command(gen_random_uuid(), 900002,
+    line || jsonb_build_object('line_id',adhoc_line,'sets',1,'unit_price',140));
+  if not exists (
+    select 1 from garments_erp.billing_item b
+    join garments_erp.po_item p on p.id = b.po_item_id
+    join garments_erp.po_item_piece_per_size s on s.po_item_id = p.id
+    where b.id = adhoc_line and p.buyer_po_id = adhoc_order
+      and b.billed_units = p.ordered_units and p.ordered_units = 1
+      and b.billed_price = p.unit_price and p.unit_price = 140
+      and s.pieces_ordered = 2 and s.share_weight = 2
+      and p.product_type_list_id = 982001 and s.hsn_code = '06109'
+  ) then raise exception 'TEST: ad-hoc PO did not mirror amended invoice'; end if;
+  perform public.erp_billing_command(gen_random_uuid(), 900002,
+    jsonb_build_object('action','remove_line','billing_id',adhoc_id,'line_id',adhoc_line));
+  if exists (select 1 from garments_erp.po_item where buyer_po_id = adhoc_order) then
+    raise exception 'TEST: ad-hoc PO line survived invoice line removal';
+  end if;
+  perform public.erp_billing_command(gen_random_uuid(), 900002, line);
+  perform public.erp_billing_command(gen_random_uuid(), 900002,
+    jsonb_build_object('action','cancel','billing_id',adhoc_id));
+  if not exists (select 1 from garments_erp.buyer_po
+    where id = adhoc_order and po_source_type = 'adhoc' and cancelled_at is not null)
+    or (select available from garments_access.finished_balances(982001)) <> 10 then
+    raise exception 'TEST: ad-hoc cancellation did not preserve PO and release stock';
+  end if;
+
   standard_id := public.erp_billing_command(request_id, 900002,
-    '{"action":"create","invoice_number":"BILL-STD","mode":"standard"}');
+    '{"action":"create","buyer_list_id":982001,"invoice_number":"BILL-STD","mode":"standard"}');
   if standard_id <> public.erp_billing_command(request_id, 900002,
-    '{"action":"create","invoice_number":"BILL-STD","mode":"standard"}') then
+    '{"action":"create","buyer_list_id":982001,"invoice_number":"BILL-STD","mode":"standard"}') then
     raise exception 'TEST: request retry did not preserve invoice identity';
   end if;
   cancelled_id := public.erp_billing_command(gen_random_uuid(), 900002,
-    '{"action":"create","invoice_number":"BILL-CANCEL","mode":"exception"}');
+    '{"action":"create","buyer_list_id":982001,"invoice_number":"BILL-CANCEL","mode":"exception"}');
   perform public.erp_billing_command(gen_random_uuid(), 900002, jsonb_build_object(
-    'action','save_line','billing_id',cancelled_id,'po_item_id',982001,
+    'action','save_line','billing_id',cancelled_id,'po_item_id',982003,
     'pieces','[{"size_id":982001,"pieces":2,"price":40}]'::jsonb));
   if (select (on_hand, held, available) from public.erp_billing_stock(982001))
     is distinct from row(10::bigint,2::bigint,8::bigint) then
@@ -76,9 +130,9 @@ begin
     raise exception 'TEST: cancellation failed to release holds and preserve invoice lines';
   end if;
   exception_id := public.erp_billing_command(gen_random_uuid(), 900002,
-    '{"action":"create","invoice_number":"BILL-EX","mode":"exception"}');
+    '{"action":"create","buyer_list_id":982001,"invoice_number":"BILL-EX","mode":"exception"}');
   line := jsonb_build_object('action','save_line','billing_id',standard_id,
-    'po_item_id',982001,'variation_id',982001,'price_version_id',982001,'sets',2);
+    'po_item_id',982001,'variation_id',982001,'price_version_id',982001,'sets',2,'unit_price',125);
   perform public.erp_billing_command(gen_random_uuid(), 900002, line);
   select id into strict standard_line from garments_erp.billing_item where billing_id = standard_id;
   line := line || jsonb_build_object('line_id', standard_line);
@@ -90,7 +144,7 @@ begin
 
   begin
     perform public.erp_billing_command(gen_random_uuid(), 900002, jsonb_build_object(
-      'action','save_line','billing_id',exception_id,'po_item_id',982001,
+      'action','save_line','billing_id',exception_id,'po_item_id',982003,
       'pieces','[{"size_id":982001,"pieces":3,"price":40}]'::jsonb));
     raise exception 'TEST: exceeded PO allowance';
   exception when raise_exception then
@@ -105,7 +159,7 @@ begin
     if sqlerrm <> 'Insufficient physical stock or PO allowance' then raise; end if;
   end;
   perform public.erp_billing_command(gen_random_uuid(), 900002, jsonb_build_object(
-    'action','save_line','billing_id',exception_id,'po_item_id',982001,
+    'action','save_line','billing_id',exception_id,'po_item_id',982003,
     'pieces','[{"size_id":982001,"pieces":2,"price":40}]'::jsonb));
   select id into strict exception_line from garments_erp.billing_item where billing_id = exception_id;
   select id into strict exception_component from garments_erp.billing_item_piece_per_size where billing_item_id = exception_line;
@@ -119,7 +173,7 @@ begin
 
   perform public.erp_billing_command(gen_random_uuid(),900002,line || '{"sets":1}'::jsonb);
   if (select available from garments_access.finished_balances(982001)) <> 6
-    or (select remaining from public.erp_billing_po_allowance(982001)) <> 2 then
+    or (select remaining from public.erp_billing_po_allowance(982001)) <> 4 then
     raise exception 'TEST: finalized amendment did not apply net quantities';
   end if;
   perform public.erp_billing_command(gen_random_uuid(),900002,line);
@@ -175,7 +229,7 @@ begin
   perform public.erp_verify_billing_return(gen_random_uuid(),standard_id,900002,
     jsonb_build_array(jsonb_build_object('billed_piece_id',component_id,'pieces',1,'price',35)));
   if (select available from garments_access.finished_balances(982001)) <> 5
-    or (select remaining from public.erp_billing_po_allowance(982001)) <> 0 then
+    or (select remaining from public.erp_billing_po_allowance(982001)) <> 2 then
     raise exception 'TEST: verified return changed incorrect balance';
   end if;
   begin

@@ -1,0 +1,484 @@
+begin;
+
+alter table garments_erp.buyer_po
+  add column po_source_type text not null default 'formal' check (po_source_type in ('formal', 'adhoc')),
+  add column cancelled_at timestamptz;
+
+alter table garments_erp.po_item
+  add column ordered_units integer check (ordered_units > 0),
+  add column unit_price numeric check (unit_price >= 0 and unit_price < 'Infinity'::numeric),
+  add constraint po_standard_terms check (
+    (ordered_units is null and unit_price is null)
+    or (sellable_product_id is not null and ordered_units is not null and unit_price is not null)
+  );
+
+alter table garments_erp.po_item_piece_per_size
+  add column share_weight integer check (share_weight > 0);
+
+alter table garments_erp.billing
+  add column buyer_list_id bigint references garments_erp.buyer_list,
+  add column adhoc_po_id bigint unique references garments_erp.buyer_po;
+
+do $$
+begin
+  if exists (
+    select 1 from garments_erp.billing_item l
+    join garments_erp.po_item p on p.id = l.po_item_id
+    join garments_erp.buyer_po h on h.id = p.buyer_po_id
+    group by l.billing_id having count(distinct h.buyer_list_id) > 1
+  ) then raise exception 'Reconcile invoices linked to multiple buyers before PO–billing alignment'; end if;
+end;
+$$;
+
+update garments_erp.billing b set buyer_list_id = buyers.buyer_id
+from (
+  select l.billing_id, min(h.buyer_list_id) as buyer_id
+  from garments_erp.billing_item l
+  join garments_erp.po_item p on p.id = l.po_item_id
+  join garments_erp.buyer_po h on h.id = p.buyer_po_id
+  group by l.billing_id
+) buyers where buyers.billing_id = b.id;
+
+alter table garments_erp.billing_item rename column set_quantity to billed_units;
+alter table garments_erp.billing_item drop constraint billing_item_sale_shape;
+alter table garments_erp.billing_item add constraint billing_item_sale_shape check (
+  (sellable_product_id is null and price_version_id is null
+    and billed_units is null and billed_price is null)
+  or (sellable_product_id is not null and billed_units is not null
+    and billed_price is not null and billed_price >= 0 and billed_price < 'Infinity'::numeric)
+);
+
+create or replace function garments_access.check_billing_packing(p_id bigint, p_complete boolean)
+returns void language plpgsql set search_path = '' as $$
+begin
+  if exists (
+    select 1
+    from garments_erp.billing_item l
+    left join garments_erp.carton_item ci on ci.billing_item_id = l.id
+    where l.billing_id = p_id and l.billed_units is not null
+    group by l.id
+    having coalesce(sum(ci.packed_units), 0) > l.billed_units
+      or (p_complete and coalesce(sum(ci.packed_units), 0) <> l.billed_units)
+  ) or exists (
+    select 1
+    from garments_erp.billing_item_piece_per_size bp
+    join garments_erp.billing_item l on l.id = bp.billing_item_id
+    left join garments_erp.carton_item_piece_per_size cp on cp.billing_item_piece_per_size_id = bp.id
+    where l.billing_id = p_id and l.billed_units is null
+    group by bp.id
+    having coalesce(sum(cp.packed_pieces), 0) > bp.billed_pieces
+      or (p_complete and coalesce(sum(cp.packed_pieces), 0) <> bp.billed_pieces)
+  ) then raise exception 'Carton allocations exceed billed quantities or packing is incomplete'; end if;
+  if p_complete and exists (
+    select 1 from garments_erp.carton c
+    join garments_erp.packing_list pl on pl.id = c.packing_list_id
+    where pl.billing_id = p_id and not exists (
+      select 1 from garments_erp.carton_item ci where ci.carton_id = c.id
+    )
+  ) then raise exception 'Empty cartons must be removed before dispatch'; end if;
+end;
+$$;
+
+-- A packing list and carton numbers are stable. Save replaces the contents
+-- of one unshipped carton, so retries produce the same allocations.
+create or replace function public.erp_pack_billing_carton(
+  p_billing_id bigint, p_list_number text, p_carton_number text, p_allocations jsonb
+) returns bigint language plpgsql security definer set search_path = '' as $$
+declare
+  list_id bigint;
+  packed_carton_id bigint;
+  allocation_id bigint;
+  allocation jsonb;
+  line garments_erp.billing_item%rowtype;
+begin
+  if current_setting('transaction_isolation') <> 'read committed' then
+    raise exception 'Packing requires read committed isolation';
+  end if;
+  perform 1 from garments_erp.billing b
+  join garments_erp.billing_status_type st on st.id = b.billing_status_type_id
+  where b.id = p_billing_id and st.type = 'finalized' for update of b;
+  if not found then raise exception 'Packing requires a finalized invoice'; end if;
+  if jsonb_typeof(p_allocations) is distinct from 'array' then raise exception 'Allocations must be an array'; end if;
+
+  insert into garments_erp.packing_list (billing_id, packing_list_number)
+  values (p_billing_id, p_list_number) on conflict (billing_id) do nothing;
+  select id into strict list_id from garments_erp.packing_list
+  where billing_id = p_billing_id and packing_list_number = p_list_number;
+  insert into garments_erp.carton (packing_list_id, carton_number)
+  values (list_id, p_carton_number) on conflict (packing_list_id, carton_number) do nothing;
+  select id into strict packed_carton_id from garments_erp.carton
+  where packing_list_id = list_id and carton_number = p_carton_number;
+  if exists (
+    select 1 from garments_erp.transport_item ti
+    join garments_erp.transport t on t.id = ti.transport_id
+    where ti.carton_id = packed_carton_id and t.dispatched_at is not null
+  ) then raise exception 'Dispatched carton is immutable'; end if;
+
+  delete from garments_erp.carton_item where carton_id = packed_carton_id;
+  if p_allocations = '[]'::jsonb then
+    delete from garments_erp.carton where id = packed_carton_id;
+    return null;
+  end if;
+
+  for allocation in select value from jsonb_array_elements(p_allocations) loop
+    select * into strict line from garments_erp.billing_item
+    where id = (allocation->>'line_id')::bigint and billing_id = p_billing_id;
+    if line.billed_units is not null then
+      if (allocation->>'sets')::integer is null or allocation ? 'pieces' then
+        raise exception 'Standard packing requires whole sets';
+      end if;
+      insert into garments_erp.carton_item (carton_id, billing_item_id, packed_units)
+      values (packed_carton_id, line.id, (allocation->>'sets')::integer);
+    else
+      if allocation ? 'sets' or jsonb_typeof(allocation->'pieces') is distinct from 'array'
+         or allocation->'pieces' = '[]'::jsonb then raise exception 'Exception packing requires physical pieces'; end if;
+      if exists (
+        select 1 from jsonb_to_recordset(allocation->'pieces') as part(pieces numeric)
+        where pieces <> trunc(pieces)
+      ) then raise exception 'Packing requires whole physical pieces'; end if;
+      insert into garments_erp.carton_item (carton_id, billing_item_id)
+      values (packed_carton_id, line.id) returning id into allocation_id;
+      insert into garments_erp.carton_item_piece_per_size
+        (carton_item_id, billing_item_piece_per_size_id, packed_pieces)
+      select allocation_id, (
+        select bp.id from garments_erp.billing_item_piece_per_size bp
+        where bp.id = part.billed_piece_id and bp.billing_item_id = line.id
+      ), part.pieces
+      from jsonb_to_recordset(allocation->'pieces') as part(billed_piece_id bigint, pieces integer);
+    end if;
+  end loop;
+  perform garments_access.check_billing_packing(p_billing_id, false);
+  return packed_carton_id;
+end;
+$$;
+revoke all on function public.erp_pack_billing_carton(bigint, text, text, jsonb) from public, anon, authenticated;
+grant execute on function public.erp_pack_billing_carton(bigint, text, text, jsonb) to service_role;
+
+-- Generated orders can only be written in the billing command's execution role.
+create function garments_access.guard_generated_po()
+returns trigger language plpgsql set search_path = '' as $$
+declare
+  row_data jsonb := to_jsonb(case when tg_op = 'DELETE' then old else new end);
+  old_data jsonb := to_jsonb(old);
+  generated_order boolean;
+begin
+  if tg_table_name = 'buyer_po' then
+    generated_order := 'adhoc' in (row_data->>'po_source_type', old_data->>'po_source_type');
+  elsif tg_table_name = 'po_item' then
+    select exists (select 1 from garments_erp.buyer_po
+      where po_source_type = 'adhoc' and id in
+        ((row_data->>'buyer_po_id')::bigint, (old_data->>'buyer_po_id')::bigint))
+    into generated_order;
+  else
+    select exists (
+      select 1 from garments_erp.po_item p join garments_erp.buyer_po h on h.id = p.buyer_po_id
+      where h.po_source_type = 'adhoc' and p.id in
+        ((row_data->>'po_item_id')::bigint, (old_data->>'po_item_id')::bigint)
+    ) into generated_order;
+  end if;
+  if generated_order and current_user <> (
+    select pg_get_userbyid(proowner) from pg_catalog.pg_proc
+    where oid = 'public.erp_billing_command(uuid,bigint,jsonb)'::regprocedure
+  ) then raise exception 'Generated POs can only be changed through billing'; end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end;
+$$;
+
+create trigger guard_generated_po before insert or update or delete on garments_erp.buyer_po
+for each row execute function garments_access.guard_generated_po();
+create trigger guard_generated_po before insert or update or delete on garments_erp.po_item
+for each row execute function garments_access.guard_generated_po();
+create trigger guard_generated_po before insert or update or delete on garments_erp.po_item_piece_per_size
+for each row execute function garments_access.guard_generated_po();
+
+create or replace function garments_access.guard_billed_po_allowance()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  used numeric;
+begin
+  perform 1 from garments_erp.po_item where id = old.po_item_id for update;
+  -- Billing validates the replacement quantities after updating both sides.
+  if exists (
+    select 1 from garments_erp.po_item p join garments_erp.buyer_po h on h.id = p.buyer_po_id
+    where p.id = old.po_item_id and h.po_source_type = 'adhoc'
+  ) then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  select coalesce(sum(bp.billed_pieces), 0) into used
+  from garments_erp.billing_item_piece_per_size bp
+  join garments_erp.billing_item l on l.id = bp.billing_item_id
+  join garments_erp.billing b on b.id = l.billing_id
+  join garments_erp.billing_status_type st on st.id = b.billing_status_type_id
+  where l.po_item_id = old.po_item_id and bp.item_size_list_id = old.item_size_list_id
+    and st.type in ('draft', 'finalized', 'dispatched');
+  if used > 0 and (tg_op = 'DELETE' or new.pieces_ordered < used
+    or (new.po_item_id, new.item_size_list_id) is distinct from (old.po_item_id, old.item_size_list_id)) then
+    raise exception 'PO allowance already allocated';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end;
+$$;
+create or replace function public.erp_billing_command(p_request_id uuid, p_employee_id bigint, p_command jsonb)
+returns bigint language plpgsql security definer set search_path = '' as $$
+declare
+  invoice_id bigint := (p_command->>'billing_id')::bigint;
+  line_id bigint := (p_command->>'line_id')::bigint;
+  po_id bigint := (p_command->>'po_item_id')::bigint;
+  variation_id bigint := (p_command->>'variation_id')::bigint;
+  version_id bigint := (p_command->>'price_version_id')::bigint;
+  sets integer := (p_command->>'sets')::integer;
+  action text := p_command->>'action';
+  buyer_id bigint := (p_command->>'buyer_list_id')::bigint;
+  shadow_id bigint;
+  po_product_type_id bigint := (p_command->>'product_type_list_id')::bigint;
+  hsn_by_size jsonb := p_command->'hsn_by_size';
+  po_line garments_erp.po_item%rowtype;
+  invoice_status text;
+  invoice_mode text;
+  previous jsonb;
+  components jsonb;
+  set_price numeric;
+  prior garments_erp.billing_audit%rowtype;
+  old_line garments_erp.billing_item%rowtype;
+begin
+  if current_setting('transaction_isolation') <> 'read committed' then
+    raise exception 'Billing commands require read committed isolation';
+  end if;
+  if p_request_id is null or not exists (
+    select 1 from garments_erp.employee where id = p_employee_id and is_active
+  ) then raise exception 'Request ID and active employee required'; end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_request_id::text, 0));
+  select * into prior from garments_erp.billing_audit where request_id = p_request_id;
+  if found then
+    if (prior.command, prior.employee_id) is distinct from (p_command, p_employee_id) then
+      raise exception 'Request ID already used';
+    end if;
+    return prior.billing_id;
+  end if;
+
+  if action = 'create' then
+    if buyer_id is null then raise exception 'Buyer required'; end if;
+    if coalesce((p_command->>'adhoc')::boolean, false) then
+      insert into garments_erp.buyer_po (po_number, buyer_list_id, po_issue_date, po_source_type)
+      values ('ADHOC-' || p_request_id, buyer_id, (p_command->>'invoice_date')::date, 'adhoc')
+      returning id into shadow_id;
+    end if;
+    insert into garments_erp.billing (invoice_number, invoice_date, billing_status_type_id, sale_mode_type_id, buyer_list_id, adhoc_po_id)
+    values (p_command->>'invoice_number', (p_command->>'invoice_date')::date,
+      (select id from garments_erp.billing_status_type where type = 'draft'),
+      (select id from garments_erp.sale_mode_type where type = p_command->>'mode'), buyer_id, shadow_id)
+    returning id into invoice_id;
+  else
+    select st.type, mode.type, b.buyer_list_id, b.adhoc_po_id
+      into strict invoice_status, invoice_mode, buyer_id, shadow_id
+    from garments_erp.billing b
+    join garments_erp.billing_status_type st on st.id = b.billing_status_type_id
+    join garments_erp.sale_mode_type mode on mode.id = b.sale_mode_type_id
+    where b.id = invoice_id for update of b;
+    previous := garments_access.billing_snapshot(invoice_id);
+    if invoice_status not in ('draft', 'finalized') then raise exception 'Invoice is immutable'; end if;
+
+    if action in ('save_line', 'remove_line') then
+      if line_id is not null then
+        select * into strict old_line from garments_erp.billing_item
+        where id = line_id and billing_id = invoice_id;
+        if exists (
+          select 1 from garments_erp.carton_item ci
+          join garments_erp.transport_item ti on ti.carton_id = ci.carton_id
+          join garments_erp.transport t on t.id = ti.transport_id
+          where ci.billing_item_id = line_id and t.dispatched_at is not null
+        ) then raise exception 'A dispatched carton freezes its billed line'; end if;
+      end if;
+      if action = 'save_line' then
+        if shadow_id is not null then
+          if po_id is not null then raise exception 'Ad-hoc billing owns its PO'; end if;
+          po_id := old_line.po_item_id;
+        else
+          perform id from garments_erp.po_item
+          where id in (po_id, old_line.po_item_id) order by id for update;
+          select p.* into strict po_line
+          from garments_erp.po_item p
+          join garments_erp.buyer_po h on h.id = p.buyer_po_id
+          where p.id = po_id and h.buyer_list_id = buyer_id and h.po_source_type = 'formal'
+          for share of h;
+        end if;
+      end if;
+
+      if action = 'save_line' and invoice_mode = 'standard' then
+        if sets is null or sets < 1 then raise exception 'Positive set quantity required'; end if;
+        variation_id := coalesce(variation_id, po_line.sellable_product_id);
+        if shadow_id is null and (
+          po_line.ordered_units is null or po_line.sellable_product_id is distinct from variation_id
+        ) then raise exception 'Standard billing requires a matching standard PO line'; end if;
+        set_price := (p_command->>'unit_price')::numeric;
+        if set_price is null or set_price < 0 or set_price >= 'Infinity'::numeric then
+          raise exception 'Explicit unit price required';
+        end if;
+        perform 1 from garments_erp.sellable_product
+        where id = variation_id and is_active and verified_at is not null
+          and verified_by_employee_id is not null for share;
+        if not found then raise exception 'Verified active product required'; end if;
+        if version_id is not null then
+          perform 1 from garments_erp.item_in_store_price
+          where id = version_id and sellable_product_id = variation_id for share;
+          if not found then raise exception 'Price version belongs to another product'; end if;
+        end if;
+        if shadow_id is null then
+          select jsonb_agg(jsonb_build_object(
+            'size_id', item_size_list_id, 'pieces', share_weight::bigint * sets, 'weight', share_weight
+          )) into components from garments_erp.po_item_piece_per_size where po_item_id = po_id;
+          if exists (
+            select 1
+            from (select item_size_list_id, share_weight from garments_erp.po_item_piece_per_size
+                  where po_item_id = po_id) ordered
+            full join (select item_size_list_id, share_weight from garments_erp.sellable_unit
+                       where sellable_product_id = variation_id) recipe using (item_size_list_id)
+            where ordered.share_weight is distinct from recipe.share_weight
+          ) then raise exception 'PO composition differs from the verified product'; end if;
+          if exists (
+            select 1 from garments_erp.po_item_piece_per_size
+            where po_item_id = po_id and (
+              share_weight is null or pieces_ordered <> share_weight::bigint * po_line.ordered_units
+            )
+          ) then raise exception 'Invalid standard PO composition'; end if;
+        else
+          select jsonb_agg(jsonb_build_object(
+            'size_id', item_size_list_id, 'pieces', share_weight::bigint * sets, 'weight', share_weight
+          )) into components from garments_erp.sellable_unit where sellable_product_id = variation_id;
+        end if;
+      elsif action = 'save_line' then
+        if variation_id is not null or version_id is not null or sets is not null then
+          raise exception 'Exception billing takes only physical pieces and prices';
+        end if;
+        if po_line.sellable_product_id is not null then
+          raise exception 'Exception billing requires an exception PO line';
+        end if;
+        components := p_command->'pieces';
+      else
+        components := '[]'::jsonb;
+      end if;
+
+      if action = 'save_line' and (
+        jsonb_typeof(components) is distinct from 'array' or components = '[]'::jsonb
+      ) then raise exception 'At least one size component required'; end if;
+
+      if action = 'save_line' and old_line.sellable_product_id is distinct from variation_id
+         and exists (select 1 from garments_erp.carton_item where billing_item_id = line_id) then
+        raise exception 'Remove carton allocations before changing the packed variation';
+      end if;
+      perform i.id from garments_erp.item i
+      where i.id in (
+        select s.item_id from garments_erp.item_size_list s
+        where s.id in (
+          select p.item_size_list_id from garments_erp.billing_item_piece_per_size p
+          where p.billing_item_id = line_id
+          union
+          select (part->>'size_id')::bigint from jsonb_array_elements(components) part
+        )
+      ) order by i.id for update;
+
+
+      if action = 'remove_line' then
+        if line_id is null then raise exception 'Billing line required'; end if;
+        if invoice_status = 'finalized' and not exists (
+          select 1 from garments_erp.billing_item where billing_id = invoice_id and id <> line_id
+        ) then raise exception 'A finalized invoice requires at least one line'; end if;
+        delete from garments_erp.billing_item_piece_per_size where billing_item_id = line_id;
+        delete from garments_erp.billing_item where id = line_id;
+        if shadow_id is not null then
+          delete from garments_erp.po_item_piece_per_size where po_item_id = old_line.po_item_id;
+          delete from garments_erp.po_item where id = old_line.po_item_id;
+        end if;
+      else
+        if exists (
+          select 1 from jsonb_to_recordset(components) as c(size_id bigint, pieces numeric, price numeric)
+          where c.size_id is null or c.pieces is null or c.pieces <= 0 or c.pieces <> trunc(c.pieces)
+            or (invoice_mode = 'exception' and c.price is null)
+        ) then raise exception 'Each component requires a size, whole pieces and an exception price'; end if;
+        if shadow_id is not null then
+          if po_product_type_id is null then
+            raise exception 'Ad-hoc PO product type required';
+          end if;
+          if jsonb_typeof(hsn_by_size) is distinct from 'object' or exists (
+            select 1 from jsonb_to_recordset(components) as c(size_id bigint)
+            where jsonb_typeof(hsn_by_size->(c.size_id::text)) is distinct from 'string'
+              or nullif(btrim(hsn_by_size->>(c.size_id::text)), '') is null
+          ) then raise exception 'Ad-hoc PO HSN code required for each size'; end if;
+          if po_id is null then
+            insert into garments_erp.po_item
+              (buyer_po_id, sellable_product_id, ordered_units, unit_price, product_type_list_id)
+            values (shadow_id, variation_id, sets, set_price, po_product_type_id) returning id into po_id;
+          else
+            update garments_erp.po_item set sellable_product_id = variation_id,
+              ordered_units = sets, unit_price = set_price, product_type_list_id = po_product_type_id
+            where id = po_id;
+          end if;
+          insert into garments_erp.po_item_piece_per_size
+            (po_item_id, item_size_list_id, pieces_ordered, share_weight, base_price, hsn_code)
+          select po_id, size_id, pieces, weight, price, btrim(hsn_by_size->>(size_id::text))
+          from jsonb_to_recordset(components) as c(size_id bigint, weight integer, pieces numeric, price numeric)
+          on conflict (po_item_id, item_size_list_id) do update
+          set pieces_ordered = excluded.pieces_ordered, share_weight = excluded.share_weight,
+              base_price = excluded.base_price, hsn_code = excluded.hsn_code;
+        end if;
+        if line_id is null then
+          insert into garments_erp.billing_item (
+            billing_id, po_item_id, sellable_product_id, price_version_id, billed_units, billed_price
+          ) values (invoice_id, po_id, variation_id, version_id, sets, set_price) returning id into line_id;
+        else
+          update garments_erp.billing_item
+          set po_item_id = po_id, sellable_product_id = variation_id,
+              price_version_id = version_id, billed_units = sets, billed_price = set_price
+          where id = line_id;
+        end if;
+        delete from garments_erp.billing_item_piece_per_size p where p.billing_item_id = line_id
+          and not exists (select 1 from jsonb_array_elements(components) part where (part->>'size_id')::bigint = p.item_size_list_id);
+        insert into garments_erp.billing_item_piece_per_size
+          (billing_item_id, item_size_list_id, share_weight, billed_pieces, price_per_piece)
+        select line_id, size_id, case when invoice_mode = 'standard' then weight else 1 end, pieces,
+               case when invoice_mode = 'exception' then price end
+        from jsonb_to_recordset(components) as c(size_id bigint, weight numeric, pieces numeric, price numeric)
+        on conflict (billing_item_id, item_size_list_id) do update
+        set share_weight = excluded.share_weight, billed_pieces = excluded.billed_pieces,
+            price_per_piece = excluded.price_per_piece;
+
+        if shadow_id is not null then
+          delete from garments_erp.po_item_piece_per_size p where p.po_item_id = po_id
+            and not exists (select 1 from garments_erp.billing_item_piece_per_size b
+              where b.billing_item_id = line_id and b.item_size_list_id = p.item_size_list_id);
+        end if;
+
+        if exists (
+          select 1 from garments_erp.billing_item_piece_per_size p
+          join garments_access.finished_balances(null) s on s.size_id = p.item_size_list_id
+          left join public.erp_billing_po_allowance(po_id) po on po.item_size_list_id = p.item_size_list_id
+          where p.billing_item_id = line_id and (s.available < 0 or po.remaining is null or po.remaining < 0)
+        ) then raise exception 'Insufficient physical stock or PO allowance'; end if;
+      end if;
+      perform garments_access.check_billing_packing(invoice_id, false);
+    elsif action = 'finalize' and invoice_status = 'draft' then
+      if not exists (select 1 from garments_erp.billing_item where billing_id = invoice_id) then
+        raise exception 'Cannot finalize an empty invoice';
+      end if;
+      update garments_erp.billing set billing_status_type_id = (
+        select id from garments_erp.billing_status_type where type = 'finalized'
+      ), verified_by = p_employee_id, finalized_at = now() where id = invoice_id;
+    elsif action = 'cancel' and invoice_status = 'draft' then
+      update garments_erp.billing set billing_status_type_id = (
+        select id from garments_erp.billing_status_type where type = 'cancelled'
+      ) where id = invoice_id;
+      update garments_erp.buyer_po set cancelled_at = now() where id = shadow_id;
+    else
+      raise exception 'Invalid billing command or status transition';
+    end if;
+  end if;
+  insert into garments_erp.billing_audit (request_id, billing_id, employee_id, command, before_state, after_state)
+  values (p_request_id, invoice_id, p_employee_id, p_command, previous, garments_access.billing_snapshot(invoice_id));
+  return invoice_id;
+end;
+$$;
+
+commit;
