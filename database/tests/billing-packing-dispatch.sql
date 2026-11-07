@@ -106,8 +106,8 @@ begin
   perform public.erp_billing_command(gen_random_uuid(), 900002,
     jsonb_build_object('action','cancel','billing_id',adhoc_id));
   if not exists (select 1 from garments_erp.buyer_po
-    where id = adhoc_order and po_source_type_id = garments_access.adhoc_po_source_id() and cancelled_at is not null)
-    or (select available from garments_access.finished_balances(982001)) <> 10 then
+    where id = adhoc_order and po_source_type_id = garments_erp.adhoc_po_source_id() and cancelled_at is not null)
+    or (select available from garments_erp.finished_balances(982001)) <> 10 then
     raise exception 'TEST: ad-hoc cancellation did not preserve PO and release stock';
   end if;
 
@@ -128,7 +128,7 @@ begin
   end if;
   perform public.erp_billing_command(gen_random_uuid(), 900002,
     jsonb_build_object('action','cancel','billing_id',cancelled_id));
-  if (select available from garments_access.finished_balances(982001)) <> 10
+  if (select available from garments_erp.finished_balances(982001)) <> 10
     or (select remaining from public.erp_billing_po_allowance(982001)) <> 6
     or not exists (select 1 from garments_erp.billing_item where billing_id = cancelled_id) then
     raise exception 'TEST: cancellation failed to release holds and preserve invoice lines';
@@ -148,7 +148,7 @@ begin
   exception when foreign_key_violation then null;
   end;
   select id into strict component_id from garments_erp.billing_item_piece_per_size where billing_item_id = standard_line;
-  if (select available from garments_access.finished_balances(982001)) <> 6
+  if (select available from garments_erp.finished_balances(982001)) <> 6
     or (select remaining from public.erp_billing_po_allowance(982001)) <> 2 then
     raise exception 'TEST: draft hold or PO allowance incorrect';
   end if;
@@ -180,14 +180,14 @@ begin
   ) then raise exception 'TEST: exception billing must store pieces without a set weight'; end if;
   perform public.erp_billing_command(gen_random_uuid(), 900002,
     jsonb_build_object('action','finalize','billing_id',standard_id));
-  if (select available from garments_access.finished_balances(982001)) <> 4 then
+  if (select available from garments_erp.finished_balances(982001)) <> 4 then
     raise exception 'TEST: finalization changed availability';
   end if;
   perform public.erp_billing_command(gen_random_uuid(), 900002,
     jsonb_build_object('action','finalize','billing_id',exception_id));
 
   perform public.erp_billing_command(gen_random_uuid(),900002,line || '{"sets":1}'::jsonb);
-  if (select available from garments_access.finished_balances(982001)) <> 6
+  if (select available from garments_erp.finished_balances(982001)) <> 6
     or (select remaining from public.erp_billing_po_allowance(982001)) <> 4 then
     raise exception 'TEST: finalized amendment did not apply net quantities';
   end if;
@@ -243,7 +243,7 @@ begin
   end if;
   perform public.erp_verify_billing_return(gen_random_uuid(),standard_id,900002,
     jsonb_build_array(jsonb_build_object('billed_piece_id',component_id,'pieces',1,'price',35)));
-  if (select available from garments_access.finished_balances(982001)) <> 5
+  if (select available from garments_erp.finished_balances(982001)) <> 5
     or (select remaining from public.erp_billing_po_allowance(982001)) <> 2 then
     raise exception 'TEST: verified return changed incorrect balance';
   end if;

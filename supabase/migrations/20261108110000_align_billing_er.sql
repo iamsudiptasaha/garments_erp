@@ -51,12 +51,30 @@ alter table garments_erp.po_item_piece_per_size
   add foreign key (po_price_type_id) references garments_erp.po_price_type;
 
 alter table garments_erp.billing_item rename column billed_price to unit_price;
+alter function garments_access.guard_generated_po() set schema garments_erp;
+alter function garments_access.guard_billed_po_allowance() set schema garments_erp;
+alter function garments_access.guard_transport_cartons() set schema garments_erp;
+alter function garments_access.guard_billed_price() set schema garments_erp;
+alter function garments_access.guard_transport_header() set schema garments_erp;
+alter function garments_access.billing_snapshot(bigint) set schema garments_erp;
+alter function garments_access.check_billing_packing(bigint, boolean) set schema garments_erp;
+alter function garments_access.finished_balances(bigint) set schema garments_erp;
+alter function garments_access.finished_stock(bigint, text, bigint, integer, integer) set schema garments_erp;
+alter function garments_access.create_finished_stock(bigint, bigint, bigint, jsonb, uuid) set schema garments_erp;
+alter function garments_access.adjust_finished_stock(bigint, bigint, numeric, text, bigint, uuid) set schema garments_erp;
+alter function garments_access.reject_finished_edit() set schema garments_erp;
+alter function garments_access.guard_finished_item() set schema garments_erp;
+alter function garments_access.guard_finished_item_child() set schema garments_erp;
+alter function garments_access.guard_finished_size() set schema garments_erp;
+alter function garments_access.guard_finished_catalogue() set schema garments_erp;
+alter function garments_access.guard_finished_recipe() set schema garments_erp;
+
 drop view garments_access.billed_stock;
 alter table garments_erp.billing_item_piece_per_size
   alter column share_weight type integer using share_weight::integer,
   alter column billed_pieces type integer using billed_pieces::integer,
   alter column share_weight drop not null;
-create view garments_access.billed_stock as
+create view garments_erp.billing_quantities_by_size as
 select p.item_size_list_id,
        coalesce(sum(p.billed_pieces) filter (where status.type in ('finalized', 'dispatched')), 0)::bigint as sold,
        coalesce(sum(p.billed_pieces) filter (where status.type = 'draft'), 0)::bigint as held
@@ -65,10 +83,11 @@ join garments_erp.billing_item l on l.id = p.billing_item_id
 join garments_erp.billing b on b.id = l.billing_id
 join garments_erp.billing_status_type status on status.id = b.billing_status_type_id
 group by p.item_size_list_id;
+revoke all on garments_erp.billing_quantities_by_size from public, anon, authenticated, service_role;
 
 alter table garments_erp.carton add column created_at timestamptz, add column updated_at timestamptz;
 alter table garments_erp.carton alter column created_at set default now(), alter column updated_at set default now();
-create function garments_access.touch_carton()
+create function garments_erp.touch_carton()
 returns trigger language plpgsql set search_path = '' as $$
 begin
   new.updated_at := statement_timestamp();
@@ -76,7 +95,7 @@ begin
 end;
 $$;
 create trigger touch_carton before update on garments_erp.carton
-for each row execute function garments_access.touch_carton();
+for each row execute function garments_erp.touch_carton();
 
 create table garments_erp.transport_bill_item (
   id bigint generated always as identity primary key,
@@ -90,17 +109,17 @@ alter table garments_erp.transport_bill_item enable row level security;
 revoke all on garments_erp.transport_bill_item from public, anon, authenticated, service_role;
 grant select, insert, update, delete on garments_erp.transport_bill_item to service_role;
 
-create function garments_access.adhoc_po_source_id()
+create function garments_erp.adhoc_po_source_id()
 returns bigint language sql stable security definer set search_path = '' as $$
   select id from garments_erp.po_source_type where type = 'adhoc'
 $$;
 
-create function garments_access.formal_po_source_id()
+create function garments_erp.formal_po_source_id()
 returns bigint language sql stable security definer set search_path = '' as $$
   select id from garments_erp.po_source_type where type = 'formal'
 $$;
 
-create or replace function garments_access.guard_generated_po()
+create or replace function garments_erp.guard_generated_po()
 returns trigger language plpgsql set search_path = '' as $$
 declare
   row_data jsonb := to_jsonb(case when tg_op = 'DELETE' then old else new end);
@@ -108,16 +127,16 @@ declare
   generated_order boolean;
 begin
   if tg_table_name = 'buyer_po' then
-    generated_order := garments_access.adhoc_po_source_id() in ((row_data->>'po_source_type_id')::bigint, (old_data->>'po_source_type_id')::bigint);
+    generated_order := garments_erp.adhoc_po_source_id() in ((row_data->>'po_source_type_id')::bigint, (old_data->>'po_source_type_id')::bigint);
   elsif tg_table_name = 'po_item' then
     select exists (select 1 from garments_erp.buyer_po
-      where po_source_type_id = garments_access.adhoc_po_source_id() and id in
+      where po_source_type_id = garments_erp.adhoc_po_source_id() and id in
         ((row_data->>'buyer_po_id')::bigint, (old_data->>'buyer_po_id')::bigint))
     into generated_order;
   else
     select exists (
       select 1 from garments_erp.po_item p join garments_erp.buyer_po h on h.id = p.buyer_po_id
-      where h.po_source_type_id = garments_access.adhoc_po_source_id() and p.id in
+      where h.po_source_type_id = garments_erp.adhoc_po_source_id() and p.id in
         ((row_data->>'po_item_id')::bigint, (old_data->>'po_item_id')::bigint)
     ) into generated_order;
   end if;
@@ -130,7 +149,7 @@ begin
 end;
 $$;
 
-create or replace function garments_access.guard_billed_po_allowance()
+create or replace function garments_erp.guard_billed_po_allowance()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
   used numeric;
@@ -139,7 +158,7 @@ begin
   -- Billing validates the replacement quantities after updating both sides.
   if exists (
     select 1 from garments_erp.po_item p join garments_erp.buyer_po h on h.id = p.buyer_po_id
-    where p.id = old.po_item_id and h.po_source_type_id = garments_access.adhoc_po_source_id()
+    where p.id = old.po_item_id and h.po_source_type_id = garments_erp.adhoc_po_source_id()
   ) then
     if tg_op = 'DELETE' then return old; end if;
     return new;
@@ -202,7 +221,7 @@ begin
     if buyer_id is null then raise exception 'Buyer required'; end if;
     if coalesce((p_command->>'adhoc')::boolean, false) then
       insert into garments_erp.buyer_po (po_number, buyer_list_id, po_issue_date, po_source_type_id)
-      values ('ADHOC-' || p_request_id, buyer_id, (p_command->>'invoice_date')::date, garments_access.adhoc_po_source_id())
+      values ('ADHOC-' || p_request_id, buyer_id, (p_command->>'invoice_date')::date, garments_erp.adhoc_po_source_id())
       returning id into shadow_id;
     end if;
     insert into garments_erp.billing (invoice_number, invoice_date, billing_status_type_id, sale_mode_type_id, buyer_list_id, adhoc_po_id)
@@ -217,7 +236,7 @@ begin
     join garments_erp.billing_status_type st on st.id = b.billing_status_type_id
     join garments_erp.sale_mode_type mode on mode.id = b.sale_mode_type_id
     where b.id = invoice_id for update of b;
-    previous := garments_access.billing_snapshot(invoice_id);
+    previous := garments_erp.billing_snapshot(invoice_id);
     if invoice_status not in ('draft', 'finalized') then raise exception 'Invoice is immutable'; end if;
 
     if action in ('save_line', 'remove_line') then
@@ -241,7 +260,7 @@ begin
           select p.* into strict po_line
           from garments_erp.po_item p
           join garments_erp.buyer_po h on h.id = p.buyer_po_id
-          where p.id = po_id and h.buyer_list_id = buyer_id and h.po_source_type_id <> garments_access.adhoc_po_source_id()
+          where p.id = po_id and h.buyer_list_id = buyer_id and h.po_source_type_id <> garments_erp.adhoc_po_source_id()
           for share of h;
         end if;
       end if;
@@ -392,12 +411,12 @@ begin
 
         if exists (
           select 1 from garments_erp.billing_item_piece_per_size p
-          join garments_access.finished_balances(null) s on s.size_id = p.item_size_list_id
+          join garments_erp.finished_balances(null) s on s.size_id = p.item_size_list_id
           left join public.erp_billing_po_allowance(po_id) po on po.item_size_list_id = p.item_size_list_id
           where p.billing_item_id = line_id and (s.available < 0 or po.remaining is null or po.remaining < 0)
         ) then raise exception 'Insufficient physical stock or PO allowance'; end if;
       end if;
-      perform garments_access.check_billing_packing(invoice_id, false);
+      perform garments_erp.check_billing_packing(invoice_id, false);
     elsif action = 'finalize' and invoice_status = 'draft' then
       if not exists (select 1 from garments_erp.billing_item where billing_id = invoice_id) then
         raise exception 'Cannot finalize an empty invoice';
@@ -415,14 +434,14 @@ begin
     end if;
   end if;
   insert into garments_erp.billing_audit (request_id, billing_id, employee_id, command, before_state, after_state)
-  values (p_request_id, invoice_id, p_employee_id, p_command, previous, garments_access.billing_snapshot(invoice_id));
+  values (p_request_id, invoice_id, p_employee_id, p_command, previous, garments_erp.billing_snapshot(invoice_id));
   return invoice_id;
 end;
 $$;
 
 alter table garments_erp.buyer_po drop column po_source_type;
 alter table garments_erp.buyer_po alter column po_source_type_id set default
-  garments_access.formal_po_source_id();
+  garments_erp.formal_po_source_id();
 update garments_erp.billing_item_piece_per_size p set share_weight = null
 from garments_erp.billing_item l join garments_erp.sale_mode_type m on m.id = l.sale_mode_type_id
 where p.billing_item_id = l.id and m.type = 'exception';
@@ -493,11 +512,35 @@ begin
       from jsonb_to_recordset(allocation->'pieces') as part(billed_piece_id bigint, pieces integer);
     end if;
   end loop;
-  perform garments_access.check_billing_packing(p_billing_id, false);
+  perform garments_erp.check_billing_packing(p_billing_id, false);
   update garments_erp.carton set updated_at = statement_timestamp() where id = packed_carton_id;
   return packed_carton_id;
 end;
 $$;
+
+-- Schema moves preserve trigger bindings and grants. Existing SQL and PL/pgSQL
+-- bodies still use the old qualified names, so update only those references.
+do $$
+declare
+  routine record;
+  revised text;
+  moved_names constant text := 'billed_stock|guard_generated_po|guard_billed_po_allowance|guard_transport_cartons|guard_billed_price|guard_transport_header|billing_snapshot|check_billing_packing|finished_balances|finished_stock|create_finished_stock|adjust_finished_stock|reject_finished_edit|guard_finished_item|guard_finished_item_child|guard_finished_size|guard_finished_catalogue|guard_finished_recipe';
+begin
+  for routine in
+    select pg_get_functiondef(p.oid) as definition
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname in ('public', 'garments_erp', 'garments_access')
+      and p.prokind in ('f', 'p')
+      and p.prosrc ~ ('garments_access\.(' || moved_names || ')\y')
+  loop
+    revised := regexp_replace(routine.definition,
+      'garments_access\.(' || moved_names || ')\y', 'garments_erp.\1', 'g');
+    execute replace(revised, 'garments_erp.billed_stock', 'garments_erp.billing_quantities_by_size');
+  end loop;
+end;
+$$;
+
+revoke all on function garments_erp.touch_carton() from public, anon, authenticated, service_role;
 
 notify pgrst, 'reload schema';
 commit;
