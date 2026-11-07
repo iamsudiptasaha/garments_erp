@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
 const root = resolve(process.argv[2] || 'fabric-poc/dist');
+const maxAssetBytes = 25 * 1024 * 1024;
 const patterns = [
   /sb_secret_[A-Za-z0-9_-]{8,}/g,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g,
@@ -11,10 +12,13 @@ const errors = [];
 function visit(dir) {
   for (const name of readdirSync(dir)) {
     const file = resolve(dir, name);
-    if (statSync(file).isDirectory()) {
+    const stat = statSync(file);
+    if (stat.isDirectory()) {
       visit(file);
       continue;
     }
+    if (stat.size > maxAssetBytes)
+      errors.push(`${relative(root, file)}: ${stat.size} bytes exceeds the 25 MiB static asset limit`);
     if (/(?:^\.env|\.sql$|\.map$|\.pem$|\.key$|\.dump$|\.csv$)/i.test(name))
       errors.push(relative(root, file) + ': forbidden release file');
     if (!/\.(?:js|html|css|json|txt)$/.test(name)) continue;
@@ -41,5 +45,5 @@ if (errors.length) {
   process.exitCode = 1;
 } else
   console.log(
-    'Release bundle contains no detected privileged credentials or forbidden data files.',
+    'Release bundle passed asset size, credential and forbidden file checks.',
   );
