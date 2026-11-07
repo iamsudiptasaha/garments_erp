@@ -33,8 +33,12 @@ insert into garments_erp.gender (id, name) values (982001, 'Billing test gender'
 insert into garments_erp.product_type_list (id, product_type, gender_id)
 values (982001, 'Billing test product type', 982001);
 insert into garments_erp.buyer_list (id, buyer_name) values (982001, 'Billing test buyer');
-insert into garments_erp.buyer_po (id, po_number, buyer_list_id) values (982001, 'BILL-TEST-PO', 982001);
-insert into garments_erp.po_item (id, buyer_po_id) values (982001, 982001), (982002, 982001), (982003, 982001);
+insert into garments_erp.buyer_po (id, po_number, buyer_list_id, po_source_type_id)
+select 982001, 'BILL-TEST-PO', 982001, id from garments_erp.po_source_type where type = 'formal';
+insert into garments_erp.po_item (id, buyer_po_id, sale_mode_type_id)
+select fixture.id, 982001, mode.id
+from (values (982001, 'standard'), (982002, 'exception'), (982003, 'exception')) fixture(id, type)
+join garments_erp.sale_mode_type mode using (type);
 update garments_erp.po_item set sellable_product_id = 982001, ordered_units = 3, unit_price = 115
 where id = 982001;
 insert into garments_erp.po_item_piece_per_size (po_item_id, item_size_list_id, pieces_ordered, share_weight)
@@ -89,7 +93,7 @@ begin
     join garments_erp.po_item_piece_per_size s on s.po_item_id = p.id
     where b.id = adhoc_line and p.buyer_po_id = adhoc_order
       and b.billed_units = p.ordered_units and p.ordered_units = 1
-      and b.billed_price = p.unit_price and p.unit_price = 140
+      and b.unit_price = p.unit_price and p.unit_price = 140
       and s.pieces_ordered = 2 and s.share_weight = 2
       and p.product_type_list_id = 982001 and s.hsn_code = '06109'
   ) then raise exception 'TEST: ad-hoc PO did not mirror amended invoice'; end if;
@@ -102,7 +106,7 @@ begin
   perform public.erp_billing_command(gen_random_uuid(), 900002,
     jsonb_build_object('action','cancel','billing_id',adhoc_id));
   if not exists (select 1 from garments_erp.buyer_po
-    where id = adhoc_order and po_source_type = 'adhoc' and cancelled_at is not null)
+    where id = adhoc_order and po_source_type_id = garments_access.adhoc_po_source_id() and cancelled_at is not null)
     or (select available from garments_access.finished_balances(982001)) <> 10 then
     raise exception 'TEST: ad-hoc cancellation did not preserve PO and release stock';
   end if;
@@ -136,6 +140,13 @@ begin
   perform public.erp_billing_command(gen_random_uuid(), 900002, line);
   select id into strict standard_line from garments_erp.billing_item where billing_id = standard_id;
   line := line || jsonb_build_object('line_id', standard_line);
+  begin
+    update garments_erp.billing_item set sale_mode_type_id =
+      (select id from garments_erp.sale_mode_type where type = 'exception')
+    where id = standard_line;
+    raise exception 'TEST: line mode diverged from invoice and PO';
+  exception when foreign_key_violation then null;
+  end;
   select id into strict component_id from garments_erp.billing_item_piece_per_size where billing_item_id = standard_line;
   if (select available from garments_access.finished_balances(982001)) <> 6
     or (select remaining from public.erp_billing_po_allowance(982001)) <> 2 then
@@ -163,6 +174,10 @@ begin
     'pieces','[{"size_id":982001,"pieces":2,"price":40}]'::jsonb));
   select id into strict exception_line from garments_erp.billing_item where billing_id = exception_id;
   select id into strict exception_component from garments_erp.billing_item_piece_per_size where billing_item_id = exception_line;
+  if not exists (
+    select 1 from garments_erp.billing_item_piece_per_size
+    where id = exception_component and share_weight is null and billed_pieces = 2
+  ) then raise exception 'TEST: exception billing must store pieces without a set weight'; end if;
   perform public.erp_billing_command(gen_random_uuid(), 900002,
     jsonb_build_object('action','finalize','billing_id',standard_id));
   if (select available from garments_access.finished_balances(982001)) <> 4 then

@@ -19,6 +19,7 @@ const files = [
   '20261107181537_billing_packing_dispatch.sql',
   '20261108090000_sellable_product.sql',
   '20261108100000_po_billing_alignment.sql',
+  '20261108110000_align_billing_er.sql',
 ];
 export function migrationConfig(env) {
   if (
