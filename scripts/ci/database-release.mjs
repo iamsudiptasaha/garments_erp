@@ -15,6 +15,8 @@ const files = [
   '20261105192048_add_item_batch_number.sql',
   '20261106054224_connect_production_workspace.sql',
   '20261107132756_finished_products.sql',
+  '20261107175500_transport_docket_ownership.sql',
+  '20261107181537_billing_packing_dispatch.sql',
 ];
 export function migrationConfig(env) {
   if (
