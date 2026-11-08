@@ -52,3 +52,12 @@ keyed by `item_size_list.id`. HSN values are nonblank strings so leading zeroes
 are preserved. The command stores the product type on the generated PO line
 and the HSN on each corresponding PO size row. The existing product type
 lookup must be populated before ad-hoc billing is used.
+
+### Returns
+
+`erp_verify_billing_return(request_id, billing_id, employee_id, lines)` remains a service-role RPC and records and verifies the return atomically. Each return line refers to one original billing line. A return can contain both modes.
+
+- Set lines accept `mode: "set"`, `billing_item_id`, `returned_units`, `unit_price` and optional `reason_id`. The RPC copies the original product and expands the frozen billed size rows. Component prices are null because the price is recorded per set.
+- Piece lines accept `mode: "piece"`, `billing_item_id`, optional `reason_id` and a `pieces_by_size` array containing `billed_piece_id`, `pieces` and `price`. The original flat component format remains accepted for existing integrations.
+- Verified child quantities restore stock. Set and piece returns share the original billed-component limit. The invoice lock serializes concurrent returns and a request ID can only be retried with the same employee and payload. PO allowance is unaffected.
+- Existing return lines retain their IDs, reasons and timestamps. Their quantities and prices move to size rows, and their original verification state continues to determine their inventory effect.

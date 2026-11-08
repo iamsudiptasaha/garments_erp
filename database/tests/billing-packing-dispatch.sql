@@ -59,6 +59,9 @@ declare
   carton_b bigint;
   carton_c bigint;
   component_id bigint;
+  return_request uuid := gen_random_uuid();
+  returned_bill bigint;
+  return_lines jsonb;
   exception_component bigint;
   transport_a bigint;
   transport_b bigint;
@@ -254,6 +257,23 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'Cumulative return exceeds dispatched pieces' then raise; end if;
   end;
+  return_lines := jsonb_build_array(
+    jsonb_build_object('mode','set','billing_item_id',standard_line,'returned_units',1,'unit_price',125),
+    jsonb_build_object('mode','piece','billing_item_id',standard_line,'pieces_by_size',
+      jsonb_build_array(jsonb_build_object('billed_piece_id',component_id,'pieces',1,'price',35)))
+  );
+  returned_bill := public.erp_verify_billing_return(return_request,standard_id,900002,return_lines);
+  if public.erp_verify_billing_return(return_request,standard_id,900002,return_lines) <> returned_bill
+    or (select available from garments_erp.finished_balances(982001)) <> 8
+    or (select remaining from public.erp_billing_po_allowance(982001)) <> 2
+    or not exists (
+      select 1 from garments_erp.return_bill_item ri
+      join garments_erp.return_bill_item_piece_per_size part on part.return_bill_item_id = ri.id
+      where ri.return_bill_id = returned_bill and ri.returned_units = 1 and ri.unit_price = 125
+        and part.share_weight = 2 and part.returned_pieces = 2 and part.returned_price_per_piece is null
+    ) then
+    raise exception 'TEST: mixed return, frozen composition, or idempotency failed';
+  end if;
   begin
     update garments_erp.item_in_store_price set price = 999 where id = 982001;
     raise exception 'TEST: billed price mutated';
