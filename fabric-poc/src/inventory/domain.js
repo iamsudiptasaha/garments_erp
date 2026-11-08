@@ -80,6 +80,7 @@ export function initialInventory() {
         quantity: 1500,
         price: 1.5,
         purchase_order_id: 'mp1',
+        raw_material_purchase_order_item_id: 'mpl1',
         invoice_number: 'MAT-001',
         raw_material_supplier_list_id: 'ms1',
         verified_by_employee_id: 'owner',
@@ -95,7 +96,7 @@ export function initialInventory() {
         reconciliation: false,
         issue_by_employee_id: 'owner',
         employee_id: 'sample-production',
-        item_part_id: null,
+        variant_item_id: null,
         check_out_type_id: 'issue-production',
         remarks: 'Issued to production',
       },
@@ -138,9 +139,17 @@ export function upgradeInventory(data) {
   );
   next.raw_material_check_in = next.raw_material_check_in.map((r) => {
     const clean = { ...r };
-    delete clean.raw_material_purchase_order_item_id;
+    if (!clean.raw_material_purchase_order_item_id && clean.purchase_order_id) {
+      const lines = next.raw_material_purchase_order_item.filter(
+        (line) =>
+          line.raw_material_purchase_order_id === clean.purchase_order_id &&
+          line.raw_material_item_id === clean.raw_material_item_id,
+      );
+      if (lines.length === 1) clean.raw_material_purchase_order_item_id = lines[0].id;
+    }
     if (clean.dyed_fabric_item_id) {
       clean.purchase_order_id = null;
+      clean.raw_material_purchase_order_item_id = null;
       clean.raw_material_supplier_list_id = null;
     }
     return clean;
@@ -162,6 +171,12 @@ function lookups(data, s) {
           .join(' / ')
       : '—';
   };
+  const variant = (id) => {
+    const link = get('variant_item', id);
+    if (!link) return '—';
+    const name = get('variant', link.variant_id)?.variant_name || link.variant_id;
+    return `${part(link.item_part_id)} / ${name} · ${link.id}`;
+  };
   const receipt = (r) => {
     const m = get('raw_material_item', r.raw_material_item_id),
       fabric = get('dyed_fabric_item', r.dyed_fabric_item_id);
@@ -172,10 +187,10 @@ function lookups(data, s) {
       category: m ? get('category_list', m.category_list_id)?.name : 'Dyed fabric',
     };
   };
-  return { get, supplier, employee, part, receipt };
+  return { get, supplier, employee, part, variant, receipt };
 }
 export function inventoryRows(data, page, s) {
-  const { get, supplier, employee, part, receipt } = lookups(data, s);
+  const { get, supplier, employee, part, variant, receipt } = lookups(data, s);
   const identity = (r) => ({ id: r.id, documentId: r.id });
   const receipts = () =>
     data.raw_material_check_in.map((r) => {
@@ -212,8 +227,7 @@ export function inventoryRows(data, page, s) {
         type: r.reconciliation
           ? 'Reconciliation'
           : get('check_out_type', r.check_out_type_id)?.name || '—',
-        part: part(r.item_part_id),
-        recipient: employee(r.employee_id),
+        part: r.variant_item_id ? variant(r.variant_item_id) : part(r.item_part_id),
         issuer: employee(r.issue_by_employee_id),
         reconciliation: r.reconciliation ? 'Marked reconciled' : 'Not reconciled',
         remarks: r.remarks || '—',
@@ -311,7 +325,7 @@ export function inventoryRows(data, page, s) {
   return [];
 }
 export function inventoryOptions(data, source, s) {
-  const { supplier, employee, part, receipt } = lookups(data, s);
+  const { supplier, employee, variant, receipt } = lookups(data, s);
   const mappings = {
     materials: ['raw_material_item', 'name'],
     materialCategories: ['category_list', 'name'],
@@ -330,7 +344,8 @@ export function inventoryOptions(data, source, s) {
     return data.raw_material_supplier_list.map((r) => [r.id, supplier(r.id)]);
   if (source === 'employees')
     return data.employee.map((r) => [r.id, `${r.employeeCode || r.id} · ${employee(r.id)}`]);
-  if (source === 'itemParts') return data.item_part.map((r) => [r.id, part(r.id)]);
+  if (source === 'checkoutVariants')
+    return (data.variant_item || []).map((r) => [r.id, variant(r.id)]);
   if (source === 'dyedBatches')
     return data.dyed_fabric_item.map((r) => [
       r.id,
@@ -431,7 +446,7 @@ export function validateInventory(data) {
   }
   for (const r of data.raw_material_check_out) {
     link(r, 'raw_material_check_in_id', 'raw_material_check_in', true);
-    link(r, 'item_part_id', 'item_part');
+    link(r, 'variant_item_id', 'variant_item');
     link(r, 'check_out_type_id', 'check_out_type');
     if (!r.reconciliation && !r.check_out_type_id) throw Error('Choose an issue type.');
     link(r, 'employee_id', 'employee');
@@ -460,6 +475,8 @@ export function prepareInventoryEdit(data, page, header, draft) {
     const old = data.raw_material_check_out.find((r) => r.id === header.id);
     if (old?.reconciliation)
       throw Error('Reconciliation entries are retained as closing records and cannot be edited.');
+    header.item_part_id = old?.item_part_id ?? null;
+    header.employee_id = old?.employee_id ?? null;
     header.reconciliation = false;
     if (draft.reconciliation) {
       if (old) throw Error('Create a new reconciliation entry.');

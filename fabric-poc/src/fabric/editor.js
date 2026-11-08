@@ -1,3 +1,4 @@
+import { CheckoutVariantPicker } from './checkout-variant-picker.js';
 import { RichCommentEditor, RichComment } from './rich-comment.js';
 import { LabRecordSelect } from './lab-record-select.js';
 import { RecordSelect, programOptions } from './record-select.js';
@@ -91,7 +92,7 @@ export function BillEditor({
     return result;
   });
   const [receiptMode, setReceiptMode] = useState(() =>
-    page === 'materialReceipts' ? receiptModeFor(documentFor(data, page, id).header) : '',
+    page === 'materialReceipts' ? receiptModeFor(draft.header) || 'order' : '',
   );
   const spec =
     page === 'materialReceipts'
@@ -151,6 +152,8 @@ export function BillEditor({
     }));
   }
   function field(f, value, onChange, prefix) {
+    if (page === 'materialIssues' && f.key === 'variant_item_id')
+      return h(CheckoutVariantPicker, { key: f.key, data, value, onChange });
     if (page === 'dyeBills' && f.key === 'dyeing_program_item_id')
       return h(RecordSelect, {
         key: f.key,

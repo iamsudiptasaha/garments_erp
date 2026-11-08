@@ -7,6 +7,7 @@ export function switchReceiptMode(header, mode) {
   return {
     ...header,
     purchase_order_id: null,
+    raw_material_purchase_order_item_id: null,
     raw_material_item_id: null,
     dyed_fabric_item_id: null,
     raw_material_supplier_list_id: null,
@@ -16,11 +17,18 @@ export function switchReceiptMode(header, mode) {
 export function updateReceipt(data, header, key, value) {
   const next = { ...header, [key]: value || null };
   if (key === 'purchase_order_id') {
+    next.raw_material_purchase_order_item_id = null;
     next.raw_material_item_id = null;
-    next.raw_material_supplier_list_id = null;
+    const order = data.raw_material_purchase_order.find((row) => row.id === value);
+    next.raw_material_supplier_list_id = order?.raw_material_supplier_list_id ?? null;
     next.dyed_fabric_item_id = null;
   }
+  if (key === 'raw_material_purchase_order_item_id') {
+    const line = data.raw_material_purchase_order_item.find((row) => row.id === value);
+    next.raw_material_item_id = line?.raw_material_item_id ?? null;
+  }
   if (key === 'dyed_fabric_item_id') {
+    next.raw_material_purchase_order_item_id = null;
     next.purchase_order_id = null;
     next.raw_material_item_id = null;
     next.raw_material_supplier_list_id = null;
@@ -37,7 +45,7 @@ export function receiptFields(spec, data, mode, header) {
           {
             ...byKey.raw_material_supplier_list_id,
             required: true,
-            disabled: !order,
+            disabled: true,
             options: data.raw_material_supplier_list
               .filter((r) => r.id === order?.raw_material_supplier_list_id)
               .map((r) => [
@@ -46,15 +54,15 @@ export function receiptFields(spec, data, mode, header) {
               ]),
           },
           {
-            ...byKey.raw_material_item_id,
+            ...byKey.raw_material_purchase_order_item_id,
             required: true,
-            disabled: !order || !header.raw_material_supplier_list_id,
+            disabled: !order,
             options: data.raw_material_purchase_order_item
               .filter((r) => r.raw_material_purchase_order_id === order?.id)
               .map((r) => {
                 const m = data.raw_material_item.find((m) => m.id === r.raw_material_item_id),
                   unit = data.unit_of_measure.find((u) => u.id === m?.unit_of_measure_id)?.unit;
-                return [r.raw_material_item_id, `${m?.name} · ${r.quantity} ${unit} ordered`];
+                return [r.id, `${m?.name} · ${r.quantity} ${unit} ordered · Line ${r.id}`];
               }),
           },
         ]
@@ -78,6 +86,7 @@ export function normaliseReceipt(data, header) {
     throw Error('Choose exactly one material or dyed-fabric batch.');
   if (header.dyed_fabric_item_id) {
     header.purchase_order_id = null;
+    header.raw_material_purchase_order_item_id = null;
     header.raw_material_supplier_list_id = null;
   } else {
     if (!header.purchase_order_id) throw Error('Select a purchase order or a fabric batch first.');
@@ -87,16 +96,24 @@ export function normaliseReceipt(data, header) {
       throw Error('Select the supplier for this purchase order.');
     if (header.raw_material_supplier_list_id !== order.raw_material_supplier_list_id)
       throw Error('Receipt supplier must match the purchase order supplier.');
-    const line = data.raw_material_purchase_order_item.find(
-      (l) =>
-        l.raw_material_purchase_order_id === order.id &&
-        l.raw_material_item_id === header.raw_material_item_id,
+    const matches = data.raw_material_purchase_order_item.filter(
+      (line) =>
+        line.raw_material_purchase_order_id === order.id &&
+        line.raw_material_item_id === header.raw_material_item_id,
     );
+    const line = header.raw_material_purchase_order_item_id
+      ? data.raw_material_purchase_order_item.find(
+          (row) => row.id === header.raw_material_purchase_order_item_id,
+        )
+      : matches.length === 1
+        ? matches[0]
+        : null;
     if (!line || line.raw_material_purchase_order_id !== order.id)
       throw Error('The material is not on the selected purchase order.');
     if (header.raw_material_item_id && header.raw_material_item_id !== line.raw_material_item_id)
       throw Error('The selected order item does not match this material.');
     header.raw_material_item_id = line.raw_material_item_id;
+    header.raw_material_purchase_order_item_id = line.id;
   }
   if (!header.sku) {
     let n = data.raw_material_check_in.length + 1;

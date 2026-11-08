@@ -237,7 +237,7 @@ test('order receipts resolve the exact ordered item and fabric receipts clear su
   const next = saveDocument(data, 'materialReceipts', receipt({ raw_material_item_id: 'mat2' }));
   const added = next.raw_material_check_in.find((r) => r.sku === 'NEW-001');
   assert.equal(added.raw_material_item_id, 'mat2');
-  assert.equal('raw_material_purchase_order_item_id' in added, false);
+  assert.equal(added.raw_material_purchase_order_item_id, 'mpl2');
   const fabric = saveDocument(
     data,
     'materialReceipts',
@@ -246,7 +246,7 @@ test('order receipts resolve the exact ordered item and fabric receipts clear su
   const f = fabric.raw_material_check_in.find((r) => r.sku === 'NEW-001');
   assert.equal(f.raw_material_supplier_list_id, null);
   assert.equal(f.purchase_order_id, null);
-  assert.equal('raw_material_purchase_order_item_id' in f, false);
+  assert.equal(f.raw_material_purchase_order_item_id, null);
   assert.throws(
     () => saveDocument(data, 'materialReceipts', receipt({ purchase_order_id: '' })),
     /purchase order or a fabric batch/,
@@ -259,12 +259,12 @@ test('order receipts resolve the exact ordered item and fabric receipts clear su
   assert.match(auto.raw_material_check_in.at(-1).sku, /^RCV-\d{6}$/);
 });
 
-test('legacy receipt upgrade removes nonexistent order-line field without changing source or quantity', () => {
+test('legacy receipt upgrade retains the exact order-line field without changing source or quantity', () => {
   const d = initialFabric();
   d.raw_material_check_in[0].raw_material_purchase_order_item_id = 'mpl1';
   const upgraded = upgradeFabric(d),
     r = upgraded.raw_material_check_in[0];
-  assert.equal('raw_material_purchase_order_item_id' in r, false);
+  assert.equal(r.raw_material_purchase_order_item_id, 'mpl1');
   assert.equal(r.purchase_order_id, 'mp1');
   assert.equal(r.raw_material_item_id, 'mat1');
   assert.equal(r.quantity, 1500);
