@@ -60,9 +60,9 @@
     },
     "fabric-poc/src/inventory": {
       "fabric-poc/src/inventory/cards.js": "4ff1af22fb4eb8bceeb6851b71abe8a4fd73640239928cf91457e65d16002780",
-      "fabric-poc/src/inventory/catalog.js": "423775279288f8f7f125e941bd5963bcc9977b55bca3657c5d01c5a53ceb33cd",
-      "fabric-poc/src/inventory/domain.js": "0e85aa27a6f6c0f5b3db855dc4fb9bbb9d78a75e1074a1957a46976fc94a4455",
-      "fabric-poc/src/inventory/receipts.js": "da2e5d7352d48c91d10b448ce3c7f39207ce8149266727c57bdcd0710a72e905"
+      "fabric-poc/src/inventory/catalog.js": "e1bb9a6be9cdb17b1c397b80c6c41924914f2ec2ea15018ee153850cc8dab9a4",
+      "fabric-poc/src/inventory/domain.js": "da995b8e11b2a88927bc6c4e1401cd7585d1d689b8d2e69ed50dfa770835f95b",
+      "fabric-poc/src/inventory/receipts.js": "f297a680bf732f286d2e0b1a7509e00580a736696d75418ee91a29df89cf3655"
     }
   },
   "aggregates": {

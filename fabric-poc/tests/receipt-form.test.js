@@ -21,15 +21,15 @@ test('receipt path switches clear dependent values and item choices are scoped t
   );
   assert.equal(
     fields
-      .find((f) => f.key === 'raw_material_item_id')
+      .find((f) => f.key === 'raw_material_purchase_order_item_id')
       .options.map(([id]) => id)
       .join(','),
-    'mat1,mat2',
+    'mpl1,mpl2',
   );
   const changed = updateReceipt(data, old, 'purchase_order_id', 'mp2');
   assert.equal(changed.raw_material_item_id, null);
   assert.equal(changed.raw_material_supplier_list_id, null);
-  const selected = updateReceipt(data, old, 'raw_material_item_id', 'mat2');
+  const selected = updateReceipt(data, old, 'raw_material_purchase_order_item_id', 'mpl2');
   assert.equal(selected.raw_material_item_id, 'mat2');
   const fabricFields = receiptFields(pages.materialReceipts, data, 'fabric', cleared).header;
   assert.ok(fabricFields.some((f) => f.key === 'dyed_fabric_item_id'));

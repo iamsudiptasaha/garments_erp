@@ -8,6 +8,23 @@ import {FILE_TARGETS} from '../fabric-poc/src/files/model.js';
 import {checklistFields} from '../fabric-poc/src/production/item-model.js';
 import {employeeRelations} from '../fabric-poc/src/hr/model.js';
 import {checkBoundaries} from './coherence-boundaries.mjs';
+function checkoutReleaseSchema(schema) {
+ const migration = '20261108135000_checkout_variant.sql';
+ const sql = readFileSync(new URL('../supabase/migrations/' + migration, import.meta.url), 'utf8');
+ if (!sql.includes('add column variant_item_id bigint references garments_erp.variant_item (id)'))
+  throw Error('Checkout variant must reference garments_erp.variant_item(id)');
+ const receiptMigration = '20261104172129_align_erp_diagram_relationships.sql';
+ const receiptSql = readFileSync(new URL('../supabase/migrations/' + receiptMigration, import.meta.url), 'utf8');
+ if (!receiptSql.includes('add column raw_material_purchase_order_item_id bigint'))
+  throw Error('Stock receipts require a purchase order line column');
+ return {...schema, columns: [...schema.columns, {
+  table_schema: 'garments_erp', table_name: 'raw_material_check_in', column_name: 'raw_material_purchase_order_item_id',
+  data_type: 'bigint', is_nullable: 'YES', pending_migration: receiptMigration,
+ }, {
+  table_schema: 'garments_erp', table_name: 'raw_material_check_out', column_name: 'variant_item_id',
+  data_type: 'bigint', is_nullable: 'YES', pending_migration: migration,
+ }]};
+}
 export function inspect(schema, catalogue, screens=pages){
  const errors=[]; const tables=new Map();
  for(const c of schema.columns){const key=c.table_schema+'.'+c.table_name;if(!tables.has(key))tables.set(key,new Set());tables.get(key).add(c.column_name)}
@@ -32,7 +49,7 @@ export function inspect(schema, catalogue, screens=pages){
  return [...new Set(errors)].sort();
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
- const schema=productionReferenceSchema(fabricBatchReleaseSchema(employeePhotoReleaseSchema(contactReleaseSchema(JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url)))))));
+ const schema=checkoutReleaseSchema(productionReferenceSchema(fabricBatchReleaseSchema(employeePhotoReleaseSchema(contactReleaseSchema(JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url))))))));
  const catalogue=JSON.parse(readFileSync(new URL('../database/catalogue/screen-table-map.json',import.meta.url)));
  const errors=[...inspect(schema,catalogue),...inspectFabricBatch(schema)];
  try{console.log(checkBoundaries());}catch(e){errors.push(e.message)}
