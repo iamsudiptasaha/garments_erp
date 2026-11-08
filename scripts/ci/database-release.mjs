@@ -26,6 +26,7 @@ const files = [
   '20261108135000_checkout_variant.sql',
   '20261108140000_item_costing.sql',
   '20261108145000_remove_checkout_item_part.sql',
+  '20261108150000_raw_material_transactions.sql',
 ];
 // Files before the first release migration belong to the deployed baseline.
 export function releaseMigrationFiles() {
@@ -197,6 +198,12 @@ export async function applyRelease(client, migrations) {
       and not exists(select 1 from information_schema.columns
         where table_schema='garments_erp' and table_name='raw_material_check_out'
           and column_name='item_part_id')
+      and to_regprocedure('public.erp_save_raw_material_transaction(text,bigint,timestamptz,jsonb)') is not null
+      and to_regprocedure('public.erp_raw_material_transaction_snapshot()') is not null
+      and to_regprocedure('public.erp_save_raw_material_setup(text,bigint,timestamptz,jsonb,jsonb)') is not null
+      and not has_function_privilege('anon','public.erp_save_raw_material_transaction(text,bigint,timestamptz,jsonb)','execute')
+      and not has_function_privilege('anon','public.erp_raw_material_transaction_snapshot()','execute')
+      and not has_function_privilege('anon','public.erp_save_raw_material_setup(text,bigint,timestamptz,jsonb,jsonb)','execute')
       as valid`);
     if (result.rows[0]?.valid !== true)
       throw new ReleaseError('Post-migration schema/security verification failed.');
