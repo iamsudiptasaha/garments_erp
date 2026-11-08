@@ -190,7 +190,7 @@ function lookups(data, s) {
   return { get, supplier, employee, part, variant, receipt };
 }
 export function inventoryRows(data, page, s) {
-  const { get, supplier, employee, part, variant, receipt } = lookups(data, s);
+  const { get, supplier, employee, variant, receipt } = lookups(data, s);
   const identity = (r) => ({ id: r.id, documentId: r.id });
   const receipts = () =>
     data.raw_material_check_in.map((r) => {
@@ -227,7 +227,7 @@ export function inventoryRows(data, page, s) {
         type: r.reconciliation
           ? 'Reconciliation'
           : get('check_out_type', r.check_out_type_id)?.name || '—',
-        part: r.variant_item_id ? variant(r.variant_item_id) : part(r.item_part_id),
+        part: variant(r.variant_item_id),
         issuer: employee(r.issue_by_employee_id),
         reconciliation: r.reconciliation ? 'Marked reconciled' : 'Not reconciled',
         remarks: r.remarks || '—',
@@ -475,7 +475,6 @@ export function prepareInventoryEdit(data, page, header, draft) {
     const old = data.raw_material_check_out.find((r) => r.id === header.id);
     if (old?.reconciliation)
       throw Error('Reconciliation entries are retained as closing records and cannot be edited.');
-    header.item_part_id = old?.item_part_id ?? null;
     header.employee_id = old?.employee_id ?? null;
     header.reconciliation = false;
     if (draft.reconciliation) {

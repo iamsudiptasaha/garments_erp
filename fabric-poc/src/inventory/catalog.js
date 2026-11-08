@@ -181,7 +181,7 @@ export const inventoryPages = {
       c('name', 'Material / fabric', false, 240),
       ...qty,
       c('type', 'Outward type'),
-      c('part', 'Item variant / legacy part'),
+      c('part', 'Item variant'),
       c('issuer', 'Sent out by'),
       c('reconciliation', 'Reconciliation'),
       c('remarks', 'Remarks', false, 240),
