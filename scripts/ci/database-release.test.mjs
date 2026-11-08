@@ -6,7 +6,12 @@ import {
   migrationBody,
   applyRelease,
   releaseFailure,
+  releaseMigrationFiles,
 } from './database-release.mjs';
+test('release list covers every tracked migration after the baseline', () => {
+  assert.ok(releaseMigrationFiles().length > 0);
+});
+
 const env = {
   GITHUB_ACTIONS: 'true',
   GITHUB_EVENT_NAME: 'workflow_dispatch',

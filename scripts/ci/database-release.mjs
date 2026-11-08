@@ -1,4 +1,5 @@
 import { readFileSync, appendFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,7 +21,27 @@ const files = [
   '20261108090000_sellable_product.sql',
   '20261108100000_po_billing_alignment.sql',
   '20261108110000_align_billing_er.sql',
+  '20261108130000_return_bill_composition.sql',
+  '20261108135000_checkout_variant.sql',
 ];
+// Files before the first release migration belong to the deployed baseline.
+export function releaseMigrationFiles() {
+  const tracked = execFileSync('git', ['ls-files', '-z', '--', 'supabase/migrations/*.sql'], {
+    encoding: 'utf8',
+  })
+    .split('\0')
+    .map((path) => path.split('/').at(-1))
+    .filter((file) => file >= files[0])
+    .sort();
+  if (tracked.join('\n') !== files.join('\n')) {
+    const missing = tracked.filter((file) => !files.includes(file));
+    const untracked = files.filter((file) => !tracked.includes(file));
+    throw new ReleaseError(
+      `Migration release list differs from Git. Missing: ${missing.join(', ') || 'none'}. Untracked: ${untracked.join(', ') || 'none'}.`,
+    );
+  }
+  return files.slice();
+}
 export function migrationConfig(env) {
   if (
     env.GITHUB_ACTIONS !== 'true' ||
@@ -162,6 +183,12 @@ export async function applyRelease(client, migrations) {
       and not has_table_privilege('authenticated','garments_access.dyed_bill_attestation','select,insert,update,delete')
       and exists(select 1 from pg_constraint where conrelid='garments_erp.dyeing_program_item'::regclass and contype='f'
         and pg_get_constraintdef(oid)='FOREIGN KEY (batch_no) REFERENCES garments_erp.batch_no_lab_dip_version_map(id)')
+      and to_regclass('garments_erp.return_mode_type') is not null
+      and to_regclass('garments_erp.return_bill_item_piece_per_size') is not null
+      and exists(select 1 from pg_constraint
+        where conrelid='garments_erp.raw_material_check_out'::regclass
+          and contype='f'
+          and pg_get_constraintdef(oid)='FOREIGN KEY (variant_item_id) REFERENCES garments_erp.variant_item(id)')
       as valid`);
     if (result.rows[0]?.valid !== true)
       throw new ReleaseError('Post-migration schema/security verification failed.');
@@ -188,7 +215,7 @@ async function run() {
     throw new ReleaseError(
       'Main advanced or could not be verified; dispatch the latest reviewed commit.',
     );
-  const migrations = files.map((file) => {
+  const migrations = releaseMigrationFiles().map((file) => {
     const sql = readFileSync('supabase/migrations/' + file, 'utf8');
     return {
       version: file.split('_')[0],
