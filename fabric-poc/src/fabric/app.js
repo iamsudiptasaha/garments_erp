@@ -1,3 +1,4 @@
+import { inventoryCommands, liveInventoryPage } from './inventory-live.js';
 import { ProductionItemEditor } from '../production-task-board/item-editor.js';
 import {
   productionCommands,
@@ -184,7 +185,8 @@ function App({ live }) {
   }, []);
   const [liveReady, setLiveReady] = useState(!live),
     [liveError, setLiveError] = useState(''),
-    [productionError, setProductionError] = useState('');
+    [productionError, setProductionError] = useState(''),
+    [inventoryError, setInventoryError] = useState('');
   const commands = useMemo(
     () => (live ? liveFabricCommands(getAccessClient(), createVerificationClient) : null),
     [Boolean(live)],
@@ -193,15 +195,21 @@ function App({ live }) {
     () => (live ? productionCommands(getAccessClient()) : null),
     [Boolean(live)],
   );
-  const connectedPage = (key) => liveFabricPage(key) || liveProductionPage(key);
+  const inventory = useMemo(
+    () => (live ? inventoryCommands(getAccessClient()) : null),
+    [Boolean(live)],
+  );
+  const connectedPage = (key) =>
+    liveFabricPage(key) || liveProductionPage(key) || liveInventoryPage(key);
   const allowedModule = (check) =>
     live &&
     (live.administrator ||
       Object.entries(live.permissions || {}).some(([key, p]) => check(key) && p.view));
   async function loadLive() {
-    const [fabricResult, productionResult] = await Promise.allSettled([
+    const [fabricResult, productionResult, inventoryResult] = await Promise.allSettled([
       allowedModule(liveFabricPage) ? commands.load() : {},
       allowedModule(liveProductionPage) || can('view', 'productionJobs') ? production.load() : {},
+      allowedModule(liveInventoryPage) ? inventory.load() : {},
     ]);
     setLiveError(fabricResult.status === 'rejected' ? fabricResult.reason.message : '');
     setProductionError(
@@ -209,7 +217,13 @@ function App({ live }) {
     );
     const fabric = fabricResult.status === 'fulfilled' ? fabricResult.value : {};
     const workspace = productionResult.status === 'fulfilled' ? productionResult.value : {};
-    return mergeProductionSnapshot(fabric, workspace);
+    setInventoryError(inventoryResult.status === 'rejected' ? inventoryResult.reason.message : '');
+    const stock = inventoryResult.status === 'fulfilled' ? inventoryResult.value : {};
+    const base = mergeProductionSnapshot(fabric, workspace);
+    const employees = new Map((base.employee || []).map((row) => [row.id, row]));
+    for (const row of stock.employee || [])
+      employees.set(row.id, { ...employees.get(row.id), ...row });
+    return mergeProductionSnapshot(base, { ...stock, employee: [...employees.values()] });
   }
   async function applyProduction(
     snapshot,
@@ -273,6 +287,7 @@ function App({ live }) {
         data: {
           ...emptyLiveFabric(initialFabric()),
           ...snapshot,
+          _live: true,
           dyed_bill_verifiers: snapshot.dyed_bill_verifiers || state.data.dyed_bill_verifiers || [],
         },
       }));
@@ -377,6 +392,38 @@ function App({ live }) {
             id: editor.id,
           }),
         );
+        setSelected(null);
+        return;
+      }
+      if (liveInventoryPage(editor.page)) {
+        const table = pages[editor.page].entity;
+        const { row, lines } = await inventory.save({
+          resource: editor.page,
+          table,
+          before: state.data,
+          after: next,
+          id: editor.id,
+        });
+        setState((previous) => {
+          const rows = previous.data[table];
+          return {
+            ...previous,
+            data: {
+              ...previous.data,
+              ...(lines
+                ? {
+                    raw_material_purchase_order_item: previous.data.raw_material_purchase_order_item
+                      .filter((entry) => entry.raw_material_purchase_order_id !== row.id)
+                      .concat(lines),
+                  }
+                : {}),
+              [table]: rows.some((entry) => entry.id === row.id)
+                ? rows.map((entry) => (entry.id === row.id ? row : entry))
+                : [...rows, row],
+            },
+          };
+        });
+        setNotice('Inventory transaction saved to Supabase');
         setSelected(null);
         return;
       }
@@ -726,7 +773,11 @@ function App({ live }) {
       ),
     );
   }
-  const activeLiveError = liveProductionPage(page) ? productionError : liveError;
+  const activeLiveError = liveInventoryPage(page)
+    ? inventoryError
+    : liveProductionPage(page)
+      ? productionError
+      : liveError;
   if (new URLSearchParams(location.search).get('floor') === '1') {
     if (live && (!liveReady || productionError))
       return h(

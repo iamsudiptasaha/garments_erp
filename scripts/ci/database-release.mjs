@@ -21,8 +21,12 @@ const files = [
   '20261108090000_sellable_product.sql',
   '20261108100000_po_billing_alignment.sql',
   '20261108110000_align_billing_er.sql',
+  '20261108120100_variant_item_per_job_billed_price.sql',
   '20261108130000_return_bill_composition.sql',
   '20261108135000_checkout_variant.sql',
+  '20261108140000_item_costing.sql',
+  '20261108145000_remove_checkout_item_part.sql',
+  '20261108150000_raw_material_transactions.sql',
 ];
 // Files before the first release migration belong to the deployed baseline.
 export function releaseMigrationFiles() {
@@ -189,6 +193,17 @@ export async function applyRelease(client, migrations) {
         where conrelid='garments_erp.raw_material_check_out'::regclass
           and contype='f'
           and pg_get_constraintdef(oid)='FOREIGN KEY (variant_item_id) REFERENCES garments_erp.variant_item(id)')
+      and to_regclass('garments_erp.item_costing') is not null
+      and to_regclass('garments_erp.item_costing_item') is not null
+      and not exists(select 1 from information_schema.columns
+        where table_schema='garments_erp' and table_name='raw_material_check_out'
+          and column_name='item_part_id')
+      and to_regprocedure('public.erp_save_raw_material_transaction(text,bigint,timestamptz,jsonb)') is not null
+      and to_regprocedure('public.erp_raw_material_transaction_snapshot()') is not null
+      and to_regprocedure('public.erp_save_raw_material_setup(text,bigint,timestamptz,jsonb,jsonb)') is not null
+      and not has_function_privilege('anon','public.erp_save_raw_material_transaction(text,bigint,timestamptz,jsonb)','execute')
+      and not has_function_privilege('anon','public.erp_raw_material_transaction_snapshot()','execute')
+      and not has_function_privilege('anon','public.erp_save_raw_material_setup(text,bigint,timestamptz,jsonb,jsonb)','execute')
       as valid`);
     if (result.rows[0]?.valid !== true)
       throw new ReleaseError('Post-migration schema/security verification failed.');

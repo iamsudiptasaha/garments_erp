@@ -179,10 +179,11 @@ function lookups(data, s) {
   };
   const receipt = (r) => {
     const m = get('raw_material_item', r.raw_material_item_id),
-      fabric = get('dyed_fabric_item', r.dyed_fabric_item_id);
+      fabric = get('dyed_fabric_item', r.dyed_fabric_item_id),
+      stockBatch = get('inventory_dyed_batches', r.dyed_fabric_item_id);
     return {
-      name: m?.name || (fabric ? s.dyed(fabric).k.name : '—'),
-      batch: (fabric ? s.dyed(fabric).batch : null) || '—',
+      name: m?.name || stockBatch?.name || (fabric ? s.dyed(fabric).k.name : '—'),
+      batch: stockBatch?.batch || (fabric ? s.dyed(fabric).batch : null) || '—',
       unit: m ? get('unit_of_measure', m.unit_of_measure_id)?.unit : 'kg',
       category: m ? get('category_list', m.category_list_id)?.name : 'Dyed fabric',
     };
@@ -190,7 +191,7 @@ function lookups(data, s) {
   return { get, supplier, employee, part, variant, receipt };
 }
 export function inventoryRows(data, page, s) {
-  const { get, supplier, employee, part, variant, receipt } = lookups(data, s);
+  const { get, supplier, employee, variant, receipt } = lookups(data, s);
   const identity = (r) => ({ id: r.id, documentId: r.id });
   const receipts = () =>
     data.raw_material_check_in.map((r) => {
@@ -227,7 +228,7 @@ export function inventoryRows(data, page, s) {
         type: r.reconciliation
           ? 'Reconciliation'
           : get('check_out_type', r.check_out_type_id)?.name || '—',
-        part: r.variant_item_id ? variant(r.variant_item_id) : part(r.item_part_id),
+        part: variant(r.variant_item_id),
         issuer: employee(r.issue_by_employee_id),
         reconciliation: r.reconciliation ? 'Marked reconciled' : 'Not reconciled',
         remarks: r.remarks || '—',
@@ -257,14 +258,15 @@ export function inventoryRows(data, page, s) {
       const header = get('raw_material_purchase_order', r.raw_material_purchase_order_id),
         m = get('raw_material_item', r.raw_material_item_id),
         received = data.raw_material_check_in
-          .filter((i) => i.purchase_order_id === header.id && i.raw_material_item_id === m.id)
-          .reduce((n, i) => n + i.quantity, 0),
-        ordered = data.raw_material_purchase_order_item
           .filter(
-            (l) =>
-              l.raw_material_purchase_order_id === header.id && l.raw_material_item_id === m.id,
+            (i) =>
+              i.raw_material_purchase_order_item_id === r.id ||
+              (!i.raw_material_purchase_order_item_id &&
+                i.purchase_order_id === header.id &&
+                i.raw_material_item_id === m.id),
           )
-          .reduce((n, l) => n + l.quantity, 0);
+          .reduce((n, i) => n + i.quantity, 0),
+        ordered = r.quantity;
       return {
         id: r.id,
         documentId: header.id,
@@ -297,7 +299,7 @@ export function inventoryRows(data, page, s) {
         ...r,
         id: 'out:' + r.id,
         direction: 'Issued',
-        party: r.recipient,
+        party: r.issuer,
         reference: r.type,
       })),
     ].sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -346,6 +348,8 @@ export function inventoryOptions(data, source, s) {
     return data.employee.map((r) => [r.id, `${r.employeeCode || r.id} · ${employee(r.id)}`]);
   if (source === 'checkoutVariants')
     return (data.variant_item || []).map((r) => [r.id, variant(r.id)]);
+  if (source === 'dyedBatches' && data.inventory_dyed_batches)
+    return data.inventory_dyed_batches.map((r) => [r.id, `${r.batch} · ${r.name}`]);
   if (source === 'dyedBatches')
     return data.dyed_fabric_item.map((r) => [
       r.id,
@@ -475,7 +479,6 @@ export function prepareInventoryEdit(data, page, header, draft) {
     const old = data.raw_material_check_out.find((r) => r.id === header.id);
     if (old?.reconciliation)
       throw Error('Reconciliation entries are retained as closing records and cannot be edited.');
-    header.item_part_id = old?.item_part_id ?? null;
     header.employee_id = old?.employee_id ?? null;
     header.reconciliation = false;
     if (draft.reconciliation) {
