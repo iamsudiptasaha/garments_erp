@@ -17,7 +17,7 @@ export const pages = {
   finishedProducts: {
     section: 'finishedGoods',
     title: 'Finished Goods',
-    permissionActions: ['view', 'create'],
+    permissionActions: ['view', 'create', 'format', 'export', 'print'],
     workspace: true,
     readonly: true,
     header: [],

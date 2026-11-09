@@ -1,6 +1,7 @@
 import { createElement as h, useEffect, useState } from 'react';
 
 import { RecordSelect } from '../fabric/record-select.js';
+import { FinishedGoodsSheetView } from './sheet-view.js';
 
 const emptyComponent = { size_id: '', pieces: '1' };
 
@@ -154,7 +155,7 @@ function ProductForm({ data, components, setComponents }) {
   );
 }
 
-export function FinishedCatalogue({ client, screen, canCreate }) {
+export function FinishedCatalogue({ client, screen, canCreate, capabilities }) {
   const [data, setData] = useState(null);
   const [revision, setRevision] = useState(0);
   const [productId, setProductId] = useState('');
@@ -233,8 +234,20 @@ export function FinishedCatalogue({ client, screen, canCreate }) {
   return h(
     'div',
     null,
-    table(columns[screen], rows),
-    !rows.length && h('p', null, 'No records yet.'),
+    h(
+      FinishedGoodsSheetView,
+      {
+        page: screen,
+        title: { products: 'Sellable products', prices: 'Item prices', priceTypes: 'Price types' }[
+          screen
+        ],
+        columns: columns[screen],
+        rows,
+        capabilities,
+      },
+      table(columns[screen], rows),
+      !rows.length && h('p', null, 'No records yet.'),
+    ),
     error && h('p', { role: 'alert' }, error),
     notice && h('p', { role: 'status' }, notice),
     screen === 'prices' &&
