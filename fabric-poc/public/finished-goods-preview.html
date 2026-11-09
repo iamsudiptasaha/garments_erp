@@ -1,0 +1,455 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Finished Goods design preview</title><style>body{margin:0} #fg-review aside,#fg-review .fg-toolbar{display:none} #fg-review .fg-shell{grid-template-columns:minmax(0,1fr)!important}</style></head><body>
+<div id="fg-review">
+  
+  <div class="fg-shell">
+    <aside>
+      <div class="fg-brand"><b>G</b><div>Garment workspace<small>Fabric pilot</small></div></div>
+      <div class="fg-context">Overview</div>
+      <details><summary>Fabric</summary><div class="fg-links"><span>Fabric overview</span></div></details>
+      <details><summary>Colours</summary></details>
+      <details>
+        <summary>Production</summary>
+        <div class="fg-links"><span>Task Board</span><span>Update Tasks</span><span>Items</span><span>Job history</span><span>Flags</span><span>Gender</span><span>Job workers</span><span>Variants</span><span>Stages</span><span>Stage types</span><span>Part names</span><span>Sizes</span><span>Product types</span><span>Job statuses</span></div>
+      </details>
+      <details open>
+        <summary>Finished Goods</summary>
+        <nav class="fg-links" aria-label="Finished Goods pages">
+          <button type="button" data-page="stock" aria-current="page">Item stock summary</button>
+          <button type="button" data-page="sellable-summary">Sellable summary</button>
+          <button type="button" data-page="valuation">Stock valuation</button>
+          <button type="button" data-page="produced">Items produced</button>
+          <button type="button" data-page="adjust">Stock adjustments</button>
+          <button type="button" data-page="products">Sellable products</button>
+          <button type="button" data-page="prices">Item prices</button>
+          <button type="button" data-page="price-types">Price types</button>
+        </nav>
+      </details>
+    <details><summary>Raw Material Inventory</summary></details><details><summary>Miscellaneous</summary></details></aside>
+    <main>
+      <div class="fg-toolbar"><button type="button" id="fg-menu" aria-expanded="true">☰ Hide menu</button><strong>Garment workspace</strong><small>Fabric pilot</small></div>
+      <div class="fg-preview">DESIGN PREVIEW · Sample data</div>
+      <section data-panel="stock">
+        <h1>Item stock summary</h1>
+        <table><thead><tr><th>Style code</th><th>Size</th><th>Total produced</th><th>Verified pieces</th><th>Pieces adjusted</th><th>Pieces returned</th><th>Pieces on bill hold</th><th>Pieces sold</th><th>Available</th></tr></thead>
+        <tbody><tr><td>KT-042</td><td>16</td><td>26</td><td>24</td><td>0</td><td>0</td><td>0</td><td>0</td><td>24</td></tr><tr><td>KT-042</td><td>18</td><td>35</td><td>32</td><td>−2</td><td>1</td><td>4</td><td>3</td><td>24</td></tr><tr><td>KT-042</td><td>20</td><td>18</td><td>18</td><td>0</td><td>0</td><td>0</td><td>0</td><td>18</td></tr></tbody></table>
+      </section>
+      <section data-panel="sellable-summary" hidden>
+        <h1>Sellable summary</h1>
+        <table><thead><tr><th>Style code</th><th>Size</th><th>Item type</th><th>Total produced (sets)</th><th>Total sold</th><th>Total returned (sets)</th><th>Total billing hold</th><th>Total ordered</th><th>Total delivered</th><th>Total left (sets)</th><th>Available %</th></tr></thead>
+        <tbody><tr><td>KT-042</td><td>16-18-20</td><td>Tee</td><td>16</td><td>—</td><td>0</td><td>—</td><td>—</td><td>—</td><td>12</td><td>—</td></tr></tbody></table>
+      </section>
+      <section data-panel="valuation" hidden>
+        <h1>Stock valuation</h1>
+        <table><thead><tr><th>Style code</th><th>Size</th><th>Total pieces in house</th><th>Base price per piece</th><th>Stock value</th></tr></thead>
+        <tbody><tr><td>KT-042</td><td>16-20</td><td>70</td><td>₹200.00</td><td>₹14,000.00</td></tr></tbody></table>
+      </section>
+      <section data-panel="produced" hidden>
+        <h1>Items produced</h1>
+        <table><thead><tr><th>Receipt</th><th>Item</th><th>Actual pieces</th><th>Verified by</th><th>Verified at</th></tr></thead><tbody><tr><td>6104</td><td>KT-042</td><td>74</td><td>R. Sen</td><td>08 Nov 2026</td></tr></tbody></table>
+        <details open><summary>New stock-in</summary>
+          <div class="fg-fields">
+            <label>Manufactured item<select><option>KT-042 · Rib tee</option></select></label>
+            <label>Verifying employee<select><option>Select employee</option><option>R. Sen · E-014</option></select></label>
+          </div>
+          <details class="fg-status"><summary>Eligible for stock-in · 2 of 2 parts complete</summary>
+          <table><thead><tr><th>Item part</th><th>Current job</th><th>Stage type</th></tr></thead><tbody><tr><td>Body</td><td>JOB-281</td><td>Complete</td></tr><tr><td>Neck binding</td><td>JOB-282</td><td>Complete</td></tr></tbody></table></details>
+          <table><thead><tr><th>Allowed size</th><th>Actual pieces</th></tr></thead><tbody>
+          <tr><td>S</td><td><input type="number" min="0" step="1" aria-label="Actual S pieces" placeholder="0"></td></tr>
+          <tr><td>M</td><td><input type="number" min="0" step="1" aria-label="Actual M pieces" placeholder="0"></td></tr>
+          <tr><td>L</td><td><input type="number" min="0" step="1" aria-label="Actual L pieces" placeholder="0"></td></tr>
+          </tbody></table>
+          <p>Verification locks the item structure and records an immutable receipt.</p>
+          <button class="fg-action" type="button" disabled>Verify stock-in</button>
+        </details>
+      </section>
+      <section data-panel="adjust" hidden>
+        <h1>Stock adjustments</h1>
+        <table><thead><tr><th>Item · size</th><th>Change</th><th>Reason</th><th>Verified by</th></tr></thead><tbody><tr><td>KT-042 · M</td><td>−2</td><td>Physical recount</td><td>R. Sen</td></tr></tbody></table>
+        <details open><summary>New adjustment</summary>
+          <div class="fg-fields">
+            <label>Manufactured item<select><option>KT-042 · Rib tee</option></select></label>
+            <label>Allowed size<select><option>M · 30 available</option><option>S · 24 available</option><option>L · 18 available</option></select></label>
+            <label>Quantity change<input type="number" step="1" placeholder="e.g. −2"></label>
+            <label>Verifying employee<select><option>Select employee</option><option>R. Sen · E-014</option></select></label>
+          </div>
+          <label>Reason<textarea rows="2" placeholder="Reason for this correction"></textarea></label>
+          <button class="fg-action" type="button" disabled>Verify adjustment</button>
+        </details>
+      </section>
+      <section data-panel="products" hidden>
+        <h1>Sellable products</h1>
+        <table><thead><tr><th>SKU</th><th>Name</th><th>Status</th></tr></thead><tbody><tr><td>KT-042-SET</td><td>Rib tee size pack</td><td>Active · Verified</td></tr></tbody></table>
+        <details open><summary>New sellable product</summary>
+          <div class="fg-fields">
+            <label>SKU<input placeholder="KT-042-TRIO"></label>
+            <label>Name<input placeholder="Rib tee trio"></label>
+            <label>Commercial style code<input placeholder="KT-042"></label>
+            <label>Date<input type="date"></label>
+          </div>
+          <h2>Sellable units</h2>
+          <table><thead><tr><th>Manufactured item</th><th>Allowed size</th><th>Pieces per set (share weight)</th></tr></thead><tbody>
+            <tr><td><select aria-label="First component item"><option>KT-042</option></select></td><td><select aria-label="First component size"><option>S</option><option>M</option><option>L</option></select></td><td><input aria-label="First component pieces per set" type="number" min="1" step="1" value="1"></td></tr>
+            <tr><td><select aria-label="Second component item"><option>KT-042</option></select></td><td><select aria-label="Second component size"><option>M</option><option>S</option><option>L</option></select></td><td><input aria-label="Second component pieces per set" type="number" min="1" step="1" value="2"></td></tr>
+          </tbody></table>
+          <label>Verifying employee<select><option>Select employee</option><option>R. Sen · E-014</option></select></label>
+          <section class="fg-recipe" aria-label="One sellable set">
+            <header><strong>One sellable set</strong><span data-recipe-total aria-live="polite">3 pieces</span></header>
+            <div data-recipe aria-live="polite"></div>
+          </section>
+          <p>Composition is locked after verification.</p>
+          <button class="fg-action" type="button" disabled>Verify composition</button>
+        </details>
+      </section>
+      <section data-panel="prices" hidden>
+        <h1>Item prices</h1>
+        <p>Price versions for a sellable product</p>
+        <table><thead><tr><th>Sellable product</th><th>Price type</th><th>Version</th><th>Price per piece</th><th>Date</th></tr></thead><tbody><tr><td>KT-042-SET</td><td>Wholesale</td><td>v1</td><td>840.00</td><td>08 Nov 2026</td></tr></tbody></table>
+        <details open><summary>New price version</summary>
+          <div class="fg-fields">
+            <label>Sellable product<select><option>KT-042-SET · Rib tee size pack</option></select></label>
+            <label>Price type<select><option>Wholesale</option></select></label>
+            <label>Version<input placeholder="v2"></label>
+            <label>Price per piece<input type="number" step="any"></label>
+            <label>Date<input type="date"></label>
+          </div>
+<details class="fg-lines"><summary>View sellable product contents</summary><p>KT-042-SET · Rib tee size pack</p><table><thead><tr><th>Item</th><th>Size</th><th>Pieces per set</th></tr></thead><tbody><tr><td>KT-042</td><td>16</td><td>1</td></tr><tr><td>KT-042</td><td>18</td><td>2</td></tr><tr><td>KT-042</td><td>20</td><td>1</td></tr></tbody></table><p>One set contains 4 pieces.</p></details>
+          <button class="fg-action" type="button" disabled>Add price version</button>
+        </details>
+      </section>
+    <section data-panel="price-types" hidden>
+      <h1>Price types</h1>
+      <table><thead><tr><th>Name</th><th>Description</th></tr></thead><tbody><tr><td>Wholesale</td><td>Trade price reference</td></tr><tr><td>Retail</td><td>Retail price reference</td></tr></tbody></table>
+      <details><summary>New price type</summary><div class="fg-fields"><label>Name<input></label><label>Description<input></label></div><button class="fg-action" type="button" disabled>Save price type</button></details>
+      </section>
+      <dialog id="fg-editor" aria-label="Record details"><div class="fg-dialog-head"><h2></h2><button type="button" id="fg-close">Close</button></div><div id="fg-editor-body"></div></dialog>
+    </main>
+  </div>
+</div>
+<style>
+#fg-review {--fg-paper:light-dark(#fff,#171d27);--fg-ink:light-dark(#202b3b,#e2eaf5);--fg-line:light-dark(#d8e0eb,#39475c);--fg-side:light-dark(#f3f6fa,#202938);--fg-active:light-dark(#dfeafb,#314967);background:var(--fg-paper);color:var(--fg-ink);border:1px solid var(--fg-line);border-radius:8px;font:14px/1.45 system-ui,sans-serif}
+#fg-review * {box-sizing:border-box}
+#fg-review .fg-top {display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 16px;border-bottom:1px solid var(--fg-line)}
+#fg-review .fg-shell {display:grid;grid-template-columns:185px minmax(0,1fr)}
+#fg-review aside {background:var(--fg-side);padding:12px;border-right:1px solid var(--fg-line)}
+#fg-review main {padding:20px;min-width:0}
+#fg-review summary {cursor:pointer;font-weight:600;padding:7px 0}
+#fg-review .fg-links {display:grid;gap:3px;padding-left:7px}
+#fg-review .fg-links span,#fg-review button {padding:6px 8px}
+#fg-review button,#fg-review input,#fg-review select,#fg-review textarea {font:inherit;color:inherit}
+#fg-review button {border:0;border-radius:4px;background:transparent;text-align:left;cursor:pointer}
+#fg-review button[aria-current],#fg-review .fg-action {background:var(--fg-active)}
+#fg-review button:disabled {opacity:.65;cursor:default}
+#fg-review .fg-action {margin-top:12px}
+#fg-review h1,#fg-review h2,#fg-review p {margin:0 0 10px}
+#fg-review h1 {font-size:24px}
+#fg-review h2 {font-size:16px;margin-top:14px}
+#fg-review .fg-kicker {font-size:11px;letter-spacing:.12em;margin-bottom:5px}
+#fg-review table {width:100%;border-collapse:collapse;table-layout:fixed;margin:10px 0 14px}
+#fg-review th,#fg-review td {border:1px solid var(--fg-line);text-align:left;padding:7px;overflow-wrap:anywhere}
+#fg-review th {background:var(--fg-side);font-weight:600}
+#fg-review .fg-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:8px 0}
+#fg-review label {display:grid;gap:4px}
+#fg-review input,#fg-review select,#fg-review textarea {width:100%;min-width:0;padding:5px;border:1px solid var(--fg-line);border-radius:4px;background:var(--fg-paper)}
+#fg-review .fg-status {padding:6px 8px;background:var(--fg-side)}
+@media(max-width:650px){#fg-review .fg-shell{grid-template-columns:1fr}#fg-review aside{border-right:0;border-bottom:1px solid var(--fg-line)}#fg-review .fg-links{display:flex;flex-wrap:wrap}#fg-review main{padding:12px}}
+@media(max-width:390px){#fg-review .fg-fields{grid-template-columns:1fr}#fg-review th,#fg-review td{padding:4px}}
+
+#fg-review {--fg-paper:light-dark(#fff,#171d27);--fg-ink:light-dark(#243e53,#e2eaf5);--fg-line:light-dark(#dce6f0,#39475c);--fg-side:light-dark(#edf4fb,#202938);--fg-active:light-dark(#d4eafa,#314967);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#fg-review [hidden]{display:none!important}
+#fg-review .fg-shell{grid-template-columns:235px minmax(0,1fr)}
+#fg-review.fg-menu-hidden .fg-shell{grid-template-columns:minmax(0,1fr)}
+#fg-review aside{padding:20px 14px}
+#fg-review summary{padding:10px 7px;font-size:13px}
+#fg-review .fg-brand{display:flex;gap:10px;align-items:center;font-weight:650;padding:0 3px 22px}
+#fg-review .fg-brand b{display:grid;place-items:center;width:36px;height:40px;border-radius:12px;background:light-dark(#8ebfe4,#345b78)}
+#fg-review small{display:block;font-size:11px;font-weight:400}
+#fg-review .fg-context{padding:8px 10px;font-size:12px}
+#fg-review .fg-links{border-left:1px solid var(--fg-line);margin:4px 0 8px 12px;padding-left:10px}
+#fg-review .fg-links span,#fg-review .fg-links button{padding:8px 10px;font-size:12px;border:0;border-radius:7px}
+#fg-review button[aria-current]{box-shadow:inset 3px 0 #6aa7d2;font-weight:600}
+#fg-review main{padding:18px 24px}
+#fg-review .fg-toolbar,#fg-review .fg-head,#fg-review .fg-actions,#fg-review .fg-dialog-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#fg-review .fg-toolbar{padding-bottom:10px;border-bottom:1px solid var(--fg-line)}
+#fg-review .fg-preview{font-size:11px;letter-spacing:.04em;margin:12px 0 22px}
+#fg-review .fg-head{justify-content:space-between;margin-bottom:20px}
+#fg-review .fg-head h1{font-size:29px;letter-spacing:-.6px;font-weight:600}
+#fg-review .fg-head p{font-size:12px;margin:0}
+#fg-review .fg-toggle{display:flex;background:var(--fg-side);border-radius:9px;padding:4px}
+#fg-review .fg-toggle button{border:0;padding:7px 12px;font-size:12px}
+#fg-review .fg-toggle button[aria-pressed=true]{background:var(--fg-paper);box-shadow:0 1px 5px #25445b20}
+#fg-review .fg-actions{margin-bottom:16px}
+#fg-review .fg-actions input{flex:1;min-width:130px;max-width:370px;margin-right:auto}
+#fg-review button{border:1px solid var(--fg-line);border-radius:8px;font-size:13px}
+#fg-review .fg-primary{background:#357fb7;color:white;border-color:#357fb7;padding:9px 12px}
+#fg-review .fg-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,235px),1fr));gap:14px}
+#fg-review .fg-record{border:1px solid var(--fg-line);border-radius:15px;padding:17px;align-self:start}
+#fg-review .fg-record h2{margin:5px 0 12px}
+#fg-review dl,#fg-review dd{margin:0}
+#fg-review dl>div{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--fg-line)}
+#fg-review dd{text-align:right}
+#fg-review dialog{color:var(--fg-ink);background:var(--fg-paper);border:1px solid var(--fg-line);border-radius:12px;width:min(680px,calc(100% - 24px));padding:20px}
+#fg-review dialog::backdrop{background:#142c4266}
+#fg-review .fg-dialog-head{justify-content:space-between;margin-bottom:12px}
+#fg-review .fg-dialog-head h2{margin:0}
+@media(max-width:650px){#fg-review .fg-shell{grid-template-columns:1fr}#fg-review main{padding:12px}}
+
+#fg-review .fg-record{border:0;padding:25px;background:light-dark(#e3f0fb,#213b50)}
+#fg-review .fg-record:nth-child(4n+2){background:light-dark(#e9edf9,#243e34)}
+#fg-review .fg-record:nth-child(4n+3){background:light-dark(#e5f2f3,#493e31)}
+#fg-review .fg-record:nth-child(4n+4){background:light-dark(#f9efdf,#3d3351)}
+#fg-review .fg-card-top{display:flex;justify-content:space-between;gap:10px;font-size:10px}
+#fg-review .fg-record h2{font-size:23px;margin:17px 0 8px;letter-spacing:-.5px}
+#fg-review .fg-record dl>div{border:0;padding:3px 0}
+#fg-review .fg-subtitle,#fg-review .fg-record dl,#fg-review .fg-size-summary{font-size:12px}
+#fg-review .fg-open{background:var(--fg-paper);margin-top:12px;font-size:12px}
+#fg-review .fg-sheet-tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px}
+#fg-review .fg-sheet-tools select{width:auto}
+#fg-review .fg-sheet-status{font-size:11px;margin:10px 0}
+#fg-review .fg-sheet{border:1px solid var(--fg-line);margin:8px 0 16px}
+#fg-review .fg-sheet table{margin:0;font-size:12px}
+#fg-review .fg-sheet th,#fg-review .fg-sheet td{padding:4px 6px}
+#fg-review .fg-sheet-index th,#fg-review .fg-row-index{background:var(--fg-side);text-align:center;font-weight:400}
+#fg-review .fg-sheet-index th:first-child,#fg-review .fg-row-index{width:30px}
+#fg-review .fg-lines{margin:10px 0}
+
+#fg-review .fg-recipe{border:1px solid var(--fg-line);border-radius:8px;padding:12px;margin:12px 0;background:var(--fg-side)}
+#fg-review .fg-recipe header{display:flex;justify-content:space-between;gap:8px;margin-bottom:10px}
+#fg-review [data-recipe]{display:flex;gap:8px;flex-wrap:wrap}
+#fg-review .fg-recipe-size{background:var(--fg-paper);border:1px solid var(--fg-line);border-radius:7px;min-width:96px;padding:8px}
+#fg-review .fg-recipe-size strong{font-size:22px}
+#fg-review .fg-sheet{overflow-x:auto}
+#fg-review .fg-wide-sheet{min-width:790px}
+#fg-review td input[type=search]{margin-bottom:4px}
+</style>
+<script>
+{
+  const root = document.getElementById('fg-review');
+  const pages = [...root.querySelectorAll('[data-page]')];
+  const panels = [...root.querySelectorAll('[data-panel]')];
+  const editor = root.querySelector('#fg-editor');
+  const editorBody = root.querySelector('#fg-editor-body');
+  const sidebar = root.querySelector('aside');
+  const menu = root.querySelector('#fg-menu');
+  menu.addEventListener('click', () => {
+    sidebar.hidden = !sidebar.hidden;
+    root.classList.toggle('fg-menu-hidden', sidebar.hidden);
+    menu.setAttribute('aria-expanded', String(!sidebar.hidden));
+    menu.textContent = sidebar.hidden ? '☰ Show menu' : '☰ Hide menu';
+  });
+  root.querySelector('#fg-close').addEventListener('click', () => editor.close());
+  const descriptions = {
+    stock: 'Compare completed production, verified stock and movements by item size.',
+    'sellable-summary': 'Available sets are limited by the component size that can make the fewest whole sets.',
+    valuation: 'Total pieces in house × item base price.',
+
+    produced: 'Record actual size quantities once every item part is complete.',
+    adjust: 'Record a verified quantity correction against an existing item size.',
+    products: 'Set up sellable products and their size-wise composition.',
+    prices: 'Set up price versions for sellable products.',
+    'price-types': 'Maintain the shared price type reference list.',
+  };
+  const actions = {
+    produced: '+ Record stock-in',
+    adjust: '+ Add adjustment',
+    products: '+ Add sellable product',
+    prices: '+ Add price version',
+    'price-types': '+ Add price type',
+  };
+  const make = (tag, label, className) => {
+    const node = document.createElement(tag);
+    if (label) node.textContent = label;
+    if (className) node.className = className;
+    return node;
+  };
+  let lookupId = 0;
+  function makeSelectorsSearchable(container) {
+    for (const select of container.querySelectorAll('select')) {
+      const input = make('input');
+      const choices = make('datalist');
+      choices.id = 'fg-lookup-' + (++lookupId);
+      const label = select.getAttribute('aria-label') || select.closest('label')?.firstChild.textContent.trim() || 'Options';
+      input.setAttribute('aria-label', label);
+      input.setAttribute('list', choices.id);
+      input.placeholder = 'Type to search…';
+      for (const option of select.options) {
+        if (!option.textContent.startsWith('Select ')) {
+          const choice = make('option');
+          choice.value = option.textContent;
+          choices.append(choice);
+        }
+      }
+      const selected = select.selectedOptions[0]?.textContent;
+      if (selected && !selected.startsWith('Select ')) input.value = selected;
+      select.replaceWith(input, choices);
+    }
+  }
+  const receiptDetails = document.createElement('template');
+  receiptDetails.innerHTML = '<p>Receipt 6104 · KT-042 · Rib tee</p><p>Verified by R. Sen · 08 Nov 2026</p><table><thead><tr><th>Size</th><th>Actual pieces</th></tr></thead><tbody><tr><td>S</td><td>24</td></tr><tr><td>M</td><td>32</td></tr><tr><td>L</td><td>18</td></tr></tbody></table><p>Total 74 pieces · Item structure locked</p>';
+  const productDetails = root.querySelector('[data-panel="prices"] .fg-lines').cloneNode(true);
+  productDetails.open = true;
+  function openRecord(name, content) {
+    editor.querySelector('h2').textContent = name;
+    editorBody.replaceChildren(content);
+    editor.showModal();
+  }
+  for (const panel of panels) {
+    const key = panel.dataset.panel;
+    const title = panel.querySelector('h1');
+    const header = make('header', '', 'fg-head');
+    const heading = make('div');
+    const eyebrow = make('div', 'FINISHED GOODS / ' + title.textContent.toUpperCase(), 'fg-kicker');
+    title.before(header);
+    heading.append(eyebrow, title, make('p', descriptions[key]));
+    header.append(heading);
+    panel.querySelectorAll(':scope > p').forEach((p) => p.remove());
+
+    const toggle = make('div', '', 'fg-toggle');
+    const overview = make('button', 'Overview');
+    const sheet = make('button', 'Sheet');
+    const cards = make('div', '', 'fg-cards');
+    const grid = make('div', '', 'fg-grid');
+    const tables = [...panel.querySelectorAll(':scope > table')];
+    for (const table of tables) {
+      if (table.rows[0].cells.length >= 9) table.classList.add('fg-wide-sheet');
+      const preceding = table.previousElementSibling;
+      if (preceding?.tagName === 'H2') grid.append(preceding);
+      const sheetFrame = make('div', '', 'fg-sheet');
+      grid.append(sheetFrame);
+      sheetFrame.append(table);
+      const headerRow = table.tHead.rows[0];
+      const letters = table.tHead.insertRow(0);
+      letters.className = 'fg-sheet-index';
+      letters.append(make('th'));
+      [...headerRow.cells].forEach((_, index) => letters.append(make('th', String.fromCharCode(65 + index))));
+      headerRow.prepend(make('th', '1', 'fg-row-index'));
+      [...table.tBodies[0].rows].forEach((row, index) => row.prepend(make('th', String(index + 2), 'fg-row-index')));
+      const labels = [...headerRow.cells].slice(1).map((cell) => cell.textContent);
+      for (const row of table.tBodies[0].rows) {
+        const values = [...row.cells].slice(1).map((cell) => cell.textContent);
+        const card = make('article', '', 'fg-record');
+        const top = make('div', '', 'fg-card-top');
+        top.append(make('span', title.textContent.toUpperCase(), 'fg-kicker'), make('span', '•••'));
+        card.append(top, make('h2', key === 'produced' ? 'KT-042 · Rib tee' : values[0]));
+        if (key === 'produced') card.append(make('p', 'Receipt ' + values[0] + ' · Verified', 'fg-subtitle'));
+        if (key === 'produced') card.append(make('p', 'S 24  ·  M 32  ·  L 18', 'fg-size-summary'));
+        const fields = make('dl');
+        labels.slice(1).forEach((label, i) => {
+          const field = make('div');
+          field.append(make('dt', label), make('dd', values[i + 1]));
+          fields.append(field);
+        });
+        card.append(fields);
+        if (['produced', 'products', 'prices'].includes(key)) {
+          const action = make('button', key === 'produced' ? 'Open receipt →' : 'View contents →', 'fg-open');
+          action.addEventListener('click', () => openRecord(
+            key === 'produced' ? 'Stock-in receipt' : 'Sellable product contents',
+            key === 'produced' ? receiptDetails.content.cloneNode(true) : productDetails.cloneNode(true),
+          ));
+          card.append(action);
+        }
+        cards.append(card);
+      }
+    }
+    const sheetTools = make('div', '', 'fg-sheet-tools');
+    sheetTools.append(make('span', 'Sort complete rows by'));
+    const sort = make('select');
+    sort.setAttribute('aria-label', 'Sort column');
+    const columns = [...tables[0].tHead.rows[1].cells].slice(1);
+    columns.forEach((cell, i) => {
+      const option = make('option', cell.textContent);
+      option.value = String(i + 1);
+      sort.append(option);
+    });
+    const direction = make('select');
+    direction.setAttribute('aria-label', 'Sort direction');
+    direction.append(make('option', 'Ascending'), make('option', 'Descending'));
+    const sortRows = () => {
+      const body = tables[0].tBodies[0];
+      const rows = [...body.rows].sort((a, b) =>
+        a.cells[Number(sort.value)].textContent.localeCompare(b.cells[Number(sort.value)].textContent, undefined, { numeric: true })
+        * (direction.selectedIndex ? -1 : 1),
+      );
+      rows.forEach((row, i) => { row.cells[0].textContent = String(i + 2); body.append(row); });
+    };
+    sort.addEventListener('change', sortRows);
+    direction.addEventListener('change', sortRows);
+    sheetTools.append(sort, direction, make('span', tables[0].tBodies[0].rows.length + ' rows'));
+    grid.prepend(sheetTools, make('div', '🔒 Read-only access · Zoom 100%', 'fg-sheet-status'));
+    const show = (view) => {
+      overview.setAttribute('aria-pressed', String(view === 'overview'));
+      sheet.setAttribute('aria-pressed', String(view === 'sheet'));
+      cards.hidden = view !== 'overview';
+      grid.hidden = view !== 'sheet';
+    };
+    overview.addEventListener('click', () => show('overview'));
+    sheet.addEventListener('click', () => show('sheet'));
+    toggle.append(overview, sheet);
+    header.append(toggle);
+
+    const toolbar = make('div', '', 'fg-actions');
+    const search = make('input');
+    search.type = 'search';
+    search.placeholder = 'Search ' + title.textContent.toLowerCase() + '…';
+    search.setAttribute('aria-label', search.placeholder);
+    search.addEventListener('input', () => {
+      const term = search.value.trim().toLowerCase();
+      for (const row of [...cards.children, ...grid.querySelectorAll('tbody tr')]) {
+        row.hidden = !row.textContent.toLowerCase().includes(term);
+      }
+    });
+    toolbar.append(search);
+    const form = panel.querySelector(':scope > details');
+    if (form) {
+      const name = form.querySelector('summary').textContent;
+      form.querySelector('summary').remove();
+      const fields = [...form.children];
+      form.remove();
+      const add = make('button', actions[key], 'fg-primary');
+      const action = fields.at(-1);
+      action.classList.add('fg-primary');
+      add.addEventListener('click', () => {
+        editor.querySelector('h2').textContent = name;
+        editorBody.replaceChildren(...fields.map((node) => node.cloneNode(true)));
+        makeSelectorsSearchable(editorBody);
+        const recipe = editorBody.querySelector('[data-recipe]');
+        if (recipe) {
+          const updateRecipe = () => {
+            const components = [...editorBody.querySelectorAll('tbody tr')].map((row) => ({
+              size: row.cells[1].querySelector('input').value,
+              weight: Number(row.cells[2].querySelector('input').value),
+            }));
+            const total = components.reduce((sum, component) => sum + component.weight, 0);
+            recipe.replaceChildren(...components.map(({ size, weight }) => {
+              const tile = make('div', '', 'fg-recipe-size');
+              tile.append(make('small', 'Size ' + size), make('strong', String(weight)), make('small', weight === 1 ? 'piece per set' : 'pieces per set'));
+              return tile;
+            }));
+            editorBody.querySelector('[data-recipe-total]').textContent = total + ' pieces';
+
+          };
+          editorBody.querySelector('table').addEventListener('input', updateRecipe);
+          updateRecipe();
+        }
+        editor.showModal();
+      });
+      toolbar.append(add);
+    }
+    panel.append(toolbar, cards, grid);
+    show(['stock', 'sellable-summary', 'valuation'].includes(key) ? 'sheet' : 'overview');
+  }
+  for (const page of pages) {
+    page.addEventListener('click', () => {
+      for (const button of pages) {
+        if (button === page) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+      }
+      for (const panel of panels) panel.hidden = panel.dataset.panel !== page.dataset.page;
+    });
+  }
+  const selected = new URLSearchParams(location.search).get('page');
+  pages.find((page) => page.dataset.page === selected)?.click();
+
+}
+</script>
+
+</body></html>

@@ -113,8 +113,21 @@ function loadSidebar() {
   return !window.matchMedia('(max-width:700px)').matches;
 }
 
+const finishedGoodsPreviewPages = {
+  sizes: ['stock', 'Item stock summary'],
+  variations: ['sellable-summary', 'Sellable summary'],
+  valuation: ['valuation', 'Stock valuation'],
+  receipt: ['produced', 'Items produced'],
+  adjustment: ['adjust', 'Stock adjustments'],
+  products: ['products', 'Sellable products'],
+  prices: ['prices', 'Item prices'],
+  priceTypes: ['price-types', 'Price types'],
+};
+
 function App({ live }) {
-  const [finishedGoodsPage, setFinishedGoodsPage] = useState('sizes');
+  const [finishedGoodsPage, setFinishedGoodsPage] = useState(() =>
+    new URLSearchParams(location.search).get('finishedGoods') === 'costing' ? 'costing' : 'sizes',
+  );
   const [sidebarOpen, setSidebarOpen] = useState(loadSidebar);
   useEffect(() => {
     try {
@@ -992,7 +1005,19 @@ function App({ live }) {
               h(
                 'nav',
                 { 'aria-label': 'Finished Goods pages' },
-                Object.entries(finishedGoodsPages)
+                Object.entries(
+                  live
+                    ? finishedGoodsPages
+                    : {
+                        ...Object.fromEntries(
+                          Object.entries(finishedGoodsPreviewPages).map(([key, [, title]]) => [
+                            key,
+                            title,
+                          ]),
+                        ),
+                        costing: finishedGoodsPages.costing,
+                      },
+                )
                   .filter(
                     ([key]) =>
                       !live ||
@@ -1176,12 +1201,21 @@ function App({ live }) {
               ? h(AdminPanel, { page, access, actor, onSave: saveAccess })
               : page === 'finishedProducts'
                 ? can('view', 'finishedProducts')
-                  ? h(FinishedGoods, {
-                      client: live ? getAccessClient() : null,
-                      key: actor + ':' + finishedGoodsPage,
-                      screen: finishedGoodsPage,
-                      canCreate: live && can('create'),
-                    })
+                  ? !live && Object.hasOwn(finishedGoodsPreviewPages, finishedGoodsPage)
+                    ? h('iframe', {
+                        title: finishedGoodsPreviewPages[finishedGoodsPage][1],
+                        src:
+                          './finished-goods-preview.html?page=' +
+                          finishedGoodsPreviewPages[finishedGoodsPage][0],
+                        sandbox: 'allow-scripts',
+                        style: { width: '100%', minHeight: '80vh', border: 0 },
+                      })
+                    : h(FinishedGoods, {
+                        client: live ? getAccessClient() : null,
+                        key: actor + ':' + finishedGoodsPage,
+                        screen: finishedGoodsPage,
+                        canCreate: live && can('create'),
+                      })
                   : h(
                       'section',
                       { className: 'access-denied' },

@@ -105,6 +105,13 @@ export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
       }),
     notice && h('p', { role: 'status' }, notice),
     !client &&
+      screen === 'costing' &&
+      h(
+        'a',
+        { href: './fabric.html?live=1&finishedGoods=costing#finishedProducts' },
+        'Open live Item costing',
+      ),
+    !client &&
       ['receipt', 'adjustment', 'costing'].includes(screen) &&
       h('p', { role: 'status' }, 'Connect to the ERP to use this page.'),
     ['sizes', 'variations'].includes(screen) &&

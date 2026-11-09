@@ -287,6 +287,8 @@ export function CostingHistory({ client, canEdit, itemIds }) {
     ),
     error && h('p', { role: 'alert' }, error),
     !error && (!items || (itemId && !history)) && h('p', { role: 'status' }, 'Loading costing…'),
+    items?.length === 0 &&
+      h('p', { role: 'status' }, 'No eligible items. Every item part must reach a complete stage.'),
     history?.length === 0 && h('p', null, 'No costing versions for this item.'),
     Boolean(history?.length) &&
       h(
