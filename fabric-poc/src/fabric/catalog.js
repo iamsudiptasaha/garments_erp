@@ -14,6 +14,15 @@ const amountFields = [
 const invoiceColumns = [column('bill', 'Bill'), column('date', 'Date')];
 export const pages = {
   ...productionPages,
+  finishedProducts: {
+    section: 'finishedGoods',
+    title: 'Finished Goods',
+    permissionActions: ['view', 'create'],
+    workspace: true,
+    readonly: true,
+    header: [],
+    columns: [],
+  },
   productionItems: {
     ...productionPages.productionItems,
     header: [

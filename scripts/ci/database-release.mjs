@@ -28,6 +28,11 @@ const files = [
   '20261108145000_remove_checkout_item_part.sql',
   '20261108150000_raw_material_transactions.sql',
   '20261109072811_move_erp_objects_out_of_access.sql',
+  '20261109101000_seed_production_stages.sql',
+  '20261109102000_item_costing_classification.sql',
+  '20261109103000_require_finalized_production_costing.sql',
+  '20261109104000_item_costing_read.sql',
+  '20261109105000_item_costing_write.sql',
 ];
 // Files before the first release migration belong to the deployed baseline.
 export function releaseMigrationFiles() {

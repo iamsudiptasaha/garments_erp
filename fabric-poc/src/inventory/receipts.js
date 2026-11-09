@@ -74,6 +74,7 @@ export function receiptFields(spec, data, mode, header) {
     header: mode
       ? [
           ...source,
+          byKey.material_category_id,
           ...['date', 'quantity', 'price', 'invoice_number', 'verified_by_employee_id'].map(
             (key) => byKey[key],
           ),

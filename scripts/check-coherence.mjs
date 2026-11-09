@@ -17,9 +17,21 @@ function checkoutReleaseSchema(schema) {
  const receiptSql = readFileSync(new URL('../supabase/migrations/' + receiptMigration, import.meta.url), 'utf8');
  if (!receiptSql.includes('add column raw_material_purchase_order_item_id bigint'))
   throw Error('Stock receipts require a purchase order line column');
+ const categoryMigration = '20261109102000_item_costing_classification.sql';
+ const categorySql = readFileSync(new URL('../supabase/migrations/' + categoryMigration, import.meta.url), 'utf8');
+ if (!categorySql.includes('add column material_category_id bigint references garments_erp.category_list (id)'))
+  throw Error('Receipt category must reference garments_erp.category_list(id)');
+ if (!categorySql.includes('add column stage_id bigint references garments_erp.stage (id)'))
+  throw Error('Checkout stage must reference garments_erp.stage(id)');
  return {...schema, columns: [...schema.columns, {
   table_schema: 'garments_erp', table_name: 'raw_material_check_in', column_name: 'raw_material_purchase_order_item_id',
   data_type: 'bigint', is_nullable: 'YES', pending_migration: receiptMigration,
+ }, {
+  table_schema: 'garments_erp', table_name: 'raw_material_check_in', column_name: 'material_category_id',
+  data_type: 'bigint', is_nullable: 'YES', pending_migration: categoryMigration,
+ }, {
+  table_schema: 'garments_erp', table_name: 'raw_material_check_out', column_name: 'stage_id',
+  data_type: 'bigint', is_nullable: 'YES', pending_migration: categoryMigration,
  }, {
   table_schema: 'garments_erp', table_name: 'raw_material_check_out', column_name: 'variant_item_id',
   data_type: 'bigint', is_nullable: 'YES', pending_migration: migration,

@@ -2,9 +2,6 @@
 \set ON_ERROR_STOP on
 begin;
 
-insert into garments_erp.stage_type (id, name) values (982001, 'Billing test completion');
-insert into garments_erp.stage (id, name, abbr, sort_order, stage_type_id)
-values (982001, 'Billing test completion', 'BTC', 982001, 982001);
 insert into garments_erp.item (id, style_code) values (982001, 'Billing test');
 insert into garments_erp.part_list (id, part) values (982001, 'Billing test body');
 insert into garments_erp.item_part (id, item_id, part_list_id) values (982001, 982001, 982001);
@@ -12,7 +9,19 @@ insert into garments_erp.size_list (id, size) values (982001, 'Billing test S');
 insert into garments_erp.item_size_list (id, item_id, size_list_id) values (982001, 982001, 982001);
 insert into garments_erp.production (id, item_part_id) overriding system value values (982001, 982001);
 insert into garments_erp.job (id, production_id, stage_id, job_code, latest)
-values (982001, 982001, 982001, 'BILL-TEST-JOB', true);
+values (982001, 982001, (select id from garments_erp.stage where abbr = 'RTD'), 'BILL-TEST-JOB', true);
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
+insert into garments_erp.item_costing (item_id, version, item_costing_status_id, completed_units)
+select 982001, 1, id, 10 from garments_erp.item_costing_status where name = 'draft';
+insert into garments_erp.item_costing_item
+  (item_costing_id, item_costing_origin_type_id, item_costing_calculation_method_id, description, approved_amount)
+select c.id, o.id, m.id, 'Billing fixture', 10 from garments_erp.item_costing c
+cross join garments_erp.item_costing_origin_type o
+cross join garments_erp.item_costing_calculation_method m
+where c.item_id = 982001 and o.name = 'manual' and m.name = 'manual';
+update garments_erp.item_costing
+set item_costing_status_id = (select id from garments_erp.item_costing_status where name = 'finalized')
+where item_id = 982001;
 insert into garments_erp.item_produced (id, item_id, completed_job_id, verified_by, request_id)
 values (982001, 982001, 982001, 900002, gen_random_uuid());
 insert into garments_erp.item_produced_pieces (item_produced_id, item_size_list_id, pieces)

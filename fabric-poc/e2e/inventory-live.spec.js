@@ -42,6 +42,8 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
     raw_material_supplier_list: [{ id: '8', contacts_id: '10' }],
     contacts: [{ id: '10', company_name: 'Tape Supplier' }],
     unit_of_measure: [{ id: '9', unit: 'metres' }],
+    category_list: [{ id: '15', name: 'Tape', type: 'Trims' }],
+    stage: [{ id: '16', name: 'Stitching', abbr: 'STH' }],
     check_out_type: [{ id: '11', name: 'Production' }],
     employee: [],
   };
@@ -82,18 +84,27 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
   await page.getByLabel('Purchase order', { exact: true }).selectOption('4');
   await page.getByLabel('Purchase order line', { exact: true }).selectOption('12');
   await page.getByLabel('Billed quantity').fill('10');
+  await page.getByLabel('Material category', { exact: true }).selectOption('15');
   await page.getByRole('button', { name: 'Review details →' }).click();
   await page.getByRole('button', { name: 'Confirm & save', exact: true }).click();
   await expect(page.getByText('RCV-21', { exact: true }).first()).toBeVisible();
-  expect(calls[0].p_values.raw_material_purchase_order_item_id).toBe('12');
+  expect(calls[0].p_values).toMatchObject({
+    raw_material_purchase_order_item_id: '12',
+    material_category_id: '15',
+  });
 
   await page.goto('/fabric.html?live=1#materialIssues');
   await page.getByRole('button', { name: '+ Record outward' }).click();
   await page.getByLabel('Source receipt / stock').selectOption('21');
   await page.getByLabel('Outward quantity').fill('4');
   await page.getByLabel('Outward type').selectOption('11');
+  await page.getByLabel('Stage', { exact: true }).selectOption('16');
   await page.getByRole('button', { name: 'Review details →' }).click();
   await page.getByRole('button', { name: 'Confirm & save', exact: true }).click();
   await expect.poll(() => calls.length).toBe(2);
-  expect(calls[1].p_values).toMatchObject({ raw_material_check_in_id: '21', quantity: 4 });
+  expect(calls[1].p_values).toMatchObject({
+    raw_material_check_in_id: '21',
+    quantity: 4,
+    stage_id: '16',
+  });
 });
