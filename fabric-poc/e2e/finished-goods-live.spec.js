@@ -175,7 +175,7 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   await nav.getByRole('button', { name: 'Item prices', exact: true }).click();
   await page.getByRole('combobox', { name: 'Sellable product', exact: true }).fill('SHIRT');
   await page.getByRole('option', { name: 'SHIRT-SET · Shirt set' }).click();
-  await page.getByText('View sellable product contents and reference costing').click();
+  await expect(page.getByRole('region', { name: 'Item Costing lookup' })).toBeVisible();
   await expect(page.getByRole('cell', { name: '23', exact: true })).toBeVisible();
   await expect(page.getByLabel('Price per piece')).toHaveValue('');
   await page.getByRole('combobox', { name: 'Price type', exact: true }).fill('Whole');
@@ -238,4 +238,19 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   await page.getByRole('button', { name: 'Verify composition' }).click();
   await expect(page.getByRole('cell', { name: 'SHIRT-TRIO' })).toBeVisible();
   expect(entries.at(-1).p_entry.components).toEqual([{ size_id: '13', pieces: 3 }]);
+});
+
+test('sample costing worksheet supports draft review and a read-only finalized version', async ({
+  page,
+}) => {
+  await page.goto('/fabric.html?finishedGoods=costing#finishedProducts');
+  const preview = page.getByRole('region', { name: 'Item Costing mockup' });
+  await expect(preview).toContainText('Accepted Ready to Dispatch pieces: 74');
+  const rate = preview.getByRole('spinbutton', { name: 'Printing approved rate per piece' });
+  await expect(rate).toHaveValue('15');
+  await rate.fill('16');
+  await expect(preview).toContainText('₹1,280.00');
+  await preview.getByRole('combobox', { name: 'Sample version' }).selectOption('finalized');
+  await expect(rate).toHaveValue('14');
+  await expect(rate).toBeDisabled();
 });

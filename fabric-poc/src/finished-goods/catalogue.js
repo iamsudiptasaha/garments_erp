@@ -185,6 +185,7 @@ export function FinishedCatalogue({ client, screen, canCreate }) {
     event.preventDefault();
     const form = event.currentTarget;
     const entry = Object.fromEntries(new FormData(form));
+    if (screen === 'prices') entry.product_id = productId;
     if (screen === 'products')
       entry.components = components.map(({ size_id, pieces }) => ({
         size_id,
@@ -207,7 +208,6 @@ export function FinishedCatalogue({ client, screen, canCreate }) {
       });
       if (result.error) throw result.error;
       form.reset();
-      setProductId('');
       setComponents([emptyComponent]);
       setNotice('Saved.');
       setRevision((value) => value + 1);
@@ -237,6 +237,39 @@ export function FinishedCatalogue({ client, screen, canCreate }) {
     !rows.length && h('p', null, 'No records yet.'),
     error && h('p', { role: 'alert' }, error),
     notice && h('p', { role: 'status' }, notice),
+    screen === 'prices' &&
+      h(
+        'section',
+        { className: 'fg-recipe', 'aria-label': 'Item Costing lookup' },
+        h('h2', null, 'Item Costing lookup'),
+        choice(
+          'Sellable product',
+          undefined,
+          data.products.filter(({ active, verified }) => !canCreate || (active && verified)),
+          ({ sku, name }) => sku + ' · ' + name,
+          { value: productId, onChange: setProductId },
+        ),
+        h(
+          'p',
+          null,
+          product
+            ? 'Finalized manufacturing costs are shown for reference. Enter the selling price manually.'
+            : 'Select a sellable product to see its components and finalized manufacturing costs.',
+        ),
+        product &&
+          table(
+            [
+              ['item', 'Manufactured item'],
+              ['size', 'Size'],
+              ['pieces', 'Pieces per set'],
+              ['reference_cost', 'Finalized cost per piece'],
+            ],
+            product.components.map((row) => ({
+              ...row,
+              reference_cost: row.reference_cost ?? 'No finalized costing',
+            })),
+          ),
+      ),
     canCreate &&
       h(
         'details',
@@ -252,7 +285,7 @@ export function FinishedCatalogue({ client, screen, canCreate }) {
         ),
         h(
           'form',
-          { onSubmit: submit },
+          { key: revision, onSubmit: submit },
           h(
             'fieldset',
             { disabled: saving },
@@ -271,16 +304,6 @@ export function FinishedCatalogue({ client, screen, canCreate }) {
                 h(
                   'div',
                   { className: 'fg-fields' },
-                  choice(
-                    'Sellable product',
-                    'product_id',
-                    data.products.filter(({ active, verified }) => active && verified),
-                    ({ sku, name }) => sku + ' · ' + name,
-                    {
-                      value: productId,
-                      onChange: setProductId,
-                    },
-                  ),
                   choice('Price type', 'type_id', data.types, ({ name }) => name),
                   field('Version', 'version'),
                   field('Price per piece', 'price_per_piece', {
@@ -290,21 +313,6 @@ export function FinishedCatalogue({ client, screen, canCreate }) {
                   }),
                   field('Date', 'date', { type: 'date' }),
                 ),
-                product &&
-                  h(
-                    'details',
-                    null,
-                    h('summary', null, 'View sellable product contents and reference costing'),
-                    table(
-                      [
-                        ['item', 'Item'],
-                        ['size', 'Size'],
-                        ['pieces', 'Pieces per set'],
-                        ['reference_cost', 'Finalized cost per piece'],
-                      ],
-                      product.components,
-                    ),
-                  ),
               ),
             h(
               'button',

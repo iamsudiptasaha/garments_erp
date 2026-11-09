@@ -40,7 +40,7 @@ function amountLabel(value) {
   return value == null ? '—' : currency.format(value);
 }
 
-function ItemCosting({ costing, canEdit, onSave, onFinalize }) {
+export function ItemCosting({ costing, canEdit, onSave, onFinalize }) {
   const [lines, setLines] = useState(costing.lines);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');

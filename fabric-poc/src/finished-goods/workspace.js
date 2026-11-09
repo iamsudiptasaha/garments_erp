@@ -1,6 +1,7 @@
 import { createElement as h, useEffect, useState } from 'react';
 
 import { FinishedCatalogue } from './catalogue.js';
+import { ItemCostingPreview } from './costing-preview.js';
 import { CostingHistory } from './item-costing.js';
 import { StockForm } from './stock-form.js';
 import './styles.css';
@@ -150,16 +151,7 @@ export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
         }),
       ),
     notice && h('p', { role: 'status' }, notice),
-    !client &&
-      screen === 'costing' &&
-      h(
-        'a',
-        { href: './fabric.html?live=1&finishedGoods=costing#finishedProducts' },
-        'Open live Item costing',
-      ),
-    !client &&
-      ['receipt', 'adjustment', 'costing'].includes(screen) &&
-      h('p', { role: 'status' }, 'Connect to the ERP to use this page.'),
+    !client && screen === 'costing' && h(ItemCostingPreview),
     Object.hasOwn(views, screen) &&
       (movement || !command) &&
       h(
