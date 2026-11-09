@@ -26,8 +26,11 @@ for (const group of FILE_GROUPS) {
   sql += `insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values (${literal(group.bucket)},${literal(group.bucket)},false,10485760,array['application/pdf','image/jpeg','image/png','image/webp']);\n`;
   sql += `insert into garments_erp.bucket_group(bucket_id,"group",description) values (${literal(group.bucket)},${literal(group.key)},${literal(group.description)});\n`;
 }
+const fileSchema = process.argv.includes('--before-erp-schema-move')
+  ? 'garments_access'
+  : 'garments_erp';
 for (const t of FILE_TARGETS)
-  sql += `insert into garments_access.app_file_route(target_key,bucket_group_id,allowed_mime_types,max_bytes) select ${literal(t.key)},id,array[${t.mime.map(literal).join(',')}],10485760 from garments_erp.bucket_group where "group"=${literal(t.group)};\n`;
+  sql += `insert into ${fileSchema}.app_file_route(target_key,bucket_group_id,allowed_mime_types,max_bytes) select ${literal(t.key)},id,array[${t.mime.map(literal).join(',')}],10485760 from garments_erp.bucket_group where "group"=${literal(t.group)};\n`;
 sql += `insert into garments_erp.knitter(id,contact_purpose_id,contacts_id) values (900001,900001,900001);\ninsert into garments_erp.knitting_bill(id,knitter_id,invoice_date,invoice_number) values (900001,900001,current_date,'CI-KNIT-ONLY');\ninsert into garments_erp.yarn_bill(id,invoice_date,invoice_number) values (900001,current_date,'CI-YARN-ONLY');\n`;
 sql += `create or replace function public.ci_refuse_sms(event jsonb) returns jsonb language plpgsql set search_path='' as $$ begin raise exception 'SMS delivery is forbidden in isolated tests';end $$;\nrevoke all on function public.ci_refuse_sms(jsonb) from public,anon,authenticated;\ngrant execute on function public.ci_refuse_sms(jsonb) to supabase_auth_admin;\n`;
 writeFileSync(process.argv[2] || '/tmp/erp-ci-seed.sql', sql);

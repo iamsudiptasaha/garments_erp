@@ -68,8 +68,8 @@ begin
   -- The existing Fabric RPC must write review rows without physical parent fields.
   perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
   perform set_config('request.jwt.claims','{"aal":"aal2","session_id":"10000000-0000-4000-8000-000000000001"}',true);
-  select garments_access.fabric_json('lab_dip',to_jsonb(l)) into root from garments_erp.lab_dip l where id=edition_id;
-  select garments_access.fabric_json('lab_dip_version',to_jsonb(v)) into prior from garments_erp.lab_dip_version v where id=version_id;
+  select garments_erp.fabric_json('lab_dip',to_jsonb(l)) into root from garments_erp.lab_dip l where id=edition_id;
+  select garments_erp.fabric_json('lab_dip_version',to_jsonb(v)) into prior from garments_erp.lab_dip_version v where id=version_id;
   result:=public.erp_save_fabric_document('labDips',jsonb_build_object('table','lab_dip','id',edition_id::text,'before',root),'edit',
    jsonb_build_array(jsonb_build_object('table','lab_dip_version','id',version_id::text,'before',prior,'values',
     jsonb_build_object('lab_dip_id',edition_id::text,'version',2,'date','2026-11-03','comments','Through legacy RPC',

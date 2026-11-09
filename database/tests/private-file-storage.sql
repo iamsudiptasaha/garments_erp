@@ -24,7 +24,7 @@ end $$;
 reset role;
 do $$ begin
  if has_function_privilege('anon','public.erp_file_registry()','execute') then raise exception 'Anonymous registry exposed';end if;
- if has_table_privilege('authenticated','garments_access.app_file_upload','insert') then raise exception 'Direct ledger insert exposed';end if;
+ if has_table_privilege('authenticated','garments_erp.app_file_upload','insert') then raise exception 'Direct ledger insert exposed';end if;
  if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'erp_%file%' and p.prosecdef) then raise exception 'Public definer exposed';end if;
 end $$;
 rollback;

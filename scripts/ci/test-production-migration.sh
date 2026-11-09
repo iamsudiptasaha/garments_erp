@@ -28,7 +28,7 @@ for prior in supabase/migrations/*.sql; do
     docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 < "$prior" >> "$work/replay.log" 2>&1
   fi
 done
-node database/ci/seed.mjs "$work/seed.sql"
+node database/ci/seed.mjs "$work/seed.sql" --before-erp-schema-move
 for sql in "$work/seed.sql" database/tests/production-hub-backfill-before.sql "$migration" database/tests/production-hub-backfill-after.sql database/tests/employee-photo-backfill-before.sql supabase/migrations/20261105152128_employee_photo_attachment_and_checklist.sql database/tests/employee-photo-attachment.sql; do
   docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 < "$sql" >> "$work/replay.log" 2>&1
 done

@@ -58,7 +58,7 @@ begin
  perform pg_temp.assert_true((select max(sp.pieces_stock_in)-min(sp.pieces_stock_in)=1 from garments_erp.stage_pieces sp
    join garments_erp.variant_item_per_job v on v.id=sp.variant_item_per_job_id where v.job_id=c1),'equal variant shares');
  select id into b from garments_erp.task_board_data where production_id=p;
- perform public.erp_save_production_board(p,md5(garments_access.production_document(p)::text),array[900001::bigint,900002],array[990001::bigint]);
+ perform public.erp_save_production_board(p,md5(garments_erp.production_document(p)::text),array[900001::bigint,900002],array[990001::bigint]);
  update garments_erp.stage_pieces set pieces_stock_out=pieces_stock_in-1
  where variant_item_per_job_id in(select id from garments_erp.variant_item_per_job where job_id=c1);
  r:=pg_temp.move(jsonb_build_object('action','advance','production_id',p::text,'from_job_id',c1::text,'to_stage_id','990002'));
@@ -73,14 +73,14 @@ begin
  perform pg_temp.assert_true(s2<>s1,'re-advance creates a fresh sewing attempt');
  r:=pg_temp.move(jsonb_build_object('action','advance','production_id',p::text,'from_job_id',s2::text,'to_stage_id','990003'));
  packing:=(r->>'job_id')::bigint;
- perform pg_temp.assert_true(garments_access.production_path(p)=array[c1,s2,packing],'working path excludes abandoned S1');
+ perform pg_temp.assert_true(garments_erp.production_path(p)=array[c1,s2,packing],'working path excludes abandoned S1');
  perform pg_temp.assert_true((select count(*)=4 from garments_erp.job_transition_log where production_id=p),'every movement preserved');
  perform pg_temp.assert_true((select id=b from garments_erp.task_board_data where production_id=p),'board identity survives stage changes');
  perform pg_temp.assert_true((select count(*)=2 from garments_erp.job_assignees where production_id=p),'multiple assignees survive stage changes');
  perform pg_temp.assert_true(exists(select 1 from garments_erp.task_board_data_flag where task_board_data_id=b),'flags survive stage changes');
  -- Jump back more than one step. Both sewing attempts and packing are historical.
  r:=pg_temp.move(jsonb_build_object('action','rectify','production_id',p::text,'from_job_id',packing::text,'to_job_id',c1::text,'reason','Upstream correction'));
- perform pg_temp.assert_true(garments_access.production_path(p)=array[c1],'multi-step rectification truncates route');
+ perform pg_temp.assert_true(garments_erp.production_path(p)=array[c1],'multi-step rectification truncates route');
  begin
   perform pg_temp.move(jsonb_build_object('action','rectify','production_id',p::text,'from_job_id',c1::text,'to_job_id',s1::text,'reason','Wrong branch'));
   raise exception 'TEST: stale branch accepted';
@@ -101,11 +101,11 @@ do $$declare payload jsonb; r jsonb; employee_key bigint; doc jsonb; rev text;be
  r:=public.erp_save_employee(payload,null);
  select id into employee_key from garments_erp.employee where id not in(900001,900002) order by id desc limit 1;
  perform pg_temp.assert_true((select is_active and is_verified and verified_by_employee_id=900001 and activated_by_employee_id=900001 from garments_erp.employee where id=employee_key),'new employee active and operator verified');
- perform public.erp_set_employee_active(employee_key,false,md5(garments_access.employee_document(employee_key)::text));
- payload:=payload||jsonb_build_object('id',employee_key::text,'expected',md5(garments_access.employee_document(employee_key)::text));
+ perform public.erp_set_employee_active(employee_key,false,md5(garments_erp.employee_document(employee_key)::text));
+ payload:=payload||jsonb_build_object('id',employee_key::text,'expected',md5(garments_erp.employee_document(employee_key)::text));
  perform public.erp_save_employee(payload,null);
  perform pg_temp.assert_true((select not is_active and is_verified and verified_by_employee_id=900001 from garments_erp.employee where id=employee_key),'ordinary edit preserves inactive state');
- payload:=jsonb_build_object('id','900001','expected',md5(garments_access.employee_document(900001)::text),
+ payload:=jsonb_build_object('id','900001','expected',md5(garments_erp.employee_document(900001)::text),
    'draft',jsonb_build_object('employee',jsonb_build_object('contacts_id','900001','contact_purpose_id','900001')));
  perform public.erp_save_employee(payload,null);
  perform pg_temp.assert_true((select verified_by_employee_id=900001 and is_verified from garments_erp.employee where id=900001),'self verification allowed');

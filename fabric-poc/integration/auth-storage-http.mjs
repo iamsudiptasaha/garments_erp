@@ -297,7 +297,7 @@ try {
   await db.query('delete from garments_erp.contacts where id=900004');
   if (uid) {
     await db.query('update garments_erp.yarn_bill set bill_attachment=null where id=900001');
-    await db.query('delete from garments_access.app_file_upload where created_by=$1', [uid]);
+    await db.query('delete from garments_erp.app_file_upload where created_by=$1', [uid]);
     if (attachment)
       await db.query('delete from garments_erp.attachments where id=$1', [attachment]);
     await db.query('delete from garments_access.app_activity_log where actor_user_id=$1', [uid]);

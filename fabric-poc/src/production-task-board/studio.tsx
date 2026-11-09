@@ -990,7 +990,10 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
   return (
     <div aria-busy={busy} className="studio-shell">
       <aside className="studio-sidebar">
-        <a href="/production-prototype.html" className="studio-brand">
+        <a
+          href={portal ? '/fabric.html#productionTaskBoard' : '/production-prototype.html'}
+          className="studio-brand"
+        >
           <span>
             <Factory size={21} />
           </span>
@@ -1030,9 +1033,14 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
         >
           <Package size={17} /> Items & parts<small>10</small>
         </button>
-        <a className="side-link" href="/production-prototype.html?screen=update&task=production-1">
-          <Check size={17} /> Update Task Status
-        </a>
+        {!portal && (
+          <a
+            className="side-link"
+            href="/production-prototype.html?screen=update&task=production-1"
+          >
+            <Check size={17} /> Update Task Status
+          </a>
+        )}
         <div className="sidebar-label saved-label">
           SAVED VIEWS
           <button

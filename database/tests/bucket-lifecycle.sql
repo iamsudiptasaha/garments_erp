@@ -10,7 +10,7 @@ begin
  begin perform public.erp_create_bucket_group('bad/../key','Invalid',array['image/png'],1048576);raise exception 'Invalid key accepted';exception when raise_exception then if sqlerrm not like 'Use 2–48%' then raise;end if;end;
  begin perform public.erp_prepare_bucket_removal(group_id,1,'wrong');raise exception 'Missing confirmation accepted';exception when raise_exception then if sqlerrm<>'Type the exact group key to confirm removal' then raise;end if;end;
  reservation:=public.erp_prepare_bucket_removal(group_id,1,'rollback_bucket_probe');
- r:=garments_access.file_target('knittingBill');
+ r:=garments_erp.file_target('knittingBill');
  begin perform public.erp_save_file_route('knittingBill',group_id,array['image/png'],1048576,true,(r->>'version')::bigint);raise exception 'Route assigned during removal';exception when raise_exception then if sqlerrm<>'Bucket removal is in progress' then raise;end if;end;
  begin perform public.erp_finish_bucket_removal(group_id,(reservation->>'token')::uuid);raise exception 'Registry removed before Storage';exception when raise_exception then if sqlerrm<>'Storage bucket has not been removed' then raise;end if;end;
  perform public.erp_cancel_bucket_removal(group_id,(reservation->>'token')::uuid);
