@@ -25,17 +25,27 @@ const views = {
   },
 };
 
-export function FinishedGoods({ client, canCreate }) {
-  const [command, setCommand] = useState('');
+export const finishedGoodsPages = {
+  sizes: 'Item stock summary',
+  variations: 'Sellable summary',
+  receipt: 'Items produced',
+  adjustment: 'Stock adjustments',
+  costing: 'Item costing',
+};
+
+export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
+  const [command, setCommand] = useState(
+    ['receipt', 'adjustment', 'costing'].includes(screen) ? screen : '',
+  );
   const [costingItemIds, setCostingItemIds] = useState(null);
   const [notice, setNotice] = useState('');
-  const [view, setView] = useState('sizes');
+  const view = screen === 'variations' ? 'variations' : 'sizes';
   const [query, setQuery] = useState({ offset: 0, sku: '' });
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!client) return;
+    if (!client || !['sizes', 'variations'].includes(screen)) return;
     let current = true;
     async function load() {
       try {
@@ -54,7 +64,7 @@ export function FinishedGoods({ client, canCreate }) {
     return () => {
       current = false;
     };
-  }, [client, query]);
+  }, [client, query, screen]);
 
   function search(next) {
     setResult(null);
@@ -67,24 +77,14 @@ export function FinishedGoods({ client, canCreate }) {
   return h(
     'section',
     null,
-    h('header', { className: 'fabric-page-header' }, h('h1', null, 'Finished Goods')),
+    h('header', { className: 'fabric-page-header' }, h('h1', null, finishedGoodsPages[screen])),
     client &&
-      !command &&
-      h(
-        'button',
-        {
-          onClick: () => {
-            setCostingItemIds(null);
-            setCommand('costing');
-          },
-        },
-        'Item costing',
-      ),
-    command === 'costing' &&
+      command === 'costing' &&
       h(
         'div',
         null,
-        h('button', { onClick: () => setCommand('') }, 'Back to finished stock'),
+        costingItemIds &&
+          h('button', { onClick: () => setCommand('') }, 'Back to sellable summary'),
         h(CostingHistory, {
           client,
           canEdit: canCreate && !costingItemIds,
@@ -92,126 +92,112 @@ export function FinishedGoods({ client, canCreate }) {
         }),
       ),
     canCreate &&
-      !command &&
-      h(
-        'div',
-        null,
-        h('button', { onClick: () => setCommand('receipt') }, 'Record stock-in'),
-        h('button', { onClick: () => setCommand('adjustment') }, 'Correct stock'),
-      ),
-    canCreate &&
       ['receipt', 'adjustment'].includes(command) &&
       h(StockForm, {
+        key: notice,
         client,
         adjustment: command === 'adjustment',
         onSaved: (id) => {
           setNotice(
             command === 'adjustment' ? `Correction ${id} verified.` : `Stock-in ${id} verified.`,
           );
-          setCommand('');
-          search({ ...query, offset: 0 });
         },
       }),
     notice && h('p', { role: 'status' }, notice),
-    h(
-      'label',
-      null,
-      'Stock view ',
+    !client &&
+      ['receipt', 'adjustment', 'costing'].includes(screen) &&
+      h('p', { role: 'status' }, 'Connect to the ERP to use this page.'),
+    ['sizes', 'variations'].includes(screen) &&
+      !command &&
       h(
-        'select',
-        {
-          value: view,
-          onChange: (event) => {
-            setView(event.target.value);
-            if (query.offset) search({ ...query, offset: 0 });
+        'div',
+        null,
+        h(
+          'form',
+          {
+            onSubmit: (event) => {
+              event.preventDefault();
+              search({ sku: new FormData(event.currentTarget).get('sku').trim(), offset: 0 });
+            },
           },
-        },
-        Object.entries(views).map(([key, { title }]) => h('option', { key, value: key }, title)),
-      ),
-    ),
-    h(
-      'form',
-      {
-        onSubmit: (event) => {
-          event.preventDefault();
-          search({ sku: new FormData(event.currentTarget).get('sku').trim(), offset: 0 });
-        },
-      },
-      h('label', null, 'Exact SKU ', h('input', { name: 'sku', defaultValue: query.sku })),
-      h('button', { type: 'submit' }, 'Search'),
-    ),
-    h('h2', null, title),
-    !client
-      ? h('p', { role: 'status' }, 'Local preview. Connect to the ERP to load finished stock.')
-      : error
-        ? h(
-            'div',
-            null,
-            h('p', { role: 'alert' }, error),
-            h('button', { onClick: () => search({ ...query }) }, 'Retry'),
-          )
-        : !result
-          ? h('p', { role: 'status' }, 'Loading finished stock…')
-          : rows.length
+          h('label', null, 'Exact SKU ', h('input', { name: 'sku', defaultValue: query.sku })),
+          h('button', { type: 'submit' }, 'Search'),
+        ),
+        h('h2', null, title),
+        !client
+          ? h('p', { role: 'status' }, 'Local preview. Connect to the ERP to load finished stock.')
+          : error
             ? h(
-                'table',
+                'div',
                 null,
-                h(
-                  'thead',
-                  null,
-                  h(
-                    'tr',
-                    null,
-                    columns.map(([key, label]) => h('th', { key, scope: 'col' }, label)),
-                    view === 'variations' && h('th', { scope: 'col' }, 'Costing'),
-                  ),
-                ),
-                h(
-                  'tbody',
-                  null,
-                  rows.map((row) =>
-                    h(
-                      'tr',
-                      { key: row.id ?? row.size_id },
-                      columns.map(([key]) => h('td', { key }, row[key])),
-                      view === 'variations' &&
-                        h(
-                          'td',
-                          null,
-                          h(
-                            'button',
-                            {
-                              disabled: !row.components?.length,
-                              onClick: () => {
-                                setCostingItemIds([
-                                  ...new Set(row.components.map(({ item_id }) => String(item_id))),
-                                ]);
-                                setCommand('costing');
-                              },
-                            },
-                            'Costing history',
-                          ),
-                        ),
-                    ),
-                  ),
-                ),
+                h('p', { role: 'alert' }, error),
+                h('button', { onClick: () => search({ ...query }) }, 'Retry'),
               )
-            : h('p', null, 'No finished stock records on this page.'),
-    h(
-      'button',
-      {
-        disabled: query.offset === 0,
-        onClick: () => search({ ...query, offset: query.offset - pageSize }),
-      },
-      'Previous',
-    ),
-    h(
-      'button',
-      {
-        disabled: rows.length < pageSize,
-        onClick: () => search({ ...query, offset: query.offset + pageSize }),
-      },
-      'Next',
-    ),
+            : !result
+              ? h('p', { role: 'status' }, 'Loading finished stock…')
+              : rows.length
+                ? h(
+                    'table',
+                    null,
+                    h(
+                      'thead',
+                      null,
+                      h(
+                        'tr',
+                        null,
+                        columns.map(([key, label]) => h('th', { key, scope: 'col' }, label)),
+                        view === 'variations' && h('th', { scope: 'col' }, 'Costing'),
+                      ),
+                    ),
+                    h(
+                      'tbody',
+                      null,
+                      rows.map((row) =>
+                        h(
+                          'tr',
+                          { key: row.id ?? row.size_id },
+                          columns.map(([key]) => h('td', { key }, row[key])),
+                          view === 'variations' &&
+                            h(
+                              'td',
+                              null,
+                              h(
+                                'button',
+                                {
+                                  disabled: !row.components?.length,
+                                  onClick: () => {
+                                    setCostingItemIds([
+                                      ...new Set(
+                                        row.components.map(({ item_id }) => String(item_id)),
+                                      ),
+                                    ]);
+                                    setCommand('costing');
+                                  },
+                                },
+                                'Costing history',
+                              ),
+                            ),
+                        ),
+                      ),
+                    ),
+                  )
+                : h('p', null, 'No finished stock records on this page.'),
+        h(
+          'button',
+          {
+            disabled: query.offset === 0,
+            onClick: () => search({ ...query, offset: query.offset - pageSize }),
+          },
+          'Previous',
+        ),
+        h(
+          'button',
+          {
+            disabled: rows.length < pageSize,
+            onClick: () => search({ ...query, offset: query.offset + pageSize }),
+          },
+          'Next',
+        ),
+      ),
   );
 }
