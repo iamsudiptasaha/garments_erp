@@ -27,6 +27,7 @@ import { ProductionOverview } from '../production/cards.js';
 import { InventoryCard } from '../inventory/cards.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { FinishedGoods } from '../finished-goods/workspace.js';
 import { pages, otherModules } from './catalog.js';
 import {
   initialFabric,
@@ -111,6 +112,7 @@ function loadSidebar() {
   }
   return !window.matchMedia('(max-width:700px)').matches;
 }
+
 function App({ live }) {
   const [sidebarOpen, setSidebarOpen] = useState(loadSidebar);
   useEffect(() => {
@@ -981,6 +983,19 @@ function App({ live }) {
                   ),
               ),
             ),
+          can('view', 'finishedProducts') &&
+            h(
+              'nav',
+              { 'aria-label': 'Finished Goods' },
+              h(
+                'button',
+                {
+                  'aria-current': page === 'finishedProducts' ? 'page' : undefined,
+                  onClick: () => navigate('finishedProducts'),
+                },
+                'Finished Goods',
+              ),
+            ),
           otherModules.map((name) =>
             h(
               'details',
@@ -1137,260 +1152,277 @@ function App({ live }) {
               })
             : Object.hasOwn(adminPages, page)
               ? h(AdminPanel, { page, access, actor, onSave: saveAccess })
-              : live && (!liveReady || activeLiveError)
-                ? h(
-                    'section',
-                    null,
-                    h(
-                      'h2',
-                      null,
-                      activeLiveError ? 'Unable to load live records' : 'Loading database records…',
-                    ),
-                    activeLiveError && h('p', { role: 'alert' }, activeLiveError),
-                    activeLiveError && h('button', { onClick: refreshLive }, 'Retry'),
-                  )
-                : live && page !== 'home' && page !== 'fabricOverview' && !connectedPage(page)
+              : page === 'finishedProducts'
+                ? can('view', 'finishedProducts')
+                  ? h(FinishedGoods, {
+                      client: live ? getAccessClient() : null,
+                      key: actor,
+                      canCreate: live && can('create'),
+                    })
+                  : h(
+                      'section',
+                      { className: 'access-denied' },
+                      h('h1', null, 'Finished Goods access restricted'),
+                    )
+                : live && (!liveReady || activeLiveError)
                   ? h(
                       'section',
                       null,
-                      h('h2', null, 'This section is not connected yet'),
-                      h('p', null, 'This module is awaiting its live backend connection.'),
+                      h(
+                        'h2',
+                        null,
+                        activeLiveError
+                          ? 'Unable to load live records'
+                          : 'Loading database records…',
+                      ),
+                      activeLiveError && h('p', { role: 'alert' }, activeLiveError),
+                      activeLiveError && h('button', { onClick: refreshLive }, 'Retry'),
                     )
-                  : page === 'home'
-                    ? h(OverviewPanel, {
-                        data,
-                        canView: (key) => can('view', key),
-                        onNavigate: navigate,
-                        live: !!live,
-                      })
-                    : page === 'fabricOverview'
-                      ? fabricHome()
-                      : !can('view')
-                        ? h(
-                            'section',
-                            { className: 'access-denied' },
-                            h('h1', null, 'Access restricted'),
-                            h(
-                              'p',
-                              null,
-                              'This page is not available to the selected preview role.',
-                            ),
-                          )
-                        : page === 'productionJobs'
-                          ? h(JobHistory, {
-                              data,
-                              onUpdate: () => navigate('productionUpdateTaskStatus'),
-                              canUpdate: can('edit', 'productionJobs'),
-                            })
-                          : ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(page)
-                            ? h(PortalTaskBoard, {
-                                key: page,
-                                data,
-                                live: !!live,
-                                liveTasks: live ? productionTasks(data) : undefined,
-                                onCommit: live ? commitProduction : undefined,
-                                onImage: live ? production.image : undefined,
-                                onStart: live
-                                  ? async (part, employee) =>
-                                      applyProduction(await production.start(data, part, employee))
-                                  : undefined,
-                                actor,
-                                mode: page === 'productionTaskBoard' ? 'board' : 'update',
-                                canEdit: can('edit'),
-                                canCreate: can('create', 'productionJobs'),
-                                onCreate: (next) => {
-                                  if (live || !can('create', 'productionJobs')) return;
-                                  save({ ...state, data: next });
-                                },
-                                onSave: (next) => {
-                                  if (live || !can('edit')) return;
-                                  save({ ...state, data: next });
-                                },
-                              })
-                            : h(
-                                React.Fragment,
+                  : live && page !== 'home' && page !== 'fabricOverview' && !connectedPage(page)
+                    ? h(
+                        'section',
+                        null,
+                        h('h2', null, 'This section is not connected yet'),
+                        h('p', null, 'This module is awaiting its live backend connection.'),
+                      )
+                    : page === 'home'
+                      ? h(OverviewPanel, {
+                          data,
+                          canView: (key) => can('view', key),
+                          onNavigate: navigate,
+                          live: !!live,
+                        })
+                      : page === 'fabricOverview'
+                        ? fabricHome()
+                        : !can('view')
+                          ? h(
+                              'section',
+                              { className: 'access-denied' },
+                              h('h1', null, 'Access restricted'),
+                              h(
+                                'p',
                                 null,
-                                h(
-                                  'header',
-                                  { className: 'fabric-page-header' },
+                                'This page is not available to the selected preview role.',
+                              ),
+                            )
+                          : page === 'productionJobs'
+                            ? h(JobHistory, {
+                                data,
+                                onUpdate: () => navigate('productionUpdateTaskStatus'),
+                                canUpdate: can('edit', 'productionJobs'),
+                              })
+                            : ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(page)
+                              ? h(PortalTaskBoard, {
+                                  key: page,
+                                  data,
+                                  live: !!live,
+                                  liveTasks: live ? productionTasks(data) : undefined,
+                                  onCommit: live ? commitProduction : undefined,
+                                  onImage: live ? production.image : undefined,
+                                  onStart: live
+                                    ? async (part, employee) =>
+                                        applyProduction(
+                                          await production.start(data, part, employee),
+                                        )
+                                    : undefined,
+                                  actor,
+                                  mode: page === 'productionTaskBoard' ? 'board' : 'update',
+                                  canEdit: can('edit'),
+                                  canCreate: can('create', 'productionJobs'),
+                                  onCreate: (next) => {
+                                    if (live || !can('create', 'productionJobs')) return;
+                                    save({ ...state, data: next });
+                                  },
+                                  onSave: (next) => {
+                                    if (live || !can('edit')) return;
+                                    save({ ...state, data: next });
+                                  },
+                                })
+                              : h(
+                                  React.Fragment,
+                                  null,
                                   h(
-                                    'div',
-                                    null,
+                                    'header',
+                                    { className: 'fabric-page-header' },
                                     h(
-                                      'p',
-                                      { className: 'eyebrow' },
-                                      (spec.section === 'colours'
-                                        ? 'COLOURS / '
-                                        : spec.section === 'production'
-                                          ? 'PRODUCTION / '
-                                          : spec.section === 'inventory'
-                                            ? 'RAW MATERIAL INVENTORY / '
-                                            : spec.section === 'miscellaneous'
-                                              ? 'MISCELLANEOUS / '
-                                              : 'FABRIC / ') + spec.title.toUpperCase(),
+                                      'div',
+                                      null,
+                                      h(
+                                        'p',
+                                        { className: 'eyebrow' },
+                                        (spec.section === 'colours'
+                                          ? 'COLOURS / '
+                                          : spec.section === 'production'
+                                            ? 'PRODUCTION / '
+                                            : spec.section === 'inventory'
+                                              ? 'RAW MATERIAL INVENTORY / '
+                                              : spec.section === 'miscellaneous'
+                                                ? 'MISCELLANEOUS / '
+                                                : 'FABRIC / ') + spec.title.toUpperCase(),
+                                      ),
+                                      h('h1', null, spec.title),
+                                      h('p', null, spec.subtitle),
                                     ),
-                                    h('h1', null, spec.title),
-                                    h('p', null, spec.subtitle),
+                                    h(
+                                      'div',
+                                      { className: 'fabric-view-toggle' },
+                                      ['overview', 'sheet'].map((v) =>
+                                        h(
+                                          'button',
+                                          {
+                                            key: v,
+                                            'aria-pressed': view === v,
+                                            onClick: () => {
+                                              setView(v);
+                                              setSelected(null);
+                                            },
+                                          },
+                                          v === 'overview' ? 'Overview' : 'Sheet',
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                   h(
                                     'div',
-                                    { className: 'fabric-view-toggle' },
-                                    ['overview', 'sheet'].map((v) =>
+                                    { className: 'fabric-actions' },
+                                    h('input', {
+                                      type: 'search',
+                                      'aria-label': 'Search ' + spec.title,
+                                      placeholder:
+                                        page === 'productionJobs'
+                                          ? 'Scan QR / enter item style code…'
+                                          : page === 'batches'
+                                            ? 'Find a batch, fabric or bill…'
+                                            : 'Search ' + spec.title.toLowerCase() + '…',
+                                      value: query,
+                                      onChange: (e) => {
+                                        setQuery(e.target.value);
+                                        setSelected(null);
+                                      },
+                                    }),
+                                    !spec.readonly &&
+                                      can('create') &&
+                                      h(
+                                        'button',
+                                        { className: 'primary', onClick: () => edit(null) },
+                                        spec.newLabel ||
+                                          (page === 'suppliers'
+                                            ? '+ Add supplier'
+                                            : '+ New document'),
+                                      ),
+                                    !spec.readonly &&
+                                      can('edit') &&
+                                      view === 'sheet' &&
                                       h(
                                         'button',
                                         {
-                                          key: v,
-                                          'aria-pressed': view === v,
-                                          onClick: () => {
-                                            setView(v);
-                                            setSelected(null);
-                                          },
+                                          disabled: !selected,
+                                          onClick: () => edit(selected.documentId),
                                         },
-                                        v === 'overview' ? 'Overview' : 'Sheet',
+                                        spec.master
+                                          ? 'Edit selected record'
+                                          : 'Edit selected document',
                                       ),
-                                    ),
                                   ),
-                                ),
-                                h(
-                                  'div',
-                                  { className: 'fabric-actions' },
-                                  h('input', {
-                                    type: 'search',
-                                    'aria-label': 'Search ' + spec.title,
-                                    placeholder:
-                                      page === 'productionJobs'
-                                        ? 'Scan QR / enter item style code…'
-                                        : page === 'batches'
-                                          ? 'Find a batch, fabric or bill…'
-                                          : 'Search ' + spec.title.toLowerCase() + '…',
-                                    value: query,
-                                    onChange: (e) => {
-                                      setQuery(e.target.value);
-                                      setSelected(null);
-                                    },
-                                  }),
-                                  !spec.readonly &&
-                                    can('create') &&
-                                    h(
-                                      'button',
-                                      { className: 'primary', onClick: () => edit(null) },
-                                      spec.newLabel ||
-                                        (page === 'suppliers'
-                                          ? '+ Add supplier'
-                                          : '+ New document'),
-                                    ),
-                                  !spec.readonly &&
-                                    can('edit') &&
+                                  page === 'materialStock' &&
                                     view === 'sheet' &&
+                                    can('create', 'materialIssues') &&
                                     h(
                                       'button',
                                       {
-                                        disabled: !selected,
-                                        onClick: () => edit(selected.documentId),
+                                        className: 'primary',
+                                        disabled: !selected || selected.left <= 0,
+                                        onClick: () => reconcile(selected.id),
                                       },
-                                      spec.master
-                                        ? 'Edit selected record'
-                                        : 'Edit selected document',
+                                      'Reconcile selected stock',
                                     ),
-                                ),
-                                page === 'materialStock' &&
-                                  view === 'sheet' &&
-                                  can('create', 'materialIssues') &&
-                                  h(
-                                    'button',
-                                    {
-                                      className: 'primary',
-                                      disabled: !selected || selected.left <= 0,
-                                      onClick: () => reconcile(selected.id),
-                                    },
-                                    'Reconcile selected stock',
-                                  ),
-                                h(
-                                  'div',
-                                  {
-                                    className: 'fabric-status',
-                                    role: 'status',
-                                    'aria-live': 'polite',
-                                  },
-                                  notice,
-                                  live && h('button', { onClick: refreshLive }, 'Refresh records'),
-                                ),
-                                records.length === 0 &&
                                   h(
                                     'div',
-                                    { className: 'empty-state' },
-                                    h('h2', null, 'Nothing here yet'),
-                                    h(
-                                      'p',
-                                      null,
-                                      query
-                                        ? 'Try a different search.'
-                                        : spec.master
-                                          ? 'Add the first record to get started.'
-                                          : 'Add the first document to get started.',
-                                    ),
+                                    {
+                                      className: 'fabric-status',
+                                      role: 'status',
+                                      'aria-live': 'polite',
+                                    },
+                                    notice,
+                                    live &&
+                                      h('button', { onClick: refreshLive }, 'Refresh records'),
                                   ),
-                                view === 'overview'
-                                  ? overview()
-                                  : h(
-                                      React.Fragment,
-                                      null,
+                                  records.length === 0 &&
+                                    h(
+                                      'div',
+                                      { className: 'empty-state' },
+                                      h('h2', null, 'Nothing here yet'),
                                       h(
-                                        'div',
-                                        { className: 'fabric-sort' },
+                                        'p',
+                                        null,
+                                        query
+                                          ? 'Try a different search.'
+                                          : spec.master
+                                            ? 'Add the first record to get started.'
+                                            : 'Add the first document to get started.',
+                                      ),
+                                    ),
+                                  view === 'overview'
+                                    ? overview()
+                                    : h(
+                                        React.Fragment,
+                                        null,
                                         h(
-                                          'label',
-                                          null,
-                                          'Sort complete rows by ',
+                                          'div',
+                                          { className: 'fabric-sort' },
+                                          h(
+                                            'label',
+                                            null,
+                                            'Sort complete rows by ',
+                                            h(
+                                              'select',
+                                              {
+                                                'aria-label': 'Sort column',
+                                                value: preferences.sort?.key || spec.columns[0].key,
+                                                onChange: (e) =>
+                                                  sorting(
+                                                    e.target.value,
+                                                    preferences.sort?.direction || 'asc',
+                                                  ),
+                                              },
+                                              spec.columns.map((c) =>
+                                                h('option', { key: c.key, value: c.key }, c.label),
+                                              ),
+                                            ),
+                                          ),
                                           h(
                                             'select',
                                             {
-                                              'aria-label': 'Sort column',
-                                              value: preferences.sort?.key || spec.columns[0].key,
+                                              'aria-label': 'Sort direction',
+                                              value: preferences.sort?.direction || 'asc',
                                               onChange: (e) =>
                                                 sorting(
+                                                  preferences.sort?.key || spec.columns[0].key,
                                                   e.target.value,
-                                                  preferences.sort?.direction || 'asc',
                                                 ),
                                             },
-                                            spec.columns.map((c) =>
-                                              h('option', { key: c.key, value: c.key }, c.label),
-                                            ),
+                                            h('option', { value: 'asc' }, 'Ascending'),
+                                            h('option', { value: 'desc' }, 'Descending'),
                                           ),
+                                          h('span', null, `${records.length} rows`),
                                         ),
-                                        h(
-                                          'select',
-                                          {
-                                            'aria-label': 'Sort direction',
-                                            value: preferences.sort?.direction || 'asc',
-                                            onChange: (e) =>
-                                              sorting(
-                                                preferences.sort?.key || spec.columns[0].key,
-                                                e.target.value,
-                                              ),
+                                        h(FabricSheet, {
+                                          key: `${page}:${preferences.sort?.key}:${preferences.sort?.direction}:${sidebarOpen}`,
+                                          page,
+                                          spec,
+                                          records,
+                                          preferences,
+                                          onPreferences: prefs,
+                                          onSelect: setSelected,
+                                          onNotice: setNotice,
+                                          capabilities: {
+                                            format: can('format'),
+                                            export: can('export'),
+                                            print: can('print'),
                                           },
-                                          h('option', { value: 'asc' }, 'Ascending'),
-                                          h('option', { value: 'desc' }, 'Descending'),
-                                        ),
-                                        h('span', null, `${records.length} rows`),
+                                        }),
                                       ),
-                                      h(FabricSheet, {
-                                        key: `${page}:${preferences.sort?.key}:${preferences.sort?.direction}:${sidebarOpen}`,
-                                        page,
-                                        spec,
-                                        records,
-                                        preferences,
-                                        onPreferences: prefs,
-                                        onSelect: setSelected,
-                                        onNotice: setNotice,
-                                        capabilities: {
-                                          format: can('format'),
-                                          export: can('export'),
-                                          print: can('print'),
-                                        },
-                                      }),
-                                    ),
-                              ),
+                                ),
       ),
     ),
     editor &&

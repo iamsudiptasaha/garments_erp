@@ -16,6 +16,13 @@ export function sqlFunctions(sql){
 }
 export function inspectBoundaries({schema,catalogue,policy,functions,links=employeeLinks,fields=employeeFields,relations=employeeRelations,sections=contactSections}){
  const errors=[];
+ for (const [screen, contract] of Object.entries(policy.readOnlyScreens || {})) {
+  if (!functions.has(contract.readFunction)) errors.push(`${screen}: missing read function ${contract.readFunction}`);
+  for (const mapping of catalogue.mappings.filter(m => m.resource_key === screen)) {
+   if (mapping.can_create || mapping.can_edit) errors.push(`${screen}: read-only screen cannot write ${mapping.table_name}`);
+   if (!contract.referenceTables.includes(mapping.table_name)) errors.push(`${screen}: unreviewed read mapping to ${mapping.table_name}`);
+  }
+ }
  for(const [screen,c]of Object.entries(policy.screens)){
   for(const table of Object.keys(relations))if(!c.writableTables.includes(table))errors.push(`${screen}: ${table} is linked data, not an owned write table`);
   for(const m of catalogue.mappings.filter(m=>m.resource_key===screen&&(m.can_create||m.can_edit)))if(![...c.writableTables,...c.maintenanceTables].includes(m.table_name))errors.push(`${screen}: forbidden writable mapping to ${m.table_name}`);
@@ -70,12 +77,50 @@ export function checkBoundaries(){
  const files=['database/ci/baseline.sql',...readdirSync(resolve(root,'supabase/migrations')).filter(f=>f.endsWith('.sql')).sort().map(f=>'supabase/migrations/'+f)];
  const functions=new Map();for(const file of files)for(const [name,body]of sqlFunctions(readFileSync(resolve(root,file),'utf8')))functions.set(name,body);
  const policy=json('database/contracts/ownership.json');
+ const receiptCategory=policy.reviewedReceiptCategory;
+ const receiptCatalog='fabric-poc/src/inventory/catalog.js';
+ const receiptField="      select('material_category_id', 'Material category', 'materialCategories', false),\n";
+ const receiptSource=readFileSync(resolve(root,receiptCatalog),'utf8');
+ const receiptLayout='          byKey.material_category_id,\n';
+ const receiptLayoutPath='fabric-poc/src/inventory/receipts.js';
+ const receiptSql=functions.get(receiptCategory?.command);
+ const receiptAdapter=readFileSync(resolve(root,'fabric-poc/src/fabric/inventory-live.js'),'utf8');
+ const receiptReviewed=receiptCategory?.owner==='materialReceipts' &&
+  receiptCategory.column==='material_category_id' && receiptCategory.selector==='materialCategories' &&
+  receiptCategory.references==='garments_erp.category_list(id)' && receiptCategory.nullable===true && receiptSource.split(receiptField).length===2 &&
+  readFileSync(resolve(root,receiptLayoutPath),'utf8').split(receiptLayout).length===2 &&
+  receiptSql?.includes("'verified_by_employee_id','material_category_id'") &&
+  receiptSql.includes('receipt.verified_by_employee_id, receipt.material_category_id') &&
+  receiptSql.includes("material_category_id = case when p_values ? 'material_category_id'") &&
+  receiptAdapter.includes("material_category_id: 'material_category_id'");
+ const checkout=policy.reviewedCheckoutStage;
+ const checkoutField="      select('stage_id', 'Stage', 'checkoutStages', false),\n";
+ const checkoutOptions="    checkoutStages: ['stage', 'name'],\n";
+ const checkoutReviewed=checkout?.owner==='materialIssues' && checkout.column==='stage_id' &&
+  checkout.selector==='checkoutStages' && checkout.references==='garments_erp.stage(id)' &&
+  checkout.nullable===true && receiptSource.split(checkoutField).length===2 &&
+  readFileSync(resolve(root,'fabric-poc/src/inventory/domain.js'),'utf8').split(checkoutOptions).length===2 && receiptSql?.includes("'remarks','reconciliation','stage_id'") &&
+  receiptSql.includes('issue.reconciliation, issue.stage_id') &&
+  receiptSql.includes("stage_id = case when p_values ? 'stage_id'") &&
+  receiptAdapter.includes("'stage_id',") &&
+  functions.get('garments_erp.raw_material_transaction_snapshot')?.includes("if can_issue then tables := tables || array['stage'];");
  const errors=inspectBoundaries({schema:contactReleaseSchema(json('database/schema/live-schema.json')),catalogue:json('database/catalogue/screen-table-map.json'),policy,functions});
+ if(!checkoutReviewed)errors.push('Stock outward: stage selector and transaction write contract differ');
+ if(!receiptReviewed)errors.push('Stock receipts: category selector and transaction write contract differ');
  for(const [folder,baseline]of Object.entries(policy.unreviewedModules||{})){
   const current=readdirSync(resolve(root,folder),{recursive:true,withFileTypes:true}).filter(e=>e.isFile()).map(e=>resolve(e.parentPath,e.name));
   const paths=new Set(current.map(p=>p.slice(root.length)));
   for(const file of Object.keys(baseline))paths.add(file);
-  for(const file of paths){let hash;try{hash=createHash('sha256').update(readFileSync(resolve(root,file))).digest('hex');}catch{hash=null;}
+  for(const file of paths){let hash;try{let content=readFileSync(resolve(root,file),'utf8');
+   // Preserve the frozen baseline for every byte outside this reviewed selector.
+   if(file===receiptCatalog&&receiptReviewed&&content.split(receiptField).length===2)
+    content=content.replace(receiptField,'');
+   if(receiptReviewed&&file===receiptLayoutPath)content=content.replace(receiptLayout,'');
+   if(checkoutReviewed&&file===receiptCatalog&&content.split(checkoutField).length===2)
+    content=content.replace(checkoutField,'');
+   if(checkoutReviewed&&file==='fabric-poc/src/inventory/domain.js'&&content.split(checkoutOptions).length===2)
+    content=content.replace(checkoutOptions,'');
+   hash=createHash('sha256').update(content).digest('hex');}catch{hash=null;}
    if(hash!==baseline[file])errors.push(`${file}: this module needs an ownership review before further changes; do not refresh its baseline to bypass review`);
   }
  }

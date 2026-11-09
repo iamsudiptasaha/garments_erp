@@ -334,6 +334,7 @@ export function inventoryOptions(data, source, s) {
     materialUnits: ['unit_of_measure', 'unit'],
     materialOrders: ['raw_material_purchase_order', 'purchase_order_number'],
     issueTypes: ['check_out_type', 'name'],
+    checkoutStages: ['stage', 'name'],
     contacts: ['contacts', 'company_name'],
     contactPurposes: ['contact_purpose', 'type'],
     transports: ['transporter', 'name'],

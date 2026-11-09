@@ -32,7 +32,22 @@ begin
     'raw_material_purchase_order_item_id',order_data->'lines'->0->>'id');
   issue_values := issue_values || jsonb_build_object('check_out_type_id',issue_type->>'id');
 
-  receipt := public.erp_save_raw_material_transaction('materialReceipts',null,null,receipt_values);
+  receipt := public.erp_save_raw_material_transaction('materialReceipts',null,null,
+    receipt_values || jsonb_build_object('material_category_id',category->>'id'));
+  if receipt->>'material_category_id' is distinct from category->>'id' then
+    raise exception 'TEST: receipt category did not persist on create';
+  end if;
+  receipt := public.erp_save_raw_material_transaction('materialReceipts',(receipt->>'id')::bigint,
+    (receipt->>'updated_at')::timestamptz,receipt_values);
+  if receipt->>'material_category_id' is distinct from category->>'id' then
+    raise exception 'TEST: legacy receipt edit cleared category';
+  end if;
+  begin
+    perform public.erp_save_raw_material_transaction('materialReceipts',(receipt->>'id')::bigint,
+      (receipt->>'updated_at')::timestamptz,receipt_values || '{"material_category_id":-1}');
+    raise exception 'TEST: unknown receipt category accepted';
+  exception when foreign_key_violation then null;
+  end;
   if jsonb_typeof(receipt->'id') <> 'string' or (receipt->>'billed_quantity')::numeric <> 10 then
     raise exception 'Receipt response has an invalid identity or quantity';
   end if;
@@ -47,7 +62,24 @@ begin
   end;
 
   issue_values := issue_values || jsonb_build_object('raw_material_check_in_id',receipt->>'id');
+  if not exists (
+    select 1 from jsonb_array_elements(public.erp_raw_material_transaction_snapshot()->'stage') row
+    where row->>'abbr' = 'CUT'
+  ) then raise exception 'TEST: checkout stage options unavailable'; end if;
   issue := public.erp_save_raw_material_transaction('materialIssues',null,null,issue_values);
+  if issue->>'stage_id' is not null then raise exception 'TEST: omitted stage was populated'; end if;
+  issue := public.erp_save_raw_material_transaction('materialIssues',(issue->>'id')::bigint,
+    (issue->>'updated_at')::timestamptz,issue_values || jsonb_build_object('stage_id',(
+      select row->>'id' from jsonb_array_elements(public.erp_raw_material_transaction_snapshot()->'stage') row
+      where row->>'abbr' = 'CUT'
+    )));
+  if issue->>'stage_id' is null then raise exception 'TEST: checkout stage did not persist'; end if;
+  begin
+    perform public.erp_save_raw_material_transaction('materialIssues',(issue->>'id')::bigint,
+      (issue->>'updated_at')::timestamptz,issue_values || '{"stage_id":-1}');
+    raise exception 'TEST: unknown checkout stage accepted';
+  exception when foreign_key_violation then null;
+  end;
   if (issue->>'quantity')::numeric <> 4 then raise exception 'Issue quantity was not saved'; end if;
 
   if not exists (

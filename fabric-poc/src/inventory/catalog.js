@@ -133,6 +133,7 @@ export const inventoryPages = {
       select('dyed_fabric_item_id', 'Fabric batch', 'dyedBatches', false),
       f('quantity', 'Billed quantity', 'number'),
       f('price', 'Billed price', 'number', opt),
+      select('material_category_id', 'Material category', 'materialCategories', false),
       select('raw_material_supplier_list_id', 'Supplier', 'materialSuppliers', false),
       select('purchase_order_id', 'Purchase order', 'materialOrders', false),
       select(
@@ -172,6 +173,7 @@ export const inventoryPages = {
       f('quantity', 'Outward quantity', 'number'),
       select('check_out_type_id', 'Outward type', 'issueTypes'),
       select('variant_item_id', 'Item variant', 'checkoutVariants', false),
+      select('stage_id', 'Stage', 'checkoutStages', false),
       select('issue_by_employee_id', 'Sent out by employee', 'employees', false),
       f('remarks', 'Remarks', 'text', opt),
     ],

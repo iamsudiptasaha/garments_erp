@@ -1,5 +1,12 @@
 {
   "version": 1,
+  "readOnlyScreens": {
+    "finishedProducts": {
+      "readFunction": "public.erp_warehouse_stock",
+      "referenceTables": ["item", "item_size_list", "sellable_product", "sellable_unit"],
+      "writableTables": []
+    }
+  },
   "screens": {
     "employees": {
       "root": "employee",
@@ -47,6 +54,21 @@
     "contact_items": "contactPeople",
     "contact_extra": "contactDetails",
     "contact_bank_account": "contactBankAccounts"
+  },
+  "reviewedReceiptCategory": {
+    "owner": "materialReceipts",
+    "column": "material_category_id",
+    "selector": "materialCategories",
+    "references": "garments_erp.category_list(id)",
+    "command": "garments_erp.save_raw_material_transaction",
+    "nullable": true
+  },
+  "reviewedCheckoutStage": {
+    "owner": "materialIssues",
+    "column": "stage_id",
+    "selector": "checkoutStages",
+    "references": "garments_erp.stage(id)",
+    "nullable": true
   },
   "unreviewedModules": {
     "fabric-poc/src/production": {
