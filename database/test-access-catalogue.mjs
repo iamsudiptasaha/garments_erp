@@ -6,6 +6,8 @@ const {resources,mappings}=catalogue;
 assert.equal(new Set(resources.map(r=>r.key)).size,resources.length,'Resource keys must be unique');
 assert.equal(new Set(mappings.map(m=>[m.resource_key,m.schema_name,m.table_name].join('|'))).size,mappings.length,'Resource/table pairs must be unique');
 for(const key of Object.keys(pages))assert.ok(resources.some(r=>r.key===key),`Missing resource: ${key}`);
+assert.equal(resources.find(r=>r.key==='finishedProducts').parent,'section:finishedGoods');
+assert.ok(!mappings.some(m=>m.resource_key==='finishedProducts'),'Finished Goods uses guarded RPCs');
 assert.ok(mappings.every(m=>!m.can_delete),'Deletion is not enabled in this pilot');
 assert.ok(mappings.filter(m=>['lookup','report_source'].includes(m.relation_type)).every(m=>!m.can_create&&!m.can_edit),'Lookups and reports must not write');
 assert.ok(resources.filter(r=>r.parent==='section:admin').every(r=>r.admin_only),'Administration is protected');

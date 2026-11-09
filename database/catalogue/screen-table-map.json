@@ -64,12 +64,21 @@
       "admin_only": true
     },
     {
+      "key": "section:finishedGoods",
+      "name": "Finished Goods",
+      "resource_type": "section",
+      "parent": null,
+      "route": null,
+      "sort_order": 7,
+      "admin_only": false
+    },
+    {
       "key": "productionItems",
       "name": "Items",
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionItems",
-      "sort_order": 7,
+      "sort_order": 8,
       "admin_only": false
     },
     {
@@ -78,7 +87,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionJobs",
-      "sort_order": 8,
+      "sort_order": 9,
       "admin_only": false
     },
     {
@@ -87,7 +96,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionWorkers",
-      "sort_order": 9,
+      "sort_order": 10,
       "admin_only": false
     },
     {
@@ -96,7 +105,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionParts",
-      "sort_order": 10,
+      "sort_order": 11,
       "admin_only": false
     },
     {
@@ -105,7 +114,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionItemSizes",
-      "sort_order": 11,
+      "sort_order": 12,
       "admin_only": false
     },
     {
@@ -114,7 +123,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionDesigns",
-      "sort_order": 12,
+      "sort_order": 13,
       "admin_only": false
     },
     {
@@ -123,7 +132,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionStages",
-      "sort_order": 13,
+      "sort_order": 14,
       "admin_only": false
     },
     {
@@ -132,7 +141,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionStageTypes",
-      "sort_order": 14,
+      "sort_order": 15,
       "admin_only": false
     },
     {
@@ -141,7 +150,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionPartTypes",
-      "sort_order": 15,
+      "sort_order": 16,
       "admin_only": false
     },
     {
@@ -150,7 +159,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionSizes",
-      "sort_order": 16,
+      "sort_order": 17,
       "admin_only": false
     },
     {
@@ -159,7 +168,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionProductTypes",
-      "sort_order": 17,
+      "sort_order": 18,
       "admin_only": false
     },
     {
@@ -168,7 +177,16 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionStatuses",
-      "sort_order": 18,
+      "sort_order": 19,
+      "admin_only": false
+    },
+    {
+      "key": "finishedProducts",
+      "name": "Finished Goods",
+      "resource_type": "screen",
+      "parent": "section:finishedGoods",
+      "route": "/fabric.html#finishedProducts",
+      "sort_order": 20,
       "admin_only": false
     },
     {
@@ -177,7 +195,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionFlags",
-      "sort_order": 19,
+      "sort_order": 21,
       "admin_only": false
     },
     {
@@ -186,7 +204,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionGenders",
-      "sort_order": 20,
+      "sort_order": 22,
       "admin_only": false
     },
     {
@@ -195,7 +213,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionTaskBoard",
-      "sort_order": 21,
+      "sort_order": 23,
       "admin_only": false
     },
     {
@@ -204,7 +222,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#productionUpdateTaskStatus",
-      "sort_order": 22,
+      "sort_order": 24,
       "admin_only": false
     },
     {
@@ -213,7 +231,7 @@
       "resource_type": "screen",
       "parent": "section:inventory",
       "route": "/fabric.html#materialStock",
-      "sort_order": 23,
+      "sort_order": 25,
       "admin_only": false
     },
     {
@@ -222,7 +240,7 @@
       "resource_type": "screen",
       "parent": "section:inventory",
       "route": "/fabric.html#materialMovements",
-      "sort_order": 24,
+      "sort_order": 26,
       "admin_only": false
     },
     {
@@ -231,7 +249,7 @@
       "resource_type": "screen",
       "parent": "section:inventory",
       "route": "/fabric.html#materials",
-      "sort_order": 25,
+      "sort_order": 27,
       "admin_only": false
     },
     {
@@ -240,7 +258,7 @@
       "resource_type": "screen",
       "parent": "section:inventory",
       "route": "/fabric.html#materialSuppliers",
-      "sort_order": 26,
+      "sort_order": 28,
       "admin_only": false
     },
     {
@@ -249,7 +267,7 @@
       "resource_type": "screen",
       "parent": "section:inventory",
       "route": "/fabric.html#materialOrders",
-      "sort_order": 27,
+      "sort_order": 29,
       "admin_only": false
     },
     {
@@ -258,7 +276,7 @@
       "resource_type": "screen",
       "parent": "section:inventory",
       "route": "/fabric.html#materialReceipts",
-      "sort_order": 28,
+      "sort_order": 30,
       "admin_only": false
     },
     {
@@ -267,7 +285,7 @@
       "resource_type": "screen",
       "parent": "section:inventory",
       "route": "/fabric.html#materialIssues",
-      "sort_order": 29,
+      "sort_order": 31,
       "admin_only": false
     },
     {
@@ -276,7 +294,7 @@
       "resource_type": "screen",
       "parent": "section:inventory",
       "route": "/fabric.html#materialCategories",
-      "sort_order": 30,
+      "sort_order": 32,
       "admin_only": false
     },
     {
@@ -285,7 +303,7 @@
       "resource_type": "screen",
       "parent": "section:inventory",
       "route": "/fabric.html#materialUnits",
-      "sort_order": 31,
+      "sort_order": 33,
       "admin_only": false
     },
     {
@@ -294,7 +312,7 @@
       "resource_type": "screen",
       "parent": "section:inventory",
       "route": "/fabric.html#materialIssueTypes",
-      "sort_order": 32,
+      "sort_order": 34,
       "admin_only": false
     },
     {
@@ -303,7 +321,7 @@
       "resource_type": "screen",
       "parent": "section:miscellaneous",
       "route": "/fabric.html#materialContacts",
-      "sort_order": 33,
+      "sort_order": 35,
       "admin_only": false
     },
     {
@@ -312,7 +330,7 @@
       "resource_type": "screen",
       "parent": "section:miscellaneous",
       "route": "/fabric.html#contactPeople",
-      "sort_order": 34,
+      "sort_order": 36,
       "admin_only": false
     },
     {
@@ -321,7 +339,7 @@
       "resource_type": "screen",
       "parent": "section:miscellaneous",
       "route": "/fabric.html#contactDetails",
-      "sort_order": 35,
+      "sort_order": 37,
       "admin_only": false
     },
     {
@@ -330,7 +348,7 @@
       "resource_type": "screen",
       "parent": "section:miscellaneous",
       "route": "/fabric.html#contactBankAccounts",
-      "sort_order": 36,
+      "sort_order": 38,
       "admin_only": false
     },
     {
@@ -339,7 +357,7 @@
       "resource_type": "screen",
       "parent": "section:miscellaneous",
       "route": "/fabric.html#contactCategories",
-      "sort_order": 37,
+      "sort_order": 39,
       "admin_only": false
     },
     {
@@ -348,7 +366,7 @@
       "resource_type": "screen",
       "parent": "section:miscellaneous",
       "route": "/fabric.html#bankAccountTypes",
-      "sort_order": 38,
+      "sort_order": 40,
       "admin_only": false
     },
     {
@@ -357,7 +375,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#yarnTypes",
-      "sort_order": 39,
+      "sort_order": 41,
       "admin_only": false
     },
     {
@@ -366,7 +384,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#fabricTypes",
-      "sort_order": 40,
+      "sort_order": 42,
       "admin_only": false
     },
     {
@@ -375,7 +393,7 @@
       "resource_type": "screen",
       "parent": "section:production",
       "route": "/fabric.html#brands",
-      "sort_order": 41,
+      "sort_order": 43,
       "admin_only": false
     },
     {
@@ -384,7 +402,7 @@
       "resource_type": "screen",
       "parent": "section:colours",
       "route": "/fabric.html#colours",
-      "sort_order": 42,
+      "sort_order": 44,
       "admin_only": false
     },
     {
@@ -393,7 +411,7 @@
       "resource_type": "screen",
       "parent": "section:colours",
       "route": "/fabric.html#colourMappings",
-      "sort_order": 43,
+      "sort_order": 45,
       "admin_only": false
     },
     {
@@ -402,7 +420,7 @@
       "resource_type": "screen",
       "parent": "section:colours",
       "route": "/fabric.html#labDips",
-      "sort_order": 44,
+      "sort_order": 46,
       "admin_only": false
     },
     {
@@ -411,7 +429,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#suppliers",
-      "sort_order": 45,
+      "sort_order": 47,
       "admin_only": false
     },
     {
@@ -420,7 +438,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#orders",
-      "sort_order": 46,
+      "sort_order": 48,
       "admin_only": false
     },
     {
@@ -429,7 +447,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#yarn",
-      "sort_order": 47,
+      "sort_order": 49,
       "admin_only": false
     },
     {
@@ -438,7 +456,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#knitting",
-      "sort_order": 48,
+      "sort_order": 50,
       "admin_only": false
     },
     {
@@ -447,7 +465,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#programs",
-      "sort_order": 49,
+      "sort_order": 51,
       "admin_only": false
     },
     {
@@ -456,7 +474,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#dyeBills",
-      "sort_order": 50,
+      "sort_order": 52,
       "admin_only": false
     },
     {
@@ -465,7 +483,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#dyed",
-      "sort_order": 51,
+      "sort_order": 53,
       "admin_only": false
     },
     {
@@ -474,7 +492,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#yarnLeft",
-      "sort_order": 52,
+      "sort_order": 54,
       "admin_only": false
     },
     {
@@ -483,7 +501,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#greige",
-      "sort_order": 53,
+      "sort_order": 55,
       "admin_only": false
     },
     {
@@ -492,7 +510,7 @@
       "resource_type": "screen",
       "parent": "section:fabric",
       "route": "/fabric.html#batches",
-      "sort_order": 54,
+      "sort_order": 56,
       "admin_only": false
     },
     {
@@ -501,7 +519,7 @@
       "resource_type": "screen",
       "parent": "section:hr",
       "route": "/fabric.html#employees",
-      "sort_order": 55,
+      "sort_order": 57,
       "admin_only": false
     },
     {
@@ -510,7 +528,7 @@
       "resource_type": "screen",
       "parent": "section:admin",
       "route": "/fabric.html#adminRoles",
-      "sort_order": 56,
+      "sort_order": 58,
       "admin_only": true
     },
     {
@@ -519,7 +537,7 @@
       "resource_type": "screen",
       "parent": "section:admin",
       "route": "/fabric.html#adminRoles",
-      "sort_order": 57,
+      "sort_order": 59,
       "admin_only": true
     },
     {
@@ -528,7 +546,7 @@
       "resource_type": "screen",
       "parent": "section:admin",
       "route": "/fabric.html#adminAudit",
-      "sort_order": 58,
+      "sort_order": 60,
       "admin_only": true
     }
   ],
