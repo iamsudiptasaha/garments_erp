@@ -27,6 +27,7 @@ const files = [
   '20261108140000_item_costing.sql',
   '20261108145000_remove_checkout_item_part.sql',
   '20261108150000_raw_material_transactions.sql',
+  '20261109072811_move_erp_objects_out_of_access.sql',
 ];
 // Files before the first release migration belong to the deployed baseline.
 export function releaseMigrationFiles() {
@@ -146,8 +147,8 @@ export async function applyRelease(client, migrations) {
       and to_regprocedure('public.erp_employee_snapshot()') is not null
       and to_regprocedure('public.erp_employee_attestation(uuid,bigint,jsonb)') is not null
       and not has_function_privilege('anon','public.erp_save_employee(jsonb,uuid)','execute')
-      and (select relrowsecurity from pg_class where oid='garments_access.employee_attestation'::regclass)
-      and not has_table_privilege('authenticated','garments_access.employee_attestation','select')
+      and (select relrowsecurity from pg_class where oid='garments_erp.employee_attestation'::regclass)
+      and not has_table_privilege('authenticated','garments_erp.employee_attestation','select')
       and (select count(*)=3 from pg_indexes where schemaname='garments_erp' and indexname in ('contact_items_one_primary_address','contact_items_one_primary_phone','contact_bank_account_one_primary') and indexdef like 'CREATE UNIQUE INDEX%WHERE%')
       and (select count(*)=3 from information_schema.columns where table_schema='garments_erp' and ((table_name='contact_items' and column_name in ('primary_address','primary_phone')) or (table_name='contact_bank_account' and column_name='primary_bank_account')) and data_type='boolean' and is_nullable='NO' and column_default='false')
       and to_regclass('garments_erp.job_status_history') is null
@@ -178,13 +179,13 @@ export async function applyRelease(client, migrations) {
         and table_name='employee' and column_name='employee_photo' and data_type='bigint')
       and not exists(select 1 from information_schema.columns where table_schema='garments_erp'
         and table_name='production_checklist' and column_name='tna_acquired_status_id')
-      and exists(select 1 from garments_access.app_file_route where target_key='employeePhoto'
+      and exists(select 1 from garments_erp.app_file_route where target_key='employeePhoto'
         and allowed_mime_types=array['image/jpeg','image/png','image/webp'] and is_active)
       and to_regprocedure('public.erp_save_verified_dyed_bill(jsonb,uuid)') is not null
       and not has_function_privilege('anon','public.erp_save_verified_dyed_bill(jsonb,uuid)','execute')
-      and not has_function_privilege('authenticated','garments_access.save_fabric_document_core(text,jsonb,text,jsonb,bigint)','execute')
-      and (select relrowsecurity from pg_class where oid='garments_access.dyed_bill_attestation'::regclass)
-      and not has_table_privilege('authenticated','garments_access.dyed_bill_attestation','select,insert,update,delete')
+      and not has_function_privilege('authenticated','garments_erp.save_fabric_document_core(text,jsonb,text,jsonb,bigint)','execute')
+      and (select relrowsecurity from pg_class where oid='garments_erp.dyed_bill_attestation'::regclass)
+      and not has_table_privilege('authenticated','garments_erp.dyed_bill_attestation','select,insert,update,delete')
       and exists(select 1 from pg_constraint where conrelid='garments_erp.dyeing_program_item'::regclass and contype='f'
         and pg_get_constraintdef(oid)='FOREIGN KEY (batch_no) REFERENCES garments_erp.batch_no_lab_dip_version_map(id)')
       and to_regclass('garments_erp.return_mode_type') is not null

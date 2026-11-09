@@ -6,10 +6,10 @@ declare r jsonb;ticket jsonb;gid bigint;rid bigint;
 begin
  select min(id) into rid from garments_erp.knitting_bill;
  if rid is null then raise exception 'Test requires a saved knitting bill';end if;
- r:=garments_access.file_target('knittingBill');
+ r:=garments_erp.file_target('knittingBill');
  select id into gid from garments_erp.bucket_group where "group"='items';
  perform public.erp_save_file_route('knittingBill',gid,array['image/png'],1048576,true,(r->>'version')::bigint);
- r:=garments_access.file_target('knittingBill');
+ r:=garments_erp.file_target('knittingBill');
  if r->>'group'<>'items' or r->>'max_bytes'<>'1048576' then raise exception 'Destination/limit did not persist';end if;
  begin perform public.erp_begin_file_upload('knittingBill',rid,'probe.pdf','application/pdf',12);raise exception 'Disallowed PDF accepted';exception when raise_exception then if sqlerrm<>'Unsupported file type' then raise;end if;end;
  begin perform public.erp_begin_file_upload('knittingBill',rid,'probe.png','image/png',1048577);raise exception 'Oversize accepted';exception when raise_exception then if sqlerrm<>'File exceeds upload limit' then raise;end if;end;
@@ -31,6 +31,6 @@ do $$ begin
 end $$;
 reset role;
 do $$ begin
- if has_function_privilege('anon','public.erp_file_routes()','execute') or has_table_privilege('authenticated','garments_access.app_file_route','update') then raise exception 'Route settings exposed';end if;
+ if has_function_privilege('anon','public.erp_file_routes()','execute') or has_table_privilege('authenticated','garments_erp.app_file_route','update') then raise exception 'Route settings exposed';end if;
 end $$;
 rollback;

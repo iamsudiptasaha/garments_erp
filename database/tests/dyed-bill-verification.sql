@@ -48,9 +48,9 @@ begin
  invalid_payload:=jsonb_set(edit_payload,'{changes}',(edit_payload->'changes')||jsonb_build_array(jsonb_build_object('table','contacts','id',gen_random_uuid()::text,'before',null,'values',jsonb_build_object('company_name','FORBIDDEN'))));
  proof:=public.erp_dyed_bill_attestation(actor,900001,invalid_payload);
  begin perform public.erp_save_verified_dyed_bill(invalid_payload,proof);raise exception 'TEST invalid linked write';exception when raise_exception then if sqlerrm='TEST invalid linked write' then raise;end if;end;
- if (select invoice_number from garments_erp.dyed_fabric_bill where id=saved_id)<>'VERIFY-CREATE' or (select used_at from garments_access.dyed_bill_attestation where id=proof) is not null then raise exception 'TEST partial bill or proof consumption after failure';end if;
+ if (select invoice_number from garments_erp.dyed_fabric_bill where id=saved_id)<>'VERIFY-CREATE' or (select used_at from garments_erp.dyed_bill_attestation where id=proof) is not null then raise exception 'TEST partial bill or proof consumption after failure';end if;
  proof:=public.erp_dyed_bill_attestation(actor,900001,edit_payload);
- update garments_access.dyed_bill_attestation set expires_at=now()-interval '1 second' where id=proof;
+ update garments_erp.dyed_bill_attestation set expires_at=now()-interval '1 second' where id=proof;
  begin perform public.erp_save_verified_dyed_bill(edit_payload,proof);raise exception 'TEST expired proof';exception when insufficient_privilege then null;end;
  proof:=public.erp_dyed_bill_attestation(actor,900001,edit_payload);
  perform public.erp_save_verified_dyed_bill(edit_payload,proof);
@@ -60,7 +60,7 @@ begin
  update garments_erp.employee set is_active=false where id=900001;
  perform set_config('request.jwt.claim.sub',actor::text,true);perform set_config('request.jwt.claims',claims::text,true);
  begin perform public.erp_dyed_bill_attestation(actor,900001,edit_payload);raise exception 'TEST inactive verifier';exception when insufficient_privilege then null;end;
- if has_function_privilege('authenticated','garments_access.save_fabric_document_core(text,jsonb,text,jsonb,bigint)','execute') or has_function_privilege('anon','public.erp_save_verified_dyed_bill(jsonb,uuid)','execute') then raise exception 'TEST exposed privileged function';end if;
+ if has_function_privilege('authenticated','garments_erp.save_fabric_document_core(text,jsonb,text,jsonb,bigint)','execute') or has_function_privilege('anon','public.erp_save_verified_dyed_bill(jsonb,uuid)','execute') then raise exception 'TEST exposed privileged function';end if;
  raise notice 'PASS verified dyed-bill create/edit, fresh password, exact payload, single use, expiry, stale edits, atomic rollback and restricted core';
 end $$;
 rollback;
