@@ -201,6 +201,7 @@ export function CostingHistory({ client, canEdit, itemIds }) {
   const [itemId, setItemId] = useState('');
   const [history, setHistory] = useState(null);
   const [versionId, setVersionId] = useState('');
+  const [comparisonId, setComparisonId] = useState('');
   const [revision, setRevision] = useState(0);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
@@ -259,6 +260,7 @@ export function CostingHistory({ client, canEdit, itemIds }) {
   }
 
   const costing = history?.find(({ id }) => id === versionId);
+  const comparison = history?.find(({ id }) => id === comparisonId && id !== versionId);
   return h(
     'section',
     null,
@@ -276,6 +278,7 @@ export function CostingHistory({ client, canEdit, itemIds }) {
             setError('');
             setHistory(null);
             setVersionId('');
+            setComparisonId('');
             setItemId(event.target.value);
           },
         },
@@ -305,6 +308,32 @@ export function CostingHistory({ client, canEdit, itemIds }) {
             h('option', { key: id, value: id }, `Version ${version} · ${status}`),
           ),
         ),
+      ),
+    history?.length > 1 &&
+      h(
+        'label',
+        null,
+        'Compare version',
+        h(
+          'select',
+          { value: comparison?.id ?? '', onChange: (event) => setComparisonId(event.target.value) },
+          h('option', { value: '' }, 'Select…'),
+          history
+            .filter(({ id }) => id !== versionId)
+            .map(({ id, version, status }) =>
+              h('option', { key: id, value: id }, `Version ${version} · ${status}`),
+            ),
+        ),
+      ),
+    comparison &&
+      h(
+        'section',
+        { 'aria-label': 'Comparison version' },
+        h(ItemCosting, {
+          key: comparison.id + ':' + comparison.updated_at,
+          costing: comparison,
+          canEdit: false,
+        }),
       ),
     canEdit &&
       history &&

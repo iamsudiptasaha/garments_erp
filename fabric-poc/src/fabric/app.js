@@ -1017,30 +1017,23 @@ function App({ live }) {
                         ),
                         costing: finishedGoodsPages.costing,
                       },
-                )
-                  .filter(
-                    ([key]) =>
-                      !live ||
-                      !['receipt', 'adjustment'].includes(key) ||
-                      can('create', 'finishedProducts'),
-                  )
-                  .map(([key, title]) =>
-                    h(
-                      'button',
-                      {
-                        key,
-                        'aria-current':
-                          page === 'finishedProducts' && finishedGoodsPage === key
-                            ? 'page'
-                            : undefined,
-                        onClick: () => {
-                          setFinishedGoodsPage(key);
-                          navigate('finishedProducts');
-                        },
+                ).map(([key, title]) =>
+                  h(
+                    'button',
+                    {
+                      key,
+                      'aria-current':
+                        page === 'finishedProducts' && finishedGoodsPage === key
+                          ? 'page'
+                          : undefined,
+                      onClick: () => {
+                        setFinishedGoodsPage(key);
+                        navigate('finishedProducts');
                       },
-                      title,
-                    ),
+                    },
+                    title,
                   ),
+                ),
               ),
             ),
           otherModules.map((name) =>

@@ -23,6 +23,18 @@ export function inspectBoundaries({schema,catalogue,policy,functions,links=emplo
    if (!contract.referenceTables.includes(mapping.table_name)) errors.push(`${screen}: unreviewed read mapping to ${mapping.table_name}`);
   }
  }
+ const finished = policy.finishedGoodsCatalogue;
+ if (finished) {
+  const read = functions.get(finished.readFunction);
+  const save = functions.get(finished.saveFunction);
+  const permission = action => `garments_access.has_screen_permission('${finished.permissionScreen}', '${action}')`;
+  const writes = code => [...(code || '').matchAll(/\b(?:insert\s+into|update|delete\s+from)\s+garments_erp\.(\w+)/gi)].map(match => match[1]);
+  if (!read?.includes(permission('view')) || writes(read).length) errors.push('Finished Goods: catalogue read boundary differs from its reviewed contract');
+  if (!save?.includes(permission('create')) || /\bexecute\b/i.test(save) ||
+      writes(save).some(table => !finished.writableTables.includes(table))) {
+   errors.push('Finished Goods: catalogue write boundary differs from its reviewed contract');
+  }
+ }
  for(const [screen,c]of Object.entries(policy.screens)){
   for(const table of Object.keys(relations))if(!c.writableTables.includes(table))errors.push(`${screen}: ${table} is linked data, not an owned write table`);
   for(const m of catalogue.mappings.filter(m=>m.resource_key===screen&&(m.can_create||m.can_edit)))if(![...c.writableTables,...c.maintenanceTables].includes(m.table_name))errors.push(`${screen}: forbidden writable mapping to ${m.table_name}`);

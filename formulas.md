@@ -35,10 +35,11 @@ Sources: [billing alignment](supabase/migrations/20261108110000_align_billing_er
 | --- | --- |
 | Available physical pieces by size | Produced pieces + signed stock corrections − finalized/dispatched billed pieces − draft-held pieces + verified returned pieces. |
 | Sellable variation capacity | Take the minimum across recipe components of floor(available physical pieces ÷ component share weight). A missing component balance contributes zero. |
+| Finished Goods summaries | Produced physical units per size use the limiting item part across current complete jobs. Open ordered sets are formal non-cancelled PO units less dispatched sets, floored at zero per line. Available percentage is available set capacity ÷ produced sets × 100, rounded to two decimals. Zero produced sets leaves the percentage unknown. [Summary RPC](supabase/migrations/20261109142922_finished_goods_catalogue.sql) |
 | Produced sets for a variation | Take the minimum across recipe components of floor(produced physical pieces ÷ component share weight). |
 | Billed component pieces | Billed sets × component share weight. Piece-level billing and returns preserve the size-level composition. |
 | Returned sets | For each billing item within a verified return event, calculate the minimum across recipe components of floor(returned component pieces ÷ component share weight). Sum complete sets across events. |
-| Stock valuation, preview rule | Physical pieces in house × item base price per piece. The [preview](fabric-poc/public/finished-goods-preview.html) labels this rule. Live quantity and price sourcing still need verification. |
+| Stock valuation | In-house pieces × final unit cost from the newest finalized costing linked to the receipt. Physical quantity includes draft holds and finalized pieces awaiting dispatch. Missing linked costing leaves value unknown. The [valuation RPC](supabase/migrations/20261109140609_finished_goods_costing_valuation.sql) uses database numeric precision. |
 
 ## Item costing
 

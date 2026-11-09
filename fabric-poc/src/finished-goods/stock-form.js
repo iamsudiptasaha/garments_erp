@@ -65,7 +65,11 @@ export function StockForm({ client, adjustment, onSaved }) {
         return;
       }
     } else {
-      args.p_job_id = values.get('job');
+      args.p_job_id = item.jobs[0]?.id;
+      if (!args.p_job_id) {
+        setError('No current completed job found. Reload stock-in choices.');
+        return;
+      }
       args.p_pieces = Object.fromEntries(
         item.sizes
           .filter(({ id }) => values.get(id) !== '')
@@ -161,7 +165,16 @@ export function StockForm({ client, adjustment, onSaved }) {
                 ),
               ]
             : [
-                selector('Completed job', 'job', item.jobs, { key: 'job' }),
+                h(
+                  'details',
+                  { key: 'jobs' },
+                  h('summary', null, `Current completed jobs (${item.jobs.length})`),
+                  h(
+                    'ul',
+                    null,
+                    item.jobs.map(({ id, label }) => h('li', { key: id }, label)),
+                  ),
+                ),
                 ...item.sizes.map(({ id, label }) =>
                   h(
                     'label',

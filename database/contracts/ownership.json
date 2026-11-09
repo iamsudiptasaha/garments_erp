@@ -7,6 +7,13 @@
       "writableTables": []
     }
   },
+  "finishedGoodsCatalogue": {
+    "permissionScreen": "finishedProducts",
+    "readFunction": "public.erp_finished_goods_catalogue",
+    "saveFunction": "public.erp_create_finished_catalogue_entry",
+    "writableTables": ["sellable_product", "sellable_unit", "item_in_store_price", "price_type"],
+    "referenceTables": ["item", "item_size_list", "size_list", "employee", "item_costing"]
+  },
   "screens": {
     "employees": {
       "root": "employee",
