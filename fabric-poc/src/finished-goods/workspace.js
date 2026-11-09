@@ -1,26 +1,70 @@
 import { createElement as h, useEffect, useState } from 'react';
 
+import { FinishedCatalogue } from './catalogue.js';
+import { ItemCostingPreview } from './costing-preview.js';
 import { CostingHistory } from './item-costing.js';
 import { StockForm } from './stock-form.js';
+import './styles.css';
 
 const pageSize = 50;
 const views = {
+  receipt: {
+    title: 'Stock-in receipts',
+    columns: [
+      ['id', 'Receipt'],
+      ['item', 'Item'],
+      ['pieces', 'Actual pieces'],
+      ['employee', 'Verified by'],
+      ['verified_at', 'Verified at'],
+    ],
+  },
+  adjustment: {
+    title: 'Verified adjustments',
+    columns: [
+      ['item', 'Item · size'],
+      ['delta', 'Change'],
+      ['reason', 'Reason'],
+      ['employee', 'Verified by'],
+    ],
+  },
+  valuation: {
+    title: 'Stock valuation',
+    columns: [
+      ['style_code', 'Style code'],
+      ['size', 'Size'],
+      ['pieces', 'Total pieces in house'],
+      ['base_price', 'Base price per piece'],
+      ['stock_value', 'Stock value'],
+    ],
+  },
   sizes: {
     title: 'Manufactured stock',
     columns: [
-      ['item_id', 'Manufactured item ID'],
-      ['size_id', 'Item-size ID'],
+      ['style_code', 'Style code'],
+      ['size', 'Size'],
+      ['total_produced', 'Total produced'],
       ['produced', 'Verified pieces'],
-      ['adjusted', 'Adjustments'],
+      ['adjusted', 'Pieces adjusted'],
+      ['returned', 'Pieces returned'],
+      ['held', 'Pieces on bill hold'],
+      ['sold', 'Pieces sold'],
       ['available', 'Available pieces'],
     ],
   },
   variations: {
     title: 'Sellable product capacity',
     columns: [
-      ['sku', 'SKU'],
-      ['name', 'Sellable product'],
-      ['capacity', 'Available sets'],
+      ['style_code', 'Style code'],
+      ['size', 'Size'],
+      ['item_type', 'Item type'],
+      ['produced_sets', 'Total produced (sets)'],
+      ['sold', 'Total sold'],
+      ['returned_sets', 'Total returned (sets)'],
+      ['held', 'Total billing hold'],
+      ['ordered', 'Total ordered'],
+      ['delivered', 'Total delivered'],
+      ['capacity', 'Total left (sets)'],
+      ['available_percent', 'Available %'],
     ],
   },
 };
@@ -28,8 +72,12 @@ const views = {
 export const finishedGoodsPages = {
   sizes: 'Item stock summary',
   variations: 'Sellable summary',
+  valuation: 'Stock valuation',
   receipt: 'Items produced',
   adjustment: 'Stock adjustments',
+  products: 'Sellable products',
+  prices: 'Item prices',
+  priceTypes: 'Price types',
   costing: 'Item costing',
 };
 
@@ -39,23 +87,31 @@ export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
   );
   const [costingItemIds, setCostingItemIds] = useState(null);
   const [notice, setNotice] = useState('');
-  const view = screen === 'variations' ? 'variations' : 'sizes';
+  const view = Object.hasOwn(views, screen) ? screen : 'sizes';
+  const movement = screen === 'receipt' || screen === 'adjustment';
   const [query, setQuery] = useState({ offset: 0, sku: '' });
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!client || !['sizes', 'variations'].includes(screen)) return;
+    if (!client || !Object.hasOwn(views, screen)) return;
     let current = true;
     async function load() {
       try {
-        const { data, error } = await client.rpc('erp_warehouse_stock', {
-          p_sku: query.sku || null,
-          p_limit: pageSize,
-          p_offset: query.offset,
-        });
+        const pagination = { p_limit: pageSize, p_offset: query.offset };
+        const { data, error } = movement
+          ? await client.rpc('erp_finished_goods_movements', {
+              ...pagination,
+              p_adjustment: screen === 'adjustment',
+            })
+          : screen === 'valuation'
+            ? await client.rpc('erp_finished_stock_valuation', pagination)
+            : await client.rpc('erp_finished_goods_summary', {
+                ...pagination,
+                p_sku: query.sku || null,
+              });
         if (error) throw error;
-        if (current) setResult(data);
+        if (current) setResult(movement || screen === 'valuation' ? { [screen]: data } : data);
       } catch (error) {
         if (current) setError(error.message || 'Unable to load finished stock.');
       }
@@ -64,7 +120,7 @@ export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
     return () => {
       current = false;
     };
-  }, [client, query, screen]);
+  }, [client, movement, query, screen]);
 
   function search(next) {
     setResult(null);
@@ -76,8 +132,11 @@ export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
   const { title, columns } = views[view];
   return h(
     'section',
-    null,
+    { className: 'finished-goods' },
     h('header', { className: 'fabric-page-header' }, h('h1', null, finishedGoodsPages[screen])),
+    client &&
+      ['products', 'prices', 'priceTypes'].includes(screen) &&
+      h(FinishedCatalogue, { client, screen, canCreate }),
     client &&
       command === 'costing' &&
       h(
@@ -91,38 +150,26 @@ export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
           itemIds: costingItemIds,
         }),
       ),
-    canCreate &&
-      ['receipt', 'adjustment'].includes(command) &&
-      h(StockForm, {
-        key: notice,
-        client,
-        adjustment: command === 'adjustment',
-        onSaved: (id) => {
-          setNotice(
-            command === 'adjustment' ? `Correction ${id} verified.` : `Stock-in ${id} verified.`,
-          );
-        },
-      }),
     notice && h('p', { role: 'status' }, notice),
-    !client &&
-      ['receipt', 'adjustment', 'costing'].includes(screen) &&
-      h('p', { role: 'status' }, 'Connect to the ERP to use this page.'),
-    ['sizes', 'variations'].includes(screen) &&
-      !command &&
+    !client && screen === 'costing' && h(ItemCostingPreview),
+    Object.hasOwn(views, screen) &&
+      (movement || !command) &&
       h(
         'div',
         null,
-        h(
-          'form',
-          {
-            onSubmit: (event) => {
-              event.preventDefault();
-              search({ sku: new FormData(event.currentTarget).get('sku').trim(), offset: 0 });
+        !movement &&
+          screen !== 'valuation' &&
+          h(
+            'form',
+            {
+              onSubmit: (event) => {
+                event.preventDefault();
+                search({ sku: new FormData(event.currentTarget).get('sku').trim(), offset: 0 });
+              },
             },
-          },
-          h('label', null, 'Exact SKU ', h('input', { name: 'sku', defaultValue: query.sku })),
-          h('button', { type: 'submit' }, 'Search'),
-        ),
+            h('label', null, 'Exact SKU ', h('input', { name: 'sku', defaultValue: query.sku })),
+            h('button', { type: 'submit' }, 'Search'),
+          ),
         h('h2', null, title),
         !client
           ? h('p', { role: 'status' }, 'Local preview. Connect to the ERP to load finished stock.')
@@ -155,8 +202,8 @@ export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
                       rows.map((row) =>
                         h(
                           'tr',
-                          { key: row.id ?? row.size_id },
-                          columns.map(([key]) => h('td', { key }, row[key])),
+                          { key: row.id ?? row.size_id ?? row.item_id },
+                          columns.map(([key]) => h('td', { key }, row[key] ?? '—')),
                           view === 'variations' &&
                             h(
                               'td',
@@ -199,5 +246,18 @@ export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
           'Next',
         ),
       ),
+    canCreate &&
+      ['receipt', 'adjustment'].includes(command) &&
+      h(StockForm, {
+        key: notice,
+        client,
+        adjustment: command === 'adjustment',
+        onSaved: (id) => {
+          setNotice(
+            command === 'adjustment' ? `Correction ${id} verified.` : `Stock-in ${id} verified.`,
+          );
+          search({ offset: 0, sku: '' });
+        },
+      }),
   );
 }

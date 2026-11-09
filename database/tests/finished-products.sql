@@ -49,6 +49,7 @@ declare
   receipt text;
   adjustment text;
   costing jsonb;
+  valuation jsonb;
   lines jsonb;
 begin
   begin
@@ -74,6 +75,16 @@ begin
   if public.erp_item_costing_read(981001)->0->>'status' is distinct from 'finalized' then
     raise exception 'TEST: costing did not finalize';
   end if;
+  costing := public.erp_item_costing_read(981001)->0;
+  begin
+    perform public.erp_item_costing_save((costing->>'id')::bigint,(costing->>'updated_at')::timestamptz,lines,false);
+    raise exception 'TEST: finalized costing accepted an edit';
+  exception when raise_exception then
+    if sqlerrm <> 'Costing changed. Reload before saving.' then raise; end if;
+  end;
+  if (public.erp_item_costing_read(981001)->0) is distinct from costing then
+    raise exception 'TEST: finalized costing history changed after rejected edit';
+  end if;
 
   receipt := public.erp_create_finished_production(981001,981001,900002,'{"981001":10}','98100000-0000-4000-8000-000000000001');
   if receipt is distinct from public.erp_create_finished_production(981001,981001,900002,'{"981001":10}','98100000-0000-4000-8000-000000000001')
@@ -86,6 +97,15 @@ begin
   then raise exception 'TEST: adjustment retry changed result'; end if;
   if (public.erp_warehouse_stock(981001)->'sizes'->0->>'available')::integer is distinct from 11
   then raise exception 'TEST: incorrect available stock'; end if;
+
+  select row into strict valuation
+  from jsonb_array_elements(public.erp_finished_stock_valuation(200, 0)) row
+  where row->>'item_id' = '981001';
+  if (valuation->>'pieces')::numeric is distinct from 11
+    or (valuation->>'base_price')::numeric is null
+    or (valuation->>'stock_value')::numeric is distinct from 11 * (valuation->>'base_price')::numeric
+  then raise exception 'TEST: valuation did not use physical stock and linked finalized costing'; end if;
+
 
   begin
     perform public.erp_adjust_finished_stock(981001,981001,-12,'Excess write-off',900002,'98100000-0000-4000-8000-000000000005');
@@ -153,4 +173,49 @@ begin
   then raise exception 'TEST: retired stock structures or anonymous stock access'; end if;
 end;
 $$;
+set local role authenticated;
+do $$
+declare
+  product_id text;
+  price_type_id text;
+  price_id text;
+  catalogue jsonb;
+  summary jsonb;
+begin
+  product_id := public.erp_create_finished_catalogue_entry('products', jsonb_build_object(
+    'sku', 'FT-CATALOGUE', 'name', 'Finished test recipe', 'employee_id', '900002',
+    'components', jsonb_build_array(jsonb_build_object('size_id', '981001', 'pieces', 2))
+  ));
+  price_type_id := public.erp_create_finished_catalogue_entry('priceTypes', '{"name":"Finished test wholesale"}');
+  price_id := public.erp_create_finished_catalogue_entry('prices', jsonb_build_object(
+    'product_id', product_id, 'type_id', price_type_id, 'version', 'v1',
+    'price_per_piece', 62.5, 'date', '2026-11-09'
+  ));
+  catalogue := public.erp_finished_goods_catalogue();
+  if not exists (
+    select 1 from jsonb_array_elements(public.erp_finished_goods_movements(false, 50, 0)) r
+    where r->>'item' = 'Finished test item' and (r->>'pieces')::integer = 10
+  ) or not exists (
+    select 1 from jsonb_array_elements(public.erp_finished_goods_movements(true, 50, 0)) r
+    where r->>'reason' = 'Write-off' and (r->>'delta')::integer = -2
+  ) then raise exception 'TEST: verified stock movement missing from history'; end if;
+  summary := public.erp_finished_goods_summary('FT-CATALOGUE', 50, 0);
+  if (summary->'sizes'->0->>'total_produced')::numeric is distinct from 10
+    or (summary->'sizes'->0->>'available')::numeric is distinct from 11
+    or (summary->'variations'->0->>'capacity')::numeric is distinct from 5
+    or (summary->'variations'->0->>'available_percent')::numeric is distinct from 100
+  then raise exception 'TEST: finished stock summary diverged from production and recipe'; end if;
+
+  if not exists (
+    select 1 from jsonb_array_elements(catalogue->'prices') p
+    where p->>'id' = price_id and (p->>'price_per_piece')::numeric = 62.5
+  ) or not exists (
+    select 1 from jsonb_array_elements(catalogue->'products') p
+    where p->>'id' = product_id and (p->'components'->0->>'pieces')::integer = 2
+      and (p->'components'->0->>'reference_cost')::numeric > 0
+  ) then raise exception 'TEST: manual pricing or read-only costing reference failed'; end if;
+end;
+$$;
+reset role;
+
 rollback;
