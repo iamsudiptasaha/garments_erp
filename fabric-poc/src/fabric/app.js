@@ -27,7 +27,7 @@ import { ProductionOverview } from '../production/cards.js';
 import { InventoryCard } from '../inventory/cards.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { FinishedGoods } from '../finished-goods/workspace.js';
+import { FinishedGoods, finishedGoodsPages } from '../finished-goods/workspace.js';
 import { pages, otherModules } from './catalog.js';
 import {
   initialFabric,
@@ -114,6 +114,7 @@ function loadSidebar() {
 }
 
 function App({ live }) {
+  const [finishedGoodsPage, setFinishedGoodsPage] = useState('sizes');
   const [sidebarOpen, setSidebarOpen] = useState(loadSidebar);
   useEffect(() => {
     try {
@@ -985,15 +986,36 @@ function App({ live }) {
             ),
           can('view', 'finishedProducts') &&
             h(
-              'nav',
-              { 'aria-label': 'Finished Goods' },
+              'details',
+              { open: true },
+              h('summary', null, 'Finished Goods'),
               h(
-                'button',
-                {
-                  'aria-current': page === 'finishedProducts' ? 'page' : undefined,
-                  onClick: () => navigate('finishedProducts'),
-                },
-                'Finished Goods',
+                'nav',
+                { 'aria-label': 'Finished Goods pages' },
+                Object.entries(finishedGoodsPages)
+                  .filter(
+                    ([key]) =>
+                      !live ||
+                      !['receipt', 'adjustment'].includes(key) ||
+                      can('create', 'finishedProducts'),
+                  )
+                  .map(([key, title]) =>
+                    h(
+                      'button',
+                      {
+                        key,
+                        'aria-current':
+                          page === 'finishedProducts' && finishedGoodsPage === key
+                            ? 'page'
+                            : undefined,
+                        onClick: () => {
+                          setFinishedGoodsPage(key);
+                          navigate('finishedProducts');
+                        },
+                      },
+                      title,
+                    ),
+                  ),
               ),
             ),
           otherModules.map((name) =>
@@ -1156,7 +1178,8 @@ function App({ live }) {
                 ? can('view', 'finishedProducts')
                   ? h(FinishedGoods, {
                       client: live ? getAccessClient() : null,
-                      key: actor,
+                      key: actor + ':' + finishedGoodsPage,
+                      screen: finishedGoodsPage,
                       canCreate: live && can('create'),
                     })
                   : h(
