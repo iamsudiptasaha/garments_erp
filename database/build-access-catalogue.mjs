@@ -4,9 +4,9 @@ const fabricChain=['contacts','yarn_supplier','yarn_type','yarn_purchase_order',
 const labChain=['lab_dip','lab_dip_version','lab_dip_version_status','batch_no_lab_dip_version_map'];
 const dyeChain=[...labChain,...fabricChain,'dyer','dyeing_program','dyeing_program_item','color_map','color_map_by_brand','brand_list','dyed_fabric_bill','dyed_fabric_item'];
 const stockChain=['raw_material_check_in','raw_material_check_out','raw_material_item','category_list','unit_of_measure','raw_material_supplier_list','contacts','raw_material_purchase_order','raw_material_purchase_order_item',...dyeChain];
-// These workspace routes remain local previews. Production commands continue
-// to use the existing productionJobs permission resource; no role grants here.
 const definitions={
+ // Finished Goods uses guarded RPCs and has no generic table mappings.
+ finishedProducts:{},
  productionTaskBoard:{report:['job','item','item_part','part_list','variant','variant_item','variant_item_per_job','stage_pieces','item_size_list','size_list','item_cut_ratio','production_checklist','stage','employee','flags_list']},
  productionUpdateTaskStatus:{report:['job','item','item_part','variant','variant_item','variant_item_per_job','stage_pieces','item_size_list','size_list','stage','employee']},
  productionFlags:{write:['flags_list']},productionGenders:{write:['gender']},
@@ -41,7 +41,7 @@ const definitions={
  adminAudit:{report:['garments_access.app_activity_log','garments_access.app_user','employee','contacts','garments_access.app_resource']}
 };
 for(const key of Object.keys(pages))if(!definitions[key])throw Error(`Missing reviewed table mapping for ${key}`);
-const sections=[['fabric','Fabric'],['colours','Colours'],['production','Production'],['inventory','Raw Material Inventory'],['miscellaneous','Miscellaneous'],['hr','Employee / HR'],['admin','Administration']];
+const sections=[['fabric','Fabric'],['colours','Colours'],['production','Production'],['inventory','Raw Material Inventory'],['miscellaneous','Miscellaneous'],['hr','Employee / HR'],['admin','Administration'],['finishedGoods','Finished Goods']];
 const resources=sections.map(([key,name],sort_order)=>({key:'section:'+key,name,resource_type:'section',parent:null,route:null,sort_order,admin_only:key==='admin'}));
 const plannedMisc={materialContacts:'Contacts',contactPeople:'Contact people',contactDetails:'Contact details',contactBankAccounts:'Bank accounts',contactCategories:'Contact categories',bankAccountTypes:'Bank account types'};
 const currentPages={...pages,yarnTypes:{...pages.yarnTypes,section:undefined},fabricTypes:{...pages.fabricTypes,section:undefined},brands:{...pages.brands,section:'production'},...Object.fromEntries(Object.entries(plannedMisc).map(([key,title])=>[key,{...pages[key],title,section:'miscellaneous'}]))};

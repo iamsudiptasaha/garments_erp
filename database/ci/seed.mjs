@@ -11,7 +11,7 @@ insert into garments_access.app_user(user_id,employee_id,is_active) values ('000
 insert into garments_access.app_user_role(user_id,role_id) select '00000000-0000-4000-8000-000000000001',id from garments_access.app_role where key='ci_admin';
 insert into garments_access.app_user_role(user_id,role_id) select '00000000-0000-4000-8000-000000000002',id from garments_access.app_role where key='ci_viewer';\n`;
 for (const r of catalogue.resources)
-  sql += `insert into garments_access.app_resource(key,name,resource_type,route,sort_order,is_active,admin_only) values (${literal(r.key)},${literal(r.name)},${literal(r.resource_type)},${r.route ? literal(r.route) : 'null'},${r.sort_order},true,${r.admin_only});\n`;
+  sql += `insert into garments_access.app_resource(key,name,resource_type,route,sort_order,is_active,admin_only) values (${literal(r.key)},${literal(r.name)},${literal(r.resource_type)},${r.route ? literal(r.route) : 'null'},${r.sort_order},true,${r.admin_only}) on conflict (key) do nothing;\n`;
 for (const r of catalogue.resources.filter((r) => r.parent))
   sql += `update garments_access.app_resource set parent_resource_id=(select id from garments_access.app_resource where key=${literal(r.parent)}) where key=${literal(r.key)};\n`;
 for (const t of catalogue.tables)
