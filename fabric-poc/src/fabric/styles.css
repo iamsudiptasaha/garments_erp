@@ -1617,3 +1617,58 @@ select {
     overflow: hidden;
   }
 }
+
+/* Shared record-grid controls. Keep actions aligned while letting them wrap. */
+.sheet-exports {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.sheet-exports > span {
+  margin-right: auto;
+}
+.sheet-exports .sheet-zoom {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+}
+.sheet-exports :is(button, select, summary) {
+  min-height: 32px;
+}
+.erp-grid-columns {
+  position: relative;
+}
+.erp-grid-columns summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid var(--erp-border);
+  border-radius: 8px;
+  font-size: 11px;
+}
+.erp-grid-columns[open] {
+  flex-basis: 100%;
+}
+.erp-grid-column-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-block: 8px;
+}
+.erp-grid-column-controls input {
+  width: 76px;
+}
+
+.erp-record-grid > .sheet-exports {
+  justify-content: flex-end;
+}
+
+.erp-record-grid .access-table {
+  width: 100%;
+  table-layout: auto;
+}
+
+.erp-record-grid .access-table :is(th, td) {
+  overflow-wrap: anywhere;
+}

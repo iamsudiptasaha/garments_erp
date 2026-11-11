@@ -37,6 +37,7 @@ const files = [
   '20261109142922_finished_goods_catalogue.sql',
   '20261109191200_production_challan_alignment.sql',
   '20261109191300_production_challan_commands.sql',
+  '20261111180000_grid_preferences.sql',
 ];
 // Files before the first release migration belong to the deployed baseline.
 export function releaseMigrationFiles() {

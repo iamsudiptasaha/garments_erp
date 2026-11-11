@@ -1,3 +1,4 @@
+import { getAccessClient } from '../access/client.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { allowed } from '../admin/model.js';
 import { FabricSheet } from '../fabric/sheet.js';
@@ -66,8 +67,7 @@ export function HRPanel({
     [reference, setReference] = useState(''),
     [referenceId, setReferenceId] = useState(null),
     [busy, setBusy] = useState(false),
-    [selection, setSelection] = useState(null),
-    [preferences, setPreferences] = useState({});
+    [selection, setSelection] = useState(null);
   const commands = useMemo(() => (live ? employeeCommands() : null), [!!live]);
   const can = (action) => allowed(access, actor, 'employees', action);
   async function reload() {
@@ -370,8 +370,7 @@ export function HRPanel({
                   page: 'employees',
                   spec,
                   records: rows,
-                  preferences,
-                  onPreferences: (p) => setPreferences((old) => ({ ...old, ...p })),
+                  client: live ? getAccessClient() : null,
                   capabilities: { format: false, export: can('export'), print: can('print') },
                   onSelect: (row) => setSelection(row?.id || null),
                   onNotice: setNotice,

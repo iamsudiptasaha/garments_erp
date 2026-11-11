@@ -171,6 +171,7 @@ function FilesWorkspace({ access }) {
                 'Live Supabase configuration · private buckets · group keys and bucket addresses stay fixed to preserve file links.',
               ),
               h(BucketSettings, {
+                preferenceClient: getAccessClient(),
                 registry,
                 buckets: registry.map((g) => ({ id: g.bucket_id, private: g.private })),
                 isAdministrator: true,
@@ -179,7 +180,12 @@ function FilesWorkspace({ access }) {
                 onRemove: removeGroup,
                 lockBucket: true,
               }),
-              h(UploadRoutes, { routes, registry, onSave: saveRoute }),
+              h(UploadRoutes, {
+                routes,
+                registry,
+                onSave: saveRoute,
+                preferenceClient: getAccessClient(),
+              }),
               h(
                 'div',
                 { className: 'file-admin-actions' },

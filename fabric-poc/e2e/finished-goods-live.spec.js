@@ -29,6 +29,7 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
       ),
     { token, actor, exp },
   );
+  const gridPreferences = new Map();
   const prices = [];
   const movements = [];
   const stockWrites = [];
@@ -91,6 +92,11 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
       case 'erp_finished_goods_movements':
         body = movements.filter(({ adjustment }) => adjustment === args.p_adjustment);
         break;
+      case 'erp_grid_preferences': {
+        body = { ...gridPreferences.get(args.p_grid), ...args.p_patch };
+        if (args.p_patch) gridPreferences.set(args.p_grid, body);
+        break;
+      }
       case 'erp_create_finished_production':
       case 'erp_adjust_finished_stock': {
         const adjustment = name === 'erp_adjust_finished_stock';

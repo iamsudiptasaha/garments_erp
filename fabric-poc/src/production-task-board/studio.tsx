@@ -1,3 +1,5 @@
+import { useGridPreferences } from '../fabric/grid-preferences.js';
+import { fitGridColumns } from '../fabric/grid-layout.js';
 import { TaskHandover } from './handover';
 import Select from 'react-select';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -328,15 +330,57 @@ export type PortalBoardOptions = {
   canEdit: boolean;
   onSave: (tasks: Task[]) => void;
   live?: boolean;
+  preferenceClient?: Parameters<typeof useGridPreferences>[0];
   onCommit?: (before: Task[], after: Task[]) => Promise<Task[]>;
 };
 export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {}) {
+  return portal?.preferenceClient ? (
+    <AuthenticatedStudio portal={portal} />
+  ) : (
+    <Studio portal={portal} />
+  );
+}
+
+function AuthenticatedStudio({ portal }: { portal: PortalBoardOptions }) {
+  const { ready, preferences, save, error } = useGridPreferences<StudioViews>(
+    portal.preferenceClient,
+    'production-studio',
+  );
+  return (
+    <>
+      {error && <p role="status">{error}</p>}
+      {ready ? (
+        <Studio portal={portal} savedViews={preferences} saveViews={save} />
+      ) : (
+        <p role="status">Loading grid preferences…</p>
+      )}
+    </>
+  );
+}
+
+type StudioViews = { config?: Config; views?: SavedView[] };
+
+function Studio({
+  portal,
+  savedViews,
+  saveViews,
+}: {
+  portal?: PortalBoardOptions;
+  savedViews?: StudioViews;
+  saveViews?: (value: StudioViews) => void;
+}) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
   const storageKey = portal
     ? `garments.production-views.${portal.actor}`
     : 'garments.production-studio.v1';
   const [loaded] = useState(() => {
     if (!portal) return initialState();
+    if (savedViews)
+      return {
+        tasks: portal.tasks,
+        config: savedViews.config ?? initialConfig,
+        views: savedViews.views ?? [],
+      };
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
       if (saved?.config && Array.isArray(saved.views)) return { ...saved, tasks: portal.tasks };
@@ -427,8 +471,30 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
     : new URLSearchParams(location.search).get('screen');
   const standalone = screen === 'qr';
   const [storageWarning, setStorageWarning] = useState(false);
+  const lastPresentation = useRef({ config, views });
+  const workspace = useRef<HTMLElement>(null);
+  const [workspaceWidth, setWorkspaceWidth] = useState(0);
+  useEffect(() => {
+    if (!portal?.live || !workspace.current) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setWorkspaceWidth(Math.floor(entry.contentRect.width)),
+    );
+    observer.observe(workspace.current);
+    return () => observer.disconnect();
+  }, [portal?.live]);
   const drawerRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
+    if (saveViews) {
+      const previous = lastPresentation.current;
+      if (previous.config !== config || previous.views !== views) {
+        saveViews({
+          ...(previous.config !== config ? { config } : {}),
+          ...(previous.views !== views ? { views } : {}),
+        });
+        lastPresentation.current = { config, views };
+      }
+      return;
+    }
     try {
       localStorage.setItem(
         storageKey,
@@ -696,9 +762,27 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
     ],
     [tasks],
   );
+  const fitted = useMemo(() => {
+    if (!portal?.live || !workspaceWidth) return columns;
+    const fields = columns
+      .filter((column) => column.id !== 'select' && config.visibility[column.id!] !== false)
+      .map((column) => ({ key: column.id!, label: String(column.header) }));
+    const values = tasks.map((task) =>
+      Object.fromEntries(
+        fields.map(({ key }) => [key, key === 'name' ? task.name : groupValue(task, key)]),
+      ),
+    );
+    const measured = new Map(
+      fitGridColumns(fields, values, workspaceWidth - 90, config.sizing).map(({ key, width }) => [
+        key,
+        width,
+      ]),
+    );
+    return columns.map((column) => ({ ...column, size: measured.get(column.id!) ?? column.size }));
+  }, [columns, config.sizing, config.visibility, portal?.live, tasks, workspaceWidth]);
   const table = useReactTable({
     data: visibleTasks,
-    columns,
+    columns: fitted,
     state: {
       grouping: config.grouping,
       columnVisibility: config.visibility,
@@ -715,7 +799,7 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
     getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
     groupedColumnMode: false,
-    columnResizeMode: 'onChange',
+    columnResizeMode: portal?.live ? 'onEnd' : 'onChange',
     enableRowSelection: (row) => !row.getIsGrouped() && row.original.kind !== 'history',
     onRowSelectionChange: setSelection,
     onExpandedChange: (up) =>
@@ -1105,7 +1189,7 @@ export function ProductionStudio({ portal }: { portal?: PortalBoardOptions } = {
           </div>
         </div>
       </aside>
-      <main className="studio-main">
+      <main className="studio-main" ref={workspace}>
         <header className="topbar">
           <div className="breadcrumb">
             Workspace <ChevronRight size={13} /> Operations <ChevronRight size={13} />
