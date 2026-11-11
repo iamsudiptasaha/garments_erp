@@ -20,6 +20,18 @@ export const resources = [
         p.permissionActions || (p.readonly ? ['view', 'format', 'export', 'print'] : actions),
     })),
   {
+    id: 'productionChallans',
+    label: 'Challans',
+    group: 'Production',
+    actions,
+  },
+  {
+    id: 'jobWorkerBills',
+    label: 'Worker bills',
+    group: 'Production',
+    actions,
+  },
+  {
     id: 'employees',
     label: 'Employees',
     group: 'Employee / HR',

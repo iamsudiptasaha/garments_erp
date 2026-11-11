@@ -12,7 +12,8 @@
     "../database/ci/seed.mjs",
     "e2e/*.js",
     "integration/*.mjs",
-    "src/production-prototype/main.tsx"
+    "src/production-prototype/main.tsx",
+    "src/production-documents/app.js"
   ],
   "project": [
     "src/**/*.js",

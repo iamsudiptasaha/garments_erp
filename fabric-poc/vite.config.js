@@ -14,6 +14,7 @@ export default defineConfig({
                 new URL('./production-prototype.html', import.meta.url),
               ),
             }),
+        productionChallan: fileURLToPath(new URL('./production-challan.html', import.meta.url)),
         fileAdmin: fileURLToPath(new URL('./files-admin.html', import.meta.url)),
         files: fileURLToPath(new URL('./files.html', import.meta.url)),
         access: fileURLToPath(new URL('./access.html', import.meta.url)),
