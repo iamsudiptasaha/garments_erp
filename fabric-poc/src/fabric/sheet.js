@@ -96,7 +96,7 @@ export function FabricSheet({
     );
   }
   function zoomTo(value) {
-    const current = book.current?.getSheet();
+    const current = book.current?.getAllSheets().find((sheet) => sheet.id === page);
     if (current && !hasDataChanges(current, state.current))
       state.current = capturePresentation(current, state.current);
     const layout = { ...state.current.layout, zoomRatio: value };

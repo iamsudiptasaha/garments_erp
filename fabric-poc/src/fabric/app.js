@@ -38,6 +38,7 @@ import {
   upgradeFabric,
 } from './domain.js';
 import { FabricSheet } from './sheet.js';
+import { WorkspaceViewToggle } from './view-toggle.js';
 import { BillEditor } from './editor.js';
 import './styles.css';
 import { initialAccess, allowed, isAdministrator, upgradeAccess } from '../admin/model.js';
@@ -1306,24 +1307,13 @@ function App({ live }) {
                                       h('h1', null, spec.title),
                                       h('p', null, spec.subtitle),
                                     ),
-                                    h(
-                                      'div',
-                                      { className: 'fabric-view-toggle' },
-                                      ['overview', 'sheet'].map((v) =>
-                                        h(
-                                          'button',
-                                          {
-                                            key: v,
-                                            'aria-pressed': view === v,
-                                            onClick: () => {
-                                              setView(v);
-                                              setSelected(null);
-                                            },
-                                          },
-                                          v === 'overview' ? 'Overview' : 'Sheet',
-                                        ),
-                                      ),
-                                    ),
+                                    h(WorkspaceViewToggle, {
+                                      view,
+                                      onChange: (mode) => {
+                                        setView(mode);
+                                        setSelected(null);
+                                      },
+                                    }),
                                   ),
                                   h(
                                     'div',

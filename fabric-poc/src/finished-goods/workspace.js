@@ -1,9 +1,10 @@
 import { createElement as h, useEffect, useState } from 'react';
 
+import { WorkspaceViewToggle } from '../fabric/view-toggle.js';
 import { FinishedCatalogue } from './catalogue.js';
 import { ItemCostingPreview } from './costing-preview.js';
 import { CostingHistory } from './item-costing.js';
-import { FinishedGoodsSheetView } from './sheet-view.js';
+import { FinishedGoodsCards, FinishedGoodsEditor, FinishedGoodsSheetView } from './sheet-view.js';
 import { StockForm } from './stock-form.js';
 import './styles.css';
 
@@ -82,7 +83,22 @@ export const finishedGoodsPages = {
   costing: 'Item costing',
 };
 
+const descriptions = {
+  sizes: 'Compare completed production, verified stock and movements by item size.',
+  variations:
+    'Available sets are limited by the component size that can make the fewest whole sets.',
+  valuation: 'Total pieces in house × item base price.',
+  receipt: 'Record actual size quantities once every item part is complete.',
+  adjustment: 'Record a verified quantity correction against an existing item size.',
+  products: 'Set up sellable products and their size-wise composition.',
+  prices: 'Set up price versions for sellable products.',
+  priceTypes: 'Maintain the shared price type reference list.',
+};
+
 export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes' }) {
+  const [display, setDisplay] = useState(
+    ['sizes', 'variations', 'valuation'].includes(screen) ? 'sheet' : 'overview',
+  );
   const [command, setCommand] = useState(
     ['receipt', 'adjustment', 'costing'].includes(screen) ? screen : '',
   );
@@ -131,13 +147,31 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
 
   const rows = result?.[view] ?? [];
   const { title, columns } = views[view];
+  const pageTitle = finishedGoodsPages[screen];
   return h(
     'section',
     { className: 'finished-goods' },
-    h('header', { className: 'fabric-page-header' }, h('h1', null, finishedGoodsPages[screen])),
+    h(
+      'header',
+      { className: 'fabric-page-header' },
+      h(
+        'div',
+        null,
+        h('p', { className: 'eyebrow' }, 'FINISHED GOODS / ' + pageTitle.toUpperCase()),
+        h('h1', null, pageTitle),
+        descriptions[screen] && h('p', null, descriptions[screen]),
+      ),
+      client &&
+        screen !== 'costing' &&
+        h(WorkspaceViewToggle, {
+          view: display,
+          onChange: setDisplay,
+          label: pageTitle + ' view',
+        }),
+    ),
     client &&
       ['products', 'prices', 'priceTypes'].includes(screen) &&
-      h(FinishedCatalogue, { client, screen, canCreate, capabilities }),
+      h(FinishedCatalogue, { client, screen, canCreate, capabilities, view: display }),
     client &&
       command === 'costing' &&
       h(
@@ -153,6 +187,30 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
       ),
     notice && h('p', { role: 'status' }, notice),
     !client && screen === 'costing' && h(ItemCostingPreview),
+    canCreate &&
+      ['receipt', 'adjustment'].includes(command) &&
+      h(
+        FinishedGoodsEditor,
+        {
+          label: command === 'adjustment' ? '+ Add adjustment' : '+ Record stock-in',
+          title: command === 'adjustment' ? 'New adjustment' : 'New stock-in',
+        },
+        (close) =>
+          h(StockForm, {
+            key: notice,
+            client,
+            adjustment: command === 'adjustment',
+            onSaved: (id) => {
+              close();
+              setNotice(
+                command === 'adjustment'
+                  ? `Correction ${id} verified.`
+                  : `Stock-in ${id} verified.`,
+              );
+              search({ offset: 0, sku: '' });
+            },
+          }),
+      ),
     Object.hasOwn(views, screen) &&
       (movement || !command) &&
       h(
@@ -163,15 +221,21 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
           h(
             'form',
             {
+              className: 'fabric-actions',
               onSubmit: (event) => {
                 event.preventDefault();
                 search({ sku: new FormData(event.currentTarget).get('sku').trim(), offset: 0 });
               },
             },
-            h('label', null, 'Exact SKU ', h('input', { name: 'sku', defaultValue: query.sku })),
+            h('input', {
+              name: 'sku',
+              type: 'search',
+              'aria-label': 'Exact SKU',
+              placeholder: 'Exact SKU',
+              defaultValue: query.sku,
+            }),
             h('button', { type: 'submit' }, 'Search'),
           ),
-        h('h2', null, title),
         !client
           ? h('p', { role: 'status' }, 'Local preview. Connect to the ERP to load finished stock.')
           : error
@@ -185,53 +249,34 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
               ? h('p', { role: 'status' }, 'Loading finished stock…')
               : h(
                   FinishedGoodsSheetView,
-                  { page: screen, title, columns, rows, capabilities },
+                  { page: screen, title, columns, rows, capabilities, view: display },
                   rows.length
-                    ? h(
-                        'table',
-                        null,
-                        h(
-                          'thead',
-                          null,
-                          h(
-                            'tr',
-                            null,
-                            columns.map(([key, label]) => h('th', { key, scope: 'col' }, label)),
-                            view === 'variations' && h('th', { scope: 'col' }, 'Costing'),
-                          ),
-                        ),
-                        h(
-                          'tbody',
-                          null,
-                          rows.map((row) =>
-                            h(
-                              'tr',
-                              { key: row.id ?? row.size_id ?? row.item_id },
-                              columns.map(([key]) => h('td', { key }, row[key] ?? '—')),
-                              view === 'variations' &&
+                    ? h(FinishedGoodsCards, {
+                        title: pageTitle,
+                        columns,
+                        rows,
+                        headline: screen === 'receipt' ? 'item' : undefined,
+                        actions:
+                          view === 'variations'
+                            ? (row) =>
                                 h(
-                                  'td',
-                                  null,
-                                  h(
-                                    'button',
-                                    {
-                                      disabled: !row.components?.length,
-                                      onClick: () => {
-                                        setCostingItemIds([
-                                          ...new Set(
-                                            row.components.map(({ item_id }) => String(item_id)),
-                                          ),
-                                        ]);
-                                        setCommand('costing');
-                                      },
+                                  'button',
+                                  {
+                                    className: 'open-document',
+                                    disabled: !row.components?.length,
+                                    onClick: () => {
+                                      setCostingItemIds([
+                                        ...new Set(
+                                          row.components.map(({ item_id }) => String(item_id)),
+                                        ),
+                                      ]);
+                                      setCommand('costing');
                                     },
-                                    'Costing history',
-                                  ),
-                                ),
-                            ),
-                          ),
-                        ),
-                      )
+                                  },
+                                  'Costing history',
+                                )
+                            : undefined,
+                      })
                     : h('p', null, 'No finished stock records on this page.'),
                 ),
         h(
@@ -251,18 +296,5 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
           'Next',
         ),
       ),
-    canCreate &&
-      ['receipt', 'adjustment'].includes(command) &&
-      h(StockForm, {
-        key: notice,
-        client,
-        adjustment: command === 'adjustment',
-        onSaved: (id) => {
-          setNotice(
-            command === 'adjustment' ? `Correction ${id} verified.` : `Stock-in ${id} verified.`,
-          );
-          search({ offset: 0, sku: '' });
-        },
-      }),
   );
 }

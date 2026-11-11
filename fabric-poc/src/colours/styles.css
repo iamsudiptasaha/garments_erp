@@ -10,9 +10,9 @@
   text-align: left;
   width: 100%;
   min-height: 220px;
-  padding: 25px;
+  padding: var(--erp-card-inset);
   border: 0;
-  border-radius: 15px;
+  border-radius: var(--erp-card-radius);
   background: transparent;
 }
 .lab-card-open:hover {
