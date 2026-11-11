@@ -1,3 +1,4 @@
+import { useNavigationPreferences } from '../access/navigation-preferences.js';
 import { getAccessClient } from '../access/client.js';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -769,6 +770,13 @@ import { pages } from '../fabric/catalog.js';
   window.addEventListener('hashchange', navigate);
   const menu = document.querySelector('.navigation-toggle');
   const sidebar = document.getElementById('challan-sidebar');
+  function NavigationPreferences() {
+    const notice = useNavigationPreferences(getAccessClient(), { current: sidebar });
+    return notice ? React.createElement('p', { role: 'status' }, notice) : null;
+  }
+  const navigationStatus = document.createElement('div');
+  sidebar.append(navigationStatus);
+  createRoot(navigationStatus).render(React.createElement(NavigationPreferences));
   menu.addEventListener('click', () => {
     sidebar.hidden = !sidebar.hidden;
     document.querySelector('.fabric-shell').classList.toggle('sidebar-collapsed', sidebar.hidden);

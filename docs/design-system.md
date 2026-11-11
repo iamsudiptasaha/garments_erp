@@ -38,6 +38,8 @@ The workspace shell has a 235px sidebar and 34px × 38px main padding. Page head
 | Forms and dialogs | Group document lines with `.fabric-line` (22px padding, 10px radius) and align actions with `.editor-actions`. Native `.fabric-dialog` uses 15px radius, 28px padding, 90vh max height, width `min(1000px, 94vw)` and `#17344966` backdrop. Follow [LabEditor](../fabric-poc/src/colours/editor.js) and [BillEditor](../fabric-poc/src/fabric/editor.js) for heading, fields and actions. |
 | Print | Use the workspace print rules as the starting point. Keep the record and hide navigation and interactive controls. [Print CSS](../fabric-poc/src/fabric/styles.css) |
 
+Navigation disclosures share stable section keys across signed-in workspaces. Persist each explicit expand or collapse through the shared account preference store. Keep the current-page indicator and responsive sidebar visibility independent of disclosure state.
+
 ## Record grids
 
 Use FabricSheet for configurable record grids. Use GridSearch for labelled, debounced search with no separate submit button. Keep existing server search semantics and label exact matches explicitly. If a grid sorts or filters a server page locally, disclose that scope next to the controls.

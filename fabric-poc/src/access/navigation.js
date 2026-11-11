@@ -1,5 +1,7 @@
 import { AccountFooter } from './account-footer.js';
-import React from 'react';
+import React, { useRef } from 'react';
+import { getAccessClient } from './client.js';
+import { useNavigationPreferences } from './navigation-preferences.js';
 import { pages } from '../fabric/catalog.js';
 import { hrPages } from '../hr/model.js';
 const h = React.createElement;
@@ -11,10 +13,13 @@ const groups = [
   ['miscellaneous', 'Miscellaneous'],
 ];
 export function AccessNavigation({ access, tab, onTab, open, onClose, accountName, onSignOut }) {
+  const sidebar = useRef(null);
+  const notice = useNavigationPreferences(getAccessClient(), sidebar);
   const can = (key) => access.permissions?.[key]?.view === true;
   return h(
     'aside',
     {
+      ref: sidebar,
       id: 'live-workspace-sidebar',
       className: 'fabric-sidebar access-navigation',
       hidden: !open,
@@ -46,7 +51,7 @@ export function AccessNavigation({ access, tab, onTab, open, onClose, accountNam
           entries.length > 0 &&
           h(
             'details',
-            { open: true, key: group },
+            { open: true, key: group, 'data-nav-section': group },
             h('summary', null, title),
             h(
               'nav',
@@ -61,7 +66,7 @@ export function AccessNavigation({ access, tab, onTab, open, onClose, accountNam
       can('employees') &&
         h(
           'details',
-          { open: true },
+          { open: true, 'data-nav-section': 'hr' },
           h('summary', null, 'Employee / HR'),
           h(
             'nav',
@@ -74,7 +79,7 @@ export function AccessNavigation({ access, tab, onTab, open, onClose, accountNam
       access.administrator &&
         h(
           'details',
-          { open: true },
+          { open: true, 'data-nav-section': 'administration' },
           h('summary', null, 'Administration'),
           h(
             'nav',
@@ -100,7 +105,7 @@ export function AccessNavigation({ access, tab, onTab, open, onClose, accountNam
       access.enabled &&
         h(
           'details',
-          { open: true },
+          { open: true, 'data-nav-section': 'files' },
           h('summary', null, 'File Uploads'),
           h(
             'nav',
@@ -109,6 +114,7 @@ export function AccessNavigation({ access, tab, onTab, open, onClose, accountNam
           ),
         ),
     ),
+    notice && h('p', { role: 'status' }, notice),
     h(AccountFooter, {
       name: accountName || 'My account',
       role: access.administrator ? 'Administrator' : 'Signed-in employee',

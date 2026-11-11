@@ -65,6 +65,7 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
           ]),
         ),
       };
+    else if (name === 'erp_grid_preferences') body = {};
     else if (name === 'erp_raw_material_transaction_snapshot') body = stock;
     else if (name === 'erp_save_raw_material_transaction') {
       calls.push(args);
