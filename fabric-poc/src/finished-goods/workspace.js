@@ -3,6 +3,7 @@ import { createElement as h, useEffect, useState } from 'react';
 import { FinishedCatalogue } from './catalogue.js';
 import { ItemCostingPreview } from './costing-preview.js';
 import { CostingHistory } from './item-costing.js';
+import { FinishedGoodsSheetView } from './sheet-view.js';
 import { StockForm } from './stock-form.js';
 import './styles.css';
 
@@ -81,7 +82,7 @@ export const finishedGoodsPages = {
   costing: 'Item costing',
 };
 
-export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
+export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes' }) {
   const [command, setCommand] = useState(
     ['receipt', 'adjustment', 'costing'].includes(screen) ? screen : '',
   );
@@ -136,7 +137,7 @@ export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
     h('header', { className: 'fabric-page-header' }, h('h1', null, finishedGoodsPages[screen])),
     client &&
       ['products', 'prices', 'priceTypes'].includes(screen) &&
-      h(FinishedCatalogue, { client, screen, canCreate }),
+      h(FinishedCatalogue, { client, screen, canCreate, capabilities }),
     client &&
       command === 'costing' &&
       h(
@@ -182,53 +183,57 @@ export function FinishedGoods({ client, canCreate, screen = 'sizes' }) {
               )
             : !result
               ? h('p', { role: 'status' }, 'Loading finished stock…')
-              : rows.length
-                ? h(
-                    'table',
-                    null,
-                    h(
-                      'thead',
-                      null,
-                      h(
-                        'tr',
+              : h(
+                  FinishedGoodsSheetView,
+                  { page: screen, title, columns, rows, capabilities },
+                  rows.length
+                    ? h(
+                        'table',
                         null,
-                        columns.map(([key, label]) => h('th', { key, scope: 'col' }, label)),
-                        view === 'variations' && h('th', { scope: 'col' }, 'Costing'),
-                      ),
-                    ),
-                    h(
-                      'tbody',
-                      null,
-                      rows.map((row) =>
                         h(
-                          'tr',
-                          { key: row.id ?? row.size_id ?? row.item_id },
-                          columns.map(([key]) => h('td', { key }, row[key] ?? '—')),
-                          view === 'variations' &&
-                            h(
-                              'td',
-                              null,
-                              h(
-                                'button',
-                                {
-                                  disabled: !row.components?.length,
-                                  onClick: () => {
-                                    setCostingItemIds([
-                                      ...new Set(
-                                        row.components.map(({ item_id }) => String(item_id)),
-                                      ),
-                                    ]);
-                                    setCommand('costing');
-                                  },
-                                },
-                                'Costing history',
-                              ),
-                            ),
+                          'thead',
+                          null,
+                          h(
+                            'tr',
+                            null,
+                            columns.map(([key, label]) => h('th', { key, scope: 'col' }, label)),
+                            view === 'variations' && h('th', { scope: 'col' }, 'Costing'),
+                          ),
                         ),
-                      ),
-                    ),
-                  )
-                : h('p', null, 'No finished stock records on this page.'),
+                        h(
+                          'tbody',
+                          null,
+                          rows.map((row) =>
+                            h(
+                              'tr',
+                              { key: row.id ?? row.size_id ?? row.item_id },
+                              columns.map(([key]) => h('td', { key }, row[key] ?? '—')),
+                              view === 'variations' &&
+                                h(
+                                  'td',
+                                  null,
+                                  h(
+                                    'button',
+                                    {
+                                      disabled: !row.components?.length,
+                                      onClick: () => {
+                                        setCostingItemIds([
+                                          ...new Set(
+                                            row.components.map(({ item_id }) => String(item_id)),
+                                          ),
+                                        ]);
+                                        setCommand('costing');
+                                      },
+                                    },
+                                    'Costing history',
+                                  ),
+                                ),
+                            ),
+                          ),
+                        ),
+                      )
+                    : h('p', null, 'No finished stock records on this page.'),
+                ),
         h(
           'button',
           {

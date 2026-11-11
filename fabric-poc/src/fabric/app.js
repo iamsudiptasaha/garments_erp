@@ -1208,6 +1208,11 @@ function App({ live }) {
                         key: actor + ':' + finishedGoodsPage,
                         screen: finishedGoodsPage,
                         canCreate: live && can('create'),
+                        capabilities: {
+                          format: can('format', 'finishedProducts'),
+                          export: can('export', 'finishedProducts'),
+                          print: can('print', 'finishedProducts'),
+                        },
                       })
                   : h(
                       'section',

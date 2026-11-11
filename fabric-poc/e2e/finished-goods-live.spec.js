@@ -79,7 +79,9 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
           actor,
           enabled: true,
           administrator: false,
-          permissions: { finishedProducts: { view: true, create: true } },
+          permissions: {
+            finishedProducts: { view: true, create: true, format: true, export: true, print: true },
+          },
         };
         break;
       case 'erp_finished_goods_summary':
@@ -186,6 +188,17 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   await page.getByRole('button', { name: 'Add price version' }).click();
   await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
   expect(entries[0].p_entry).toMatchObject({ product_id: '9', price_per_piece: '62.50' });
+
+  const priceView = page.getByRole('group', { name: 'Item prices view' });
+  await priceView.getByRole('button', { name: 'Sheet', exact: true }).click();
+  await expect(page.getByText('Values protected · formatting enabled')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Sheet zoom' }).selectOption('1.25');
+  await priceView.getByRole('button', { name: 'Overview', exact: true }).click();
+  await expect(page.getByRole('cell', { name: '62.50', exact: true })).toBeVisible();
+  await priceView.getByRole('button', { name: 'Sheet', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Sheet zoom' })).toHaveValue('1.25');
+  expect(entries).toHaveLength(1);
 
   await nav.getByRole('button', { name: 'Item costing', exact: true }).click();
   await page
