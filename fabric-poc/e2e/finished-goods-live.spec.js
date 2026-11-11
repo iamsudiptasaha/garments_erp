@@ -66,6 +66,7 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   };
   const oldVersion = { ...costing, id: '15', version: 1, status: 'finalized' };
   const history = [oldVersion];
+  let permission = { view: true, create: true, format: true, export: true, print: true };
   await page.route('https://example.invalid/**', async (route) => {
     const name = new URL(route.request().url()).pathname.split('/').at(-1);
     const args = route.request().postDataJSON();
@@ -80,7 +81,7 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
           enabled: true,
           administrator: false,
           permissions: {
-            finishedProducts: { view: true, create: true, format: true, export: true, print: true },
+            finishedProducts: permission,
           },
         };
         break;
@@ -107,7 +108,16 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
         break;
       }
       case 'erp_finished_stock_valuation':
-        body = [];
+        body = [
+          {
+            item_id: item.id,
+            style_code: 'TEST-SHIRT',
+            size: '16-20',
+            pieces: 10,
+            base_price: 23,
+            stock_value: 230,
+          },
+        ];
         break;
       case 'erp_finished_goods_choices':
         body = {
@@ -162,6 +172,7 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
 
   await page.goto('/fabric.html?live=1#finishedProducts');
   const nav = page.getByRole('navigation', { name: 'Finished Goods pages' });
+  await expect(nav.getByRole('button')).toHaveCount(9);
   for (const title of [
     'Item stock summary',
     'Sellable summary',
@@ -251,6 +262,28 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   await page.getByRole('button', { name: 'Verify composition' }).click();
   await expect(page.getByRole('cell', { name: 'SHIRT-TRIO' })).toBeVisible();
   expect(entries.at(-1).p_entry.components).toEqual([{ size_id: '13', pieces: 3 }]);
+
+  permission = { view: true };
+  await page.reload();
+  await expect(nav.getByRole('button')).toHaveCount(9);
+  for (const [title, readValue, writeAction] of [
+    ['Sellable products', 'SHIRT-TRIO', 'Verify composition'],
+    ['Price types', 'Retail', 'Save price type'],
+    ['Item prices', '62.50', 'Add price version'],
+  ]) {
+    await nav.getByRole('button', { name: title, exact: true }).click();
+    await expect(page.getByRole('cell', { name: readValue, exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: writeAction })).toHaveCount(0);
+  }
+  await nav.getByRole('button', { name: 'Stock valuation', exact: true }).click();
+  await expect(page.getByRole('row', { name: 'TEST-SHIRT 16-20 10 23 230' })).toBeVisible();
+
+  permission = { view: false };
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: 'Finished Goods access restricted' }),
+  ).toBeVisible();
+  await expect(nav).toHaveCount(0);
 });
 
 test('sample costing worksheet supports draft review and a read-only finalized version', async ({
