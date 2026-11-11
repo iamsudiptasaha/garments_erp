@@ -51,6 +51,7 @@ async function liveWorkspace(page, { rejectMovement = false } = {}) {
         ),
       };
     else if (name === 'erp_production_workspace') body = snapshot;
+    else if (name === 'erp_grid_preferences' && args.p_grid === 'workspace-navigation') body = {};
     else if (name === 'erp_grid_preferences') {
       expect(args).toMatchObject({ p_grid: 'production-studio', p_owner: actor });
       if (args.p_patch) studioPreferences = { ...studioPreferences, ...args.p_patch };

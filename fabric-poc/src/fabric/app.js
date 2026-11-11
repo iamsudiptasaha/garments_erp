@@ -1,3 +1,4 @@
+import { useNavigationPreferences } from '../access/navigation-preferences.js';
 import { inventoryCommands, liveInventoryPage } from './inventory-live.js';
 import { ProductionItemEditor } from '../production-task-board/item-editor.js';
 import {
@@ -25,7 +26,7 @@ import { ItemEditor } from '../production/item-editor.js';
 import { JobEditor } from '../production/editor.js';
 import { ProductionOverview } from '../production/cards.js';
 import { InventoryCard } from '../inventory/cards.js';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FinishedGoods, finishedGoodsPages } from '../finished-goods/workspace.js';
 import { pages, otherModules } from './catalog.js';
@@ -130,6 +131,8 @@ function App({ live }) {
     new URLSearchParams(location.search).get('finishedGoods') === 'costing' ? 'costing' : 'sizes',
   );
   const [sidebarOpen, setSidebarOpen] = useState(loadSidebar);
+  const sidebar = useRef(null);
+  const navigationNotice = useNavigationPreferences(live ? getAccessClient() : null, sidebar);
   useEffect(() => {
     try {
       localStorage.setItem('garments-sidebar-open', String(sidebarOpen));
@@ -826,6 +829,7 @@ function App({ live }) {
         {
           id: 'workspace-sidebar',
           className: 'fabric-sidebar',
+          ref: sidebar,
           hidden: !sidebarOpen,
           'aria-label': 'Workspace navigation',
         },
@@ -856,7 +860,7 @@ function App({ live }) {
           ),
           h(
             'details',
-            { open: true },
+            { open: true, 'data-nav-section': 'fabric' },
             h('summary', null, 'Fabric'),
             h(
               'nav',
@@ -887,7 +891,7 @@ function App({ live }) {
           Object.entries(pages).some(([key, p]) => p.section === 'colours' && can('view', key)) &&
             h(
               'details',
-              { open: true, className: 'colour-nav' },
+              { open: true, className: 'colour-nav', 'data-nav-section': 'colours' },
               h('summary', null, 'Colours'),
               h(
                 'nav',
@@ -913,7 +917,7 @@ function App({ live }) {
             (live && (can('view', 'productionChallans') || can('view', 'jobWorkerBills')))) &&
             h(
               'details',
-              { open: true, className: 'production-nav' },
+              { open: true, className: 'production-nav', 'data-nav-section': 'production' },
               h('summary', null, 'Production'),
               h(
                 'nav',
@@ -952,7 +956,7 @@ function App({ live }) {
           Object.entries(pages).some(([key, p]) => p.section === 'inventory' && can('view', key)) &&
             h(
               'details',
-              { open: true, className: 'inventory-nav' },
+              { open: true, className: 'inventory-nav', 'data-nav-section': 'inventory' },
               h('summary', null, 'Raw Material Inventory'),
               h(
                 'nav',
@@ -977,7 +981,7 @@ function App({ live }) {
           ) &&
             h(
               'details',
-              { open: true, className: 'miscellaneous-nav' },
+              { open: true, className: 'miscellaneous-nav', 'data-nav-section': 'miscellaneous' },
               h('summary', null, 'Miscellaneous'),
               h(
                 'nav',
@@ -1000,7 +1004,7 @@ function App({ live }) {
           can('view', 'finishedProducts') &&
             h(
               'details',
-              { open: true },
+              { open: true, 'data-nav-section': 'finished-goods' },
               h('summary', null, 'Finished Goods'),
               h(
                 'nav',
@@ -1027,7 +1031,7 @@ function App({ live }) {
           otherModules.map((name) =>
             h(
               'details',
-              { key: name },
+              { key: name, 'data-nav-section': 'preview-' + name },
               h('summary', null, name),
               h('p', { className: 'phase-note' }, 'Next phase · after Fabric'),
             ),
@@ -1035,7 +1039,7 @@ function App({ live }) {
           can('view', 'employees') &&
             h(
               'details',
-              { open: true, className: 'hr-nav' },
+              { open: true, className: 'hr-nav', 'data-nav-section': 'hr' },
               h('summary', null, 'Employee / HR'),
               h(
                 'nav',
@@ -1056,7 +1060,7 @@ function App({ live }) {
           isAdministrator(access, actor) &&
             h(
               'details',
-              { open: true, className: 'admin-nav' },
+              { open: true, className: 'admin-nav', 'data-nav-section': 'administration' },
               h('summary', null, 'Administration'),
               h(
                 'nav',
@@ -1079,7 +1083,7 @@ function App({ live }) {
             ),
           h(
             'details',
-            { open: true },
+            { open: true, 'data-nav-section': 'files' },
             h('summary', null, 'File Uploads'),
             h(
               'nav',
@@ -1088,6 +1092,7 @@ function App({ live }) {
             ),
           ),
         ),
+        navigationNotice && h('p', { role: 'status' }, navigationNotice),
         h(AccountFooter, {
           name: access.users.find((user) => user.id === actor)?.name || 'My account',
           role: live

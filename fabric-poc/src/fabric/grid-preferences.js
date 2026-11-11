@@ -3,6 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 const pending = new Map();
 const empty = {};
 
+export function waitForGridPreferences(owner, page) {
+  return pending.get(owner + ':' + page);
+}
+
 async function request(client, page, owner, patch = null) {
   const { data, error } = await client.rpc('erp_grid_preferences', {
     p_grid: page,
@@ -41,7 +45,7 @@ export function useGridPreferences(client, page, defaults = empty) {
         if (client) {
           if (!owner) throw Error('No authenticated session');
           const queueKey = owner + ':' + page;
-          await pending.get(queueKey);
+          await waitForGridPreferences(owner, page);
           entry = { owner, queueKey, value: (await request(client, page, owner)) ?? {} };
         } else {
           entry = { value: JSON.parse(localStorage.getItem(storageKey) || '{}') };
@@ -98,6 +102,7 @@ export function useGridPreferences(client, page, defaults = empty) {
 
   const ready = saved?.owner === owner && saved?.page === page;
   return {
+    owner,
     ready,
     preferences: ready ? { ...defaults, ...saved.value } : defaults,
     save,

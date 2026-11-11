@@ -1,3 +1,4 @@
+import { flushNavigationPreferences } from './navigation-preferences.js';
 import { RecordGrid } from '../fabric/record-grid.js';
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -121,6 +122,7 @@ function AccessApp() {
   }
   async function signOut() {
     setError('');
+    await flushNavigationPreferences(client);
     const { error } = await client.auth.signOut();
     if (error) setError(error.message);
   }

@@ -1,3 +1,4 @@
+import { flushNavigationPreferences } from './navigation-preferences.js';
 import React, { useState } from 'react';
 import { getAccessClient } from './client.js';
 const h = React.createElement;
@@ -23,7 +24,9 @@ export function AccountFooter({
     try {
       if (onSignOut) await onSignOut();
       else {
-        const { error } = await getAccessClient().auth.signOut();
+        const client = getAccessClient();
+        await flushNavigationPreferences(client);
+        const { error } = await client.auth.signOut();
         if (error) throw error;
         location.assign('/access.html');
       }
@@ -38,7 +41,7 @@ export function AccountFooter({
     { className: 'sidebar-account' },
     h(
       'details',
-      { className: 'sidebar-account-menu' },
+      { className: 'sidebar-account-menu', 'data-nav-section': 'account' },
       h(
         'summary',
         { 'aria-label': 'Personal account' },
