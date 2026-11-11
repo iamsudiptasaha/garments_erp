@@ -186,6 +186,19 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
     await expect(page.getByRole('heading', { name: title, level: 1 })).toBeVisible();
   }
   await nav.getByRole('button', { name: 'Item prices', exact: true }).click();
+  const colours = await page.context().newPage();
+  await colours.goto('/fabric.html#labDips');
+  const referenceToggle = colours.locator('.fabric-page-header .fabric-view-toggle');
+  const pricesToggle = page.getByRole('group', { name: 'Item prices view' });
+  await expect(referenceToggle).toBeVisible();
+  await Promise.all([colours, page].map((tab) => tab.evaluate(() => document.fonts.ready)));
+  await page.mouse.move(0, 0);
+  const screenshot = { animations: 'disabled', caret: 'hide' };
+  expect(await pricesToggle.screenshot(screenshot)).toEqual(
+    await referenceToggle.screenshot(screenshot),
+  );
+  await colours.close();
+  await page.getByRole('button', { name: '+ Add price version', exact: true }).click();
   await page.getByRole('combobox', { name: 'Sellable product', exact: true }).fill('SHIRT');
   await page.getByRole('option', { name: 'SHIRT-SET · Shirt set' }).click();
   await expect(page.getByRole('region', { name: 'Item Costing lookup' })).toBeVisible();
@@ -196,7 +209,7 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   await page.getByLabel('Version', { exact: true }).fill('v1');
   await page.getByLabel('Price per piece').fill('62.50');
   await page.getByLabel('Date', { exact: true }).fill('2026-11-09');
-  await page.getByRole('button', { name: 'Add price version' }).click();
+  await page.getByRole('button', { name: 'Add price version', exact: true }).click();
   await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
   expect(entries[0].p_entry).toMatchObject({ product_id: '9', price_per_piece: '62.50' });
 
@@ -206,7 +219,12 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
   await page.getByRole('combobox', { name: 'Sheet zoom' }).selectOption('1.25');
   await priceView.getByRole('button', { name: 'Overview', exact: true }).click();
-  await expect(page.getByRole('cell', { name: '62.50', exact: true })).toBeVisible();
+  await expect(page.locator('.overview-grid').getByText('62.50', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'View contents →' }).click();
+  const contents = page.getByRole('dialog', { name: 'Sellable product contents' });
+  await expect(contents.getByRole('cell', { name: '23', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(contents).toHaveCount(0);
   await priceView.getByRole('button', { name: 'Sheet', exact: true }).click();
   await expect(page.getByRole('combobox', { name: 'Sheet zoom' })).toHaveValue('1.25');
   expect(entries).toHaveLength(1);
@@ -228,29 +246,33 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   expect(saves.map(({ p_finalize }) => p_finalize)).toEqual([false, true]);
 
   await nav.getByRole('button', { name: 'Items produced', exact: true }).click();
+  await page.getByRole('button', { name: '+ Record stock-in' }).click();
   await page.getByRole('combobox', { name: 'Manufactured item' }).selectOption('7');
   await page.getByRole('combobox', { name: 'Verifying employee' }).selectOption('14');
   await page.getByLabel('Actual pieces · M').fill('10');
   await page.getByRole('button', { name: 'Verify', exact: true }).click();
-  await expect(page.getByRole('cell', { name: '31' })).toBeVisible();
+  await expect(page.locator('.overview-grid').getByText('31', { exact: true })).toBeVisible();
   expect(stockWrites[0]).toMatchObject({ p_job_id: '22', p_pieces: { 13: 10 } });
 
   await nav.getByRole('button', { name: 'Stock adjustments', exact: true }).click();
+  await page.getByRole('button', { name: '+ Add adjustment' }).click();
   await page.getByRole('combobox', { name: 'Manufactured item' }).selectOption('7');
   await page.getByRole('combobox', { name: 'Verifying employee' }).selectOption('14');
   await page.getByRole('combobox', { name: 'Size', exact: true }).selectOption('13');
   await page.getByLabel('Quantity change').fill('-2');
   await page.getByLabel('Reason').fill('Recount');
   await page.getByRole('button', { name: 'Verify', exact: true }).click();
-  await expect(page.getByRole('cell', { name: 'Recount' })).toBeVisible();
+  await expect(page.locator('.overview-grid').getByText('Recount', { exact: true })).toBeVisible();
   expect(stockWrites[1]).toMatchObject({ p_delta: -2, p_size_id: '13' });
 
   await nav.getByRole('button', { name: 'Price types', exact: true }).click();
+  await page.getByRole('button', { name: '+ Add price type', exact: true }).click();
   await page.getByLabel('Name', { exact: true }).fill('Retail');
   await page.getByRole('button', { name: 'Save price type' }).click();
-  await expect(page.getByRole('cell', { name: 'Retail' })).toBeVisible();
+  await expect(page.locator('.overview-grid').getByText('Retail', { exact: true })).toBeVisible();
 
   await nav.getByRole('button', { name: 'Sellable products', exact: true }).click();
+  await page.getByRole('button', { name: '+ Add sellable product', exact: true }).click();
   await page.getByLabel('SKU', { exact: true }).fill('SHIRT-TRIO');
   await page.getByLabel('Name', { exact: true }).fill('Shirt trio');
   await page.getByRole('combobox', { name: 'Manufactured item and size' }).fill('Test shirt');
@@ -260,23 +282,35 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   await page.getByRole('combobox', { name: 'Verifying employee' }).fill('E-14');
   await page.getByRole('option', { name: 'E-14' }).click();
   await page.getByRole('button', { name: 'Verify composition' }).click();
-  await expect(page.getByRole('cell', { name: 'SHIRT-TRIO' })).toBeVisible();
+  await expect(
+    page.locator('.overview-grid').getByText('SHIRT-TRIO', { exact: true }),
+  ).toBeVisible();
   expect(entries.at(-1).p_entry.components).toEqual([{ size_id: '13', pieces: 3 }]);
 
   permission = { view: true };
   await page.reload();
   await expect(nav.getByRole('button')).toHaveCount(9);
   for (const [title, readValue, writeAction] of [
-    ['Sellable products', 'SHIRT-TRIO', 'Verify composition'],
-    ['Price types', 'Retail', 'Save price type'],
-    ['Item prices', '62.50', 'Add price version'],
+    ['Sellable products', 'SHIRT-TRIO', '+ Add sellable product'],
+    ['Price types', 'Retail', '+ Add price type'],
+    ['Item prices', '62.50', '+ Add price version'],
   ]) {
     await nav.getByRole('button', { name: title, exact: true }).click();
-    await expect(page.getByRole('cell', { name: readValue, exact: true })).toBeVisible();
+    await expect(
+      page.locator('.overview-grid').getByText(readValue, { exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: writeAction })).toHaveCount(0);
   }
   await nav.getByRole('button', { name: 'Stock valuation', exact: true }).click();
-  await expect(page.getByRole('row', { name: 'TEST-SHIRT 16-20 10 23 230' })).toBeVisible();
+  const valuation = page.getByRole('group', { name: 'Stock valuation view' });
+  await expect(valuation.getByRole('button', { name: 'Sheet' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await valuation.getByRole('button', { name: 'Overview' }).click();
+  const valuationCard = page.locator('.overview-card').filter({ hasText: 'TEST-SHIRT' });
+  await expect(valuationCard).toContainText('16-20');
+  await expect(valuationCard).toContainText('Stock value230');
 
   permission = { view: false };
   await page.reload();

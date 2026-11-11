@@ -21,6 +21,54 @@
   background: var(--fg-surface);
 }
 
+.finished-goods .fg-card-fields {
+  margin: 0;
+  font-size: 12px;
+}
+
+.finished-goods .fg-create-actions {
+  justify-content: flex-end;
+}
+
+.finished-goods .fg-card-fields > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.finished-goods .fg-card-fields dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.finished-goods .fg-recipe > header,
+.finished-goods .fg-recipe-sizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.finished-goods .fg-recipe > header {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.finished-goods .fg-recipe-size {
+  display: grid;
+  min-width: 96px;
+  padding: 8px;
+  border: 1px solid var(--fg-line);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.finished-goods .fg-recipe-size strong {
+  font-size: 22px;
+}
+
 .finished-goods fieldset,
 .finished-goods details {
   margin-block: 10px;

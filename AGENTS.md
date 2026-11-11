@@ -14,3 +14,8 @@
 - If an approved UI conflicts with the database, stop the affected implementation, explain the exact conflict and consult the user before proceeding. Do not silently change either the database or the UI to reconcile it.
 - Coherence checks must cover relationships and ownership, not only matching table and column names. Passing syntactic checks does not establish workflow correctness.
 - Run `npm --prefix fabric-poc run check:coherence` for every UI/backend change. Vite validates startup, builds and source/backend changes automatically; the staged pre-commit hook and CI enforce the same checks. Extend the reviewed ownership contract before adding a new custom screen or save boundary. A new business interpretation requires user consultation, not merely a new allowlist.
+
+# UI design system
+
+- Before adding or modifying any ERP UI screen or mockup, read and follow [the canonical ERP design reference](docs/design-system.md). Use Colours and the relevant established page as visual references. Reuse existing components and styles, preserve layout and density, and document exceptions. Get approval before introducing a theme, UI library or styling convention.
+- For shared UI changes, run the relevant browser visual and interaction checks documented in the design reference. Preserve existing screenshots, computed styles and behavior unless a change is approved.

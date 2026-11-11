@@ -1,12 +1,20 @@
 :root {
+  --erp-text: #243e53;
+  --erp-surface: #fff;
+  --erp-border: #dce6f0;
+  --erp-primary: #357fb7;
+  --erp-focus: #7bbcf1;
+  --erp-view-background: #e7eff7;
+  --erp-card-radius: 15px;
+  --erp-card-inset: 25px;
   font-family:
     Inter,
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  color: #243e53;
-  background: #fff;
+  color: var(--erp-text);
+  background: var(--erp-surface);
   font-synthesis: none;
 }
 body {
@@ -23,9 +31,9 @@ select {
 }
 button {
   cursor: pointer;
-  border: 1px solid #dce6f0;
+  border: 1px solid var(--erp-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--erp-surface);
   padding: 10px 14px;
   font-size: 13px;
 }
@@ -40,12 +48,12 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 summary:focus-visible {
-  outline: 3px solid #7bbcf1;
+  outline: 3px solid var(--erp-focus);
   outline-offset: 2px;
 }
 .primary {
-  background: #357fb7;
-  border-color: #357fb7;
+  background: var(--erp-primary);
+  border-color: var(--erp-primary);
   color: white;
 }
 .primary:hover {
@@ -353,7 +361,7 @@ select {
 }
 .fabric-view-toggle {
   display: flex;
-  background: #e7eff7;
+  background: var(--erp-view-background);
   border-radius: 9px;
   padding: 4px;
 }
@@ -389,8 +397,8 @@ select {
   gap: 18px;
 }
 .overview-card {
-  border-radius: 15px;
-  padding: 25px;
+  border-radius: var(--erp-card-radius);
+  padding: var(--erp-card-inset);
   min-width: 0;
   align-self: start;
 }

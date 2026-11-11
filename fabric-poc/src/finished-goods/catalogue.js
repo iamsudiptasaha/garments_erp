@@ -1,7 +1,7 @@
 import { createElement as h, useEffect, useState } from 'react';
 
 import { RecordSelect } from '../fabric/record-select.js';
-import { FinishedGoodsSheetView } from './sheet-view.js';
+import { FinishedGoodsCards, FinishedGoodsEditor, FinishedGoodsSheetView } from './sheet-view.js';
 
 const emptyComponent = { size_id: '', pieces: '1' };
 
@@ -48,6 +48,22 @@ function table(fields, rows) {
         ),
       ),
     ),
+  );
+}
+
+function productContents(product, includeCosting = false) {
+  const fields = [
+    ['item', 'Manufactured item'],
+    ['size', 'Size'],
+    ['pieces', 'Pieces per set'],
+  ];
+  if (includeCosting) fields.push(['reference_cost', 'Finalized cost per piece']);
+  return table(
+    fields,
+    product.components.map((row) => ({
+      ...row,
+      reference_cost: row.reference_cost ?? 'No finalized costing',
+    })),
   );
 }
 
@@ -139,15 +155,28 @@ function ProductForm({ data, components, setComponents }) {
     h(
       'section',
       { className: 'fg-recipe', 'aria-label': 'One sellable set' },
-      h('h2', null, 'One sellable set'),
-      h('p', null, recipe.reduce((sum, row) => sum + Number(row.pieces), 0) + ' pieces'),
-      table(
-        [
-          ['item', 'Manufactured item'],
-          ['size', 'Size'],
-          ['pieces', 'Pieces per set'],
-        ],
-        recipe,
+      h(
+        'header',
+        null,
+        h('strong', null, 'One sellable set'),
+        h(
+          'span',
+          { 'aria-live': 'polite' },
+          recipe.reduce((sum, row) => sum + Number(row.pieces), 0) + ' pieces',
+        ),
+      ),
+      h(
+        'div',
+        { className: 'fg-recipe-sizes' },
+        recipe.map(({ id, item, size, pieces }) =>
+          h(
+            'div',
+            { className: 'fg-recipe-size', key: id },
+            h('small', null, item + ' · ' + size),
+            h('strong', null, pieces),
+            h('small', null, Number(pieces) === 1 ? 'piece per set' : 'pieces per set'),
+          ),
+        ),
       ),
     ),
     choice('Verifying employee', 'employee_id', data.employees, ({ label }) => label),
@@ -155,7 +184,7 @@ function ProductForm({ data, components, setComponents }) {
   );
 }
 
-export function FinishedCatalogue({ client, screen, canCreate, capabilities }) {
+export function FinishedCatalogue({ client, screen, canCreate, capabilities, view }) {
   const [data, setData] = useState(null);
   const [revision, setRevision] = useState(0);
   const [productId, setProductId] = useState('');
@@ -182,7 +211,7 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities }) {
     };
   }, [client, revision]);
 
-  async function submit(event) {
+  async function submit(event, close) {
     event.preventDefault();
     const form = event.currentTarget;
     const entry = Object.fromEntries(new FormData(form));
@@ -211,6 +240,7 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities }) {
       form.reset();
       setComponents([emptyComponent]);
       setNotice('Saved.');
+      close();
       setRevision((value) => value + 1);
     } catch (failure) {
       setError(failure.message);
@@ -230,114 +260,136 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities }) {
     prices: data.prices,
     priceTypes: data.types,
   }[screen];
+  const title = { products: 'Sellable products', prices: 'Item prices', priceTypes: 'Price types' }[
+    screen
+  ];
+
+  const costingLookup =
+    screen === 'prices' &&
+    h(
+      'section',
+      { className: 'fg-recipe', 'aria-label': 'Item Costing lookup' },
+      h('h2', null, 'Item Costing lookup'),
+      choice(
+        'Sellable product',
+        undefined,
+        data.products.filter(({ active, verified }) => !canCreate || (active && verified)),
+        ({ sku, name }) => sku + ' · ' + name,
+        { value: productId, onChange: setProductId },
+      ),
+      h(
+        'p',
+        null,
+        product
+          ? 'Finalized manufacturing costs are shown for reference. Enter the selling price manually.'
+          : 'Select a sellable product to see its components and finalized manufacturing costs.',
+      ),
+      product && productContents(product, true),
+    );
+
+  function recordActions(row) {
+    const record =
+      screen === 'products' ? row : data.products.find(({ sku }) => sku === row.product);
+    return (
+      record &&
+      h(
+        FinishedGoodsEditor,
+        { record: true, label: 'View contents →', title: 'Sellable product contents' },
+        () =>
+          h(
+            'div',
+            null,
+            h('p', null, record.sku + ' · ' + record.name),
+            productContents(record, screen === 'prices'),
+          ),
+      )
+    );
+  }
 
   return h(
     'div',
     null,
-    h(
-      FinishedGoodsSheetView,
-      {
-        page: screen,
-        title: { products: 'Sellable products', prices: 'Item prices', priceTypes: 'Price types' }[
-          screen
-        ],
-        columns: columns[screen],
-        rows,
-        capabilities,
-      },
-      table(columns[screen], rows),
-      !rows.length && h('p', null, 'No records yet.'),
-    ),
-    error && h('p', { role: 'alert' }, error),
-    notice && h('p', { role: 'status' }, notice),
-    screen === 'prices' &&
-      h(
-        'section',
-        { className: 'fg-recipe', 'aria-label': 'Item Costing lookup' },
-        h('h2', null, 'Item Costing lookup'),
-        choice(
-          'Sellable product',
-          undefined,
-          data.products.filter(({ active, verified }) => !canCreate || (active && verified)),
-          ({ sku, name }) => sku + ' · ' + name,
-          { value: productId, onChange: setProductId },
-        ),
-        h(
-          'p',
-          null,
-          product
-            ? 'Finalized manufacturing costs are shown for reference. Enter the selling price manually.'
-            : 'Select a sellable product to see its components and finalized manufacturing costs.',
-        ),
-        product &&
-          table(
-            [
-              ['item', 'Manufactured item'],
-              ['size', 'Size'],
-              ['pieces', 'Pieces per set'],
-              ['reference_cost', 'Finalized cost per piece'],
-            ],
-            product.components.map((row) => ({
-              ...row,
-              reference_cost: row.reference_cost ?? 'No finalized costing',
-            })),
-          ),
-      ),
     canCreate &&
       h(
-        'details',
-        { open: true },
-        h(
-          'summary',
-          null,
-          {
+        FinishedGoodsEditor,
+        {
+          label: {
+            products: '+ Add sellable product',
+            prices: '+ Add price version',
+            priceTypes: '+ Add price type',
+          }[screen],
+          title: {
             products: 'New sellable product',
             prices: 'New price version',
             priceTypes: 'New price type',
           }[screen],
-        ),
-        h(
-          'form',
-          { key: revision, onSubmit: submit },
+        },
+        (close) =>
           h(
-            'fieldset',
-            { disabled: saving },
-            screen === 'products' && h(ProductForm, { data, components, setComponents }),
-            screen === 'priceTypes' &&
-              h(
-                'div',
-                { className: 'fg-fields' },
-                field('Name', 'name'),
-                field('Description', 'description', { required: false }),
-              ),
-            screen === 'prices' &&
-              h(
-                'div',
-                null,
+            'form',
+            { key: revision, onSubmit: (event) => submit(event, close) },
+            h(
+              'fieldset',
+              { disabled: saving },
+              costingLookup,
+              screen === 'products' && h(ProductForm, { data, components, setComponents }),
+              screen === 'priceTypes' &&
                 h(
                   'div',
                   { className: 'fg-fields' },
-                  choice('Price type', 'type_id', data.types, ({ name }) => name),
-                  field('Version', 'version'),
-                  field('Price per piece', 'price_per_piece', {
-                    type: 'number',
-                    min: 0,
-                    step: 'any',
-                  }),
-                  field('Date', 'date', { type: 'date' }),
+                  field('Name', 'name'),
+                  field('Description', 'description', { required: false }),
                 ),
+              screen === 'prices' &&
+                h(
+                  'div',
+                  null,
+                  h(
+                    'div',
+                    { className: 'fg-fields' },
+                    choice('Price type', 'type_id', data.types, ({ name }) => name),
+                    field('Version', 'version'),
+                    field('Price per piece', 'price_per_piece', {
+                      type: 'number',
+                      min: 0,
+                      step: 'any',
+                    }),
+                    field('Date', 'date', { type: 'date' }),
+                  ),
+                ),
+              h(
+                'button',
+                { type: 'submit', className: 'primary' },
+                {
+                  products: 'Verify composition',
+                  prices: 'Add price version',
+                  priceTypes: 'Save price type',
+                }[screen],
               ),
-            h(
-              'button',
-              { type: 'submit' },
-              {
-                products: 'Verify composition',
-                prices: 'Add price version',
-                priceTypes: 'Save price type',
-              }[screen],
             ),
+            error && h('p', { role: 'alert' }, error),
           ),
-        ),
       ),
+    h(
+      FinishedGoodsSheetView,
+      {
+        page: screen,
+        title,
+        columns: columns[screen],
+        rows,
+        capabilities,
+        view,
+      },
+      rows.length
+        ? h(FinishedGoodsCards, {
+            title,
+            columns: columns[screen],
+            rows,
+            actions: screen === 'priceTypes' ? undefined : recordActions,
+          })
+        : h('p', null, 'No records yet.'),
+    ),
+    notice && h('p', { role: 'status' }, notice),
+    !canCreate && costingLookup,
   );
 }
