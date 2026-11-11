@@ -114,14 +114,14 @@ function loadSidebar() {
 }
 
 const finishedGoodsPreviewPages = {
-  sizes: ['stock', 'Item stock summary'],
-  variations: ['sellable-summary', 'Sellable summary'],
-  valuation: ['valuation', 'Stock valuation'],
-  receipt: ['produced', 'Items produced'],
-  adjustment: ['adjust', 'Stock adjustments'],
-  products: ['products', 'Sellable products'],
-  prices: ['prices', 'Item prices'],
-  priceTypes: ['price-types', 'Price types'],
+  sizes: 'stock',
+  variations: 'sellable-summary',
+  valuation: 'valuation',
+  receipt: 'produced',
+  adjustment: 'adjust',
+  products: 'products',
+  prices: 'prices',
+  priceTypes: 'price-types',
 };
 
 function App({ live }) {
@@ -1005,19 +1005,7 @@ function App({ live }) {
               h(
                 'nav',
                 { 'aria-label': 'Finished Goods pages' },
-                Object.entries(
-                  live
-                    ? finishedGoodsPages
-                    : {
-                        ...Object.fromEntries(
-                          Object.entries(finishedGoodsPreviewPages).map(([key, [, title]]) => [
-                            key,
-                            title,
-                          ]),
-                        ),
-                        costing: finishedGoodsPages.costing,
-                      },
-                ).map(([key, title]) =>
+                Object.entries(finishedGoodsPages).map(([key, title]) =>
                   h(
                     'button',
                     {
@@ -1196,10 +1184,10 @@ function App({ live }) {
                 ? can('view', 'finishedProducts')
                   ? !live && Object.hasOwn(finishedGoodsPreviewPages, finishedGoodsPage)
                     ? h('iframe', {
-                        title: finishedGoodsPreviewPages[finishedGoodsPage][1],
+                        title: finishedGoodsPages[finishedGoodsPage],
                         src:
                           './finished-goods-preview.html?page=' +
-                          finishedGoodsPreviewPages[finishedGoodsPage][0],
+                          finishedGoodsPreviewPages[finishedGoodsPage],
                         sandbox: 'allow-scripts',
                         style: { width: '100%', minHeight: '80vh', border: 0 },
                       })

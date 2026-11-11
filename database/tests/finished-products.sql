@@ -218,4 +218,44 @@ end;
 $$;
 reset role;
 
+-- A signed-in user needs the Finished Goods grant to read either endpoint.
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000002',true);
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000002"}',true);
+set local role authenticated;
+do $$
+begin
+  begin
+    perform public.erp_finished_goods_catalogue();
+    raise exception 'TEST: catalogue exposed without Finished Goods access';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.erp_finished_stock_valuation(50, 0);
+    raise exception 'TEST: valuation exposed without Finished Goods access';
+  exception when insufficient_privilege then null;
+  end;
+end;
+$$;
+reset role;
+
+insert into garments_access.app_role_resource_permission(app_role_id,app_resource_id,can_view)
+select role.id, resource.id, true
+from garments_access.app_role role, garments_access.app_resource resource
+where role.key = 'ci_viewer' and resource.key = 'finishedProducts';
+
+set local role authenticated;
+do $$
+begin
+  if jsonb_array_length(public.erp_finished_goods_catalogue()->'prices') < 1
+    or jsonb_array_length(public.erp_finished_stock_valuation(50, 0)) < 1
+  then raise exception 'TEST: view-only Finished Goods access failed'; end if;
+  begin
+    perform public.erp_create_finished_catalogue_entry('priceTypes', '{"name":"Unauthorized type"}');
+    raise exception 'TEST: view-only user created a price type';
+  exception when insufficient_privilege then null;
+  end;
+end;
+$$;
+reset role;
+
 rollback;
