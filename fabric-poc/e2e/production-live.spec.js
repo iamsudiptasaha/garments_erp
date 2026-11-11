@@ -4,6 +4,7 @@ import { productionFixture } from '../tests/fixtures/production-live.js';
 async function liveWorkspace(page, { rejectMovement = false } = {}) {
   const snapshot = productionFixture(),
     calls = [];
+  let studioPreferences = {};
   const actor = '00000000-0000-4000-8000-000000000003';
   const encode = (x) => Buffer.from(JSON.stringify(x)).toString('base64url');
   const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: actor, role: 'authenticated', aal: 'aal2', exp: Math.floor(Date.now() / 1000) + 3600 })}.synthetic`;
@@ -50,7 +51,11 @@ async function liveWorkspace(page, { rejectMovement = false } = {}) {
         ),
       };
     else if (name === 'erp_production_workspace') body = snapshot;
-    else if (name === 'erp_edit_production_task') {
+    else if (name === 'erp_grid_preferences') {
+      expect(args).toMatchObject({ p_grid: 'production-studio', p_owner: actor });
+      if (args.p_patch) studioPreferences = { ...studioPreferences, ...args.p_patch };
+      body = studioPreferences;
+    } else if (name === 'erp_edit_production_task') {
       snapshot.production_records[0].assignees = args.p_assignees;
       snapshot.production_records[0].flags = args.p_flags;
       snapshot.production_records[0].statuses[0].item_status_list_id = args.p_status;
@@ -109,7 +114,19 @@ test('live Task Board loads without Fabric permission and saves shared status ac
   await expect
     .poll(() => calls.filter((c) => c.name === 'erp_edit_production_task').length)
     .toBe(1);
+  await expect
+    .poll(() =>
+      calls.some(
+        ({ name, args }) =>
+          name === 'erp_grid_preferences' && args.p_patch?.config?.mode === 'kanban',
+      ),
+    )
+    .toBe(true);
   await page.reload();
+  await expect(page.getByRole('tab', { name: 'Kanban', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   await expect(page.getByText('Complete', { exact: true }).first()).toBeVisible();
   expect(calls.some((c) => c.name === 'erp_fabric_snapshot')).toBe(false);
   expect(

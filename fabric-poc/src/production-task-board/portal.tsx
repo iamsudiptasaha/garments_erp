@@ -50,6 +50,7 @@ type Props = {
   onCreate?: (data: Parameters<typeof portalTasks>[0]) => void;
   onSave: (data: Parameters<typeof portalTasks>[0]) => void;
   live?: boolean;
+  preferenceClient?: PortalBoardOptions['preferenceClient'];
   liveTasks?: Task[];
   onImage?: (id: string) => Promise<string>;
   onCommit?: (before: Task[], after: Task[]) => Promise<Task[]>;
@@ -64,6 +65,7 @@ export function PortalTaskBoard({
   onCreate,
   onSave,
   live,
+  preferenceClient,
   liveTasks,
   onCommit,
   onStart,
@@ -86,6 +88,7 @@ export function PortalTaskBoard({
         }))
       : portalTasks(data),
     live,
+    preferenceClient,
     onCommit,
     actor,
     mode,

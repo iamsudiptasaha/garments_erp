@@ -1,8 +1,10 @@
+import { RecordGrid } from '../fabric/record-grid.js';
 import React, { useState } from 'react';
 import { FILE_GROUPS, prettyBytes } from './model.js';
 import { FileTypes, MIME_OPTIONS } from './rules.js';
 const h = React.createElement;
 export function BucketSettings({
+  preferenceClient,
   registry,
   buckets,
   isAdministrator,
@@ -260,19 +262,18 @@ export function BucketSettings({
               'div',
               { className: 'permission-scroll' },
               h(
-                'table',
-                { className: 'access-table' },
-                h(
-                  'thead',
-                  null,
-                  h(
-                    'tr',
-                    null,
-                    ['Group', 'Private bucket', 'File types', 'Per file', 'Routes', ''].map(
-                      (label) => h('th', { key: label }, label),
-                    ),
-                  ),
-                ),
+                RecordGrid,
+                {
+                  client: preferenceClient,
+                  grid: 'files-buckets',
+                  fields: [
+                    ['group', 'Group'],
+                    ['bucket', 'Private bucket'],
+                    ['types', 'File types'],
+                    ['limit', 'Per file'],
+                    ['routes', 'Routes'],
+                  ],
+                },
                 h(
                   'tbody',
                   null,

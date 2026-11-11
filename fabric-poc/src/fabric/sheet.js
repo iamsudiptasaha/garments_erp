@@ -9,8 +9,24 @@ import {
   orderedRecords,
 } from '../fortune-state.js';
 import { formattedReport } from './report.js';
+import { useGridPreferences } from './grid-preferences.js';
+import { GridColumns, GridSort } from './grid-toolbar.js';
+import { fitGridColumns, gridColumns, projectBorders } from './grid-layout.js';
 const h = React.createElement;
-export function FabricSheet({
+const zoomLevels = [0.5, 0.75, 1, 1.25, 1.5, 2];
+export function FabricSheet({ page, client, preferences: defaults, ...props }) {
+  const { ready, preferences, save, error } = useGridPreferences(client, page, defaults);
+  return h(
+    React.Fragment,
+    null,
+    error && h('p', { role: 'status' }, error),
+    ready
+      ? h(GridWorkbook, { ...props, page, preferences, onPreferences: save })
+      : h('p', { role: 'status' }, 'Loading grid preferences…'),
+  );
+}
+
+function GridWorkbook({
   page,
   spec,
   records,
@@ -19,28 +35,73 @@ export function FabricSheet({
   onSelect,
   onNotice,
   capabilities,
+  paged,
 }) {
   const book = useRef(null),
     host = useRef(null),
     state = useRef(null),
     callbacks = useRef({ onPreferences, onSelect, onNotice, capabilities });
   callbacks.current = { onPreferences, onSelect, onNotice };
-  const [revision, setRevision] = useState(0),
-    [print, setPrint] = useState(null),
-    [zoom, setZoom] = useState(preferences.layout?.zoomRatio || 1);
+  const [revision, setRevision] = useState(0);
+  const [print, setPrint] = useState(null);
+  const [available, setAvailable] = useState(0);
   const printDialog = useRef(null);
+  const zoom = zoomLevels.includes(preferences.layout?.zoomRatio)
+    ? preferences.layout.zoomRatio
+    : 1;
+  const sort = spec.columns.some(({ key }) => key === preferences.sort?.key)
+    ? {
+        key: preferences.sort.key,
+        direction: preferences.sort.direction === 'desc' ? 'desc' : 'asc',
+      }
+    : { key: spec.columns[0].key, direction: 'asc' };
+  const { arranged, visible } = useMemo(
+    () => gridColumns(spec.columns, preferences.order, preferences.hidden),
+    [spec.columns, preferences.order, preferences.hidden],
+  );
+  const widths =
+    preferences.columnWidths ??
+    Object.fromEntries(
+      spec.columns.flatMap(({ key }, index) =>
+        preferences.layout?.widths?.[index] ? [[key, preferences.layout.widths[index]]] : [],
+      ),
+    );
+  const generation = useRef(0);
+  const lastSheet = useRef(null);
+  const latest = useRef(preferences);
+  latest.current = preferences;
   const initial = useMemo(() => {
+    const saved = latest.current;
+    const manual =
+      saved.columnWidths ??
+      Object.fromEntries(
+        spec.columns.map(({ key }, index) => [key, saved.layout?.widths?.[index]]),
+      );
+    const columns = fitGridColumns(visible, records, (available - 56) / zoom, manual);
     state.current = {
       page,
       title: spec.title,
-      columns: spec.columns,
+      columns,
       records,
-      styles: preferences.styles || {},
-      layout: preferences.layout || {},
-      sort: preferences.sort || { key: spec.columns[0].key, direction: 'asc' },
+      styles: saved.styles || {},
+      layout: {
+        ...saved.layout,
+        widths: Object.fromEntries(columns.map(({ width }, index) => [index, width])),
+        borders: projectBorders(saved.layout?.borders, spec.columns, columns),
+      },
+      sort: { key: sort.key, direction: sort.direction },
     };
-    return [buildSheet(state.current)];
-  }, [page, spec, records, preferences.sort?.key, preferences.sort?.direction, revision, zoom]);
+    lastSheet.current = null;
+    return { data: [buildSheet(state.current)], key: ++generation.current };
+  }, [page, spec, visible, records, sort.key, sort.direction, revision, zoom, available]);
+
+  useEffect(() => {
+    const observer = new ResizeObserver(([entry]) =>
+      setAvailable(Math.floor(entry.contentRect.width)),
+    );
+    observer.observe(host.current);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     if (print) printDialog.current.showModal();
   }, [print]);
@@ -78,7 +139,10 @@ export function FabricSheet({
   function change(sheets) {
     if (!capabilities.format) return;
     const sheet = sheets[0];
-    if (!sheet) return;
+    if (!sheet?.data || sheet === lastSheet.current) return;
+    const firstChange = lastSheet.current === null;
+    lastSheet.current = sheet;
+    if (firstChange) return;
     if (hasDataChanges(sheet, state.current)) {
       callbacks.current.onNotice(
         'Direct data change blocked. The original records have been restored.',
@@ -86,8 +150,32 @@ export function FabricSheet({
       setRevision((x) => x + 1);
       return;
     }
-    state.current = capturePresentation(sheet, state.current);
-    callbacks.current.onPreferences({ styles: state.current.styles, layout: state.current.layout });
+    const previous = state.current;
+    state.current = capturePresentation(sheet, previous, { sparse: true });
+    const { widths: captured, borders, ...layout } = state.current.layout;
+    const changedWidths = Object.fromEntries(
+      previous.columns.flatMap(({ key }, index) =>
+        captured[index] && captured[index] !== previous.layout.widths[index]
+          ? [[key, captured[index]]]
+          : [],
+      ),
+    );
+    const hidden = spec.columns.filter(({ key }) => !visible.some((column) => column.key === key));
+    const hiddenBorders = projectBorders(preferences.layout?.borders, spec.columns, hidden);
+    callbacks.current.onPreferences({
+      styles: state.current.styles,
+      layout: {
+        ...layout,
+        zoomRatio: zoom,
+        borders: [
+          ...projectBorders(hiddenBorders, hidden, spec.columns),
+          ...projectBorders(borders, visible, spec.columns),
+        ],
+      },
+      ...(Object.keys(changedWidths).length
+        ? { columnWidths: { ...widths, ...changedWidths } }
+        : {}),
+    });
   }
   function selection(_sheet, range) {
     const sorted = orderedRecords(state.current);
@@ -95,14 +183,10 @@ export function FabricSheet({
       range.row[0] === range.row[1] && range.row[0] > 0 ? sorted[range.row[0] - 1] : null,
     );
   }
-  function zoomTo(value) {
-    const current = book.current?.getAllSheets().find((sheet) => sheet.id === page);
-    if (current && !hasDataChanges(current, state.current))
-      state.current = capturePresentation(current, state.current);
-    const layout = { ...state.current.layout, zoomRatio: value };
-    state.current.layout = layout;
-    callbacks.current.onPreferences({ layout });
-    setZoom(value);
+  function configure(patch) {
+    onPreferences(patch);
+    onSelect(null);
+    setRevision((value) => value + 1);
   }
   function download() {
     if (!capabilities.export) {
@@ -125,7 +209,7 @@ export function FabricSheet({
       return;
     }
     try {
-      setPrint(formattedReport(book.current, spec.columns, records.length));
+      setPrint(formattedReport(book.current, state.current.columns, records.length));
     } catch (e) {
       onNotice(e.message);
     }
@@ -134,7 +218,7 @@ export function FabricSheet({
     function beforePrint() {
       if (!capabilities.print) return;
       try {
-        const report = formattedReport(book.current, spec.columns, records.length);
+        const report = formattedReport(book.current, state.current.columns, records.length);
         const surface = document.getElementById('fabric-printed-table');
         if (surface) surface.innerHTML = report;
       } catch {
@@ -147,6 +231,13 @@ export function FabricSheet({
   return h(
     React.Fragment,
     null,
+    h(GridSort, {
+      columns: arranged,
+      sort,
+      paged,
+      rowCount: records.length,
+      onSort: (next) => configure({ sort: next }),
+    }),
     h(
       'div',
       { className: 'sheet-exports' },
@@ -155,6 +246,7 @@ export function FabricSheet({
         null,
         capabilities.format ? '🔒 Values protected · formatting enabled' : '🔒 Read-only access',
       ),
+      h(GridColumns, { columns: arranged, visible, widths, onChange: configure }),
       h(
         'label',
         { className: 'sheet-zoom' },
@@ -164,9 +256,10 @@ export function FabricSheet({
           {
             'aria-label': 'Sheet zoom',
             value: zoom,
-            onChange: (e) => zoomTo(Number(e.target.value)),
+            onChange: (e) =>
+              configure({ layout: { ...preferences.layout, zoomRatio: Number(e.target.value) } }),
           },
-          [0.5, 0.75, 1, 1.25, 1.5, 2].map((value) =>
+          zoomLevels.map((value) =>
             h('option', { key: value, value }, `${Math.round(value * 100)}%`),
           ),
         ),
@@ -178,9 +271,9 @@ export function FabricSheet({
       'div',
       { className: 'fabric-grid', ref: host },
       h(Workbook, {
-        key: `${page}:${revision}:${zoom}`,
+        key: initial.key,
         ref: book,
-        data: initial,
+        data: initial.data,
         lang: 'en',
         allowEdit: capabilities.format,
         showToolbar: capabilities.format,

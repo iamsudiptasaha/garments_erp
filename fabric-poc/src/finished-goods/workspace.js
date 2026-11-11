@@ -1,5 +1,6 @@
-import { createElement as h, useEffect, useState } from 'react';
+import { createElement as h, useEffect, useMemo, useState } from 'react';
 
+import { GridSearch, useGridSearch } from '../fabric/grid-toolbar.js';
 import { WorkspaceViewToggle } from '../fabric/view-toggle.js';
 import { FinishedCatalogue } from './catalogue.js';
 import { ItemCostingPreview } from './costing-preview.js';
@@ -9,6 +10,7 @@ import { StockForm } from './stock-form.js';
 import './styles.css';
 
 const pageSize = 50;
+const emptyRows = [];
 const views = {
   receipt: {
     title: 'Stock-in receipts',
@@ -106,16 +108,25 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
   const [notice, setNotice] = useState('');
   const view = Object.hasOwn(views, screen) ? screen : 'sizes';
   const movement = screen === 'receipt' || screen === 'adjustment';
-  const [query, setQuery] = useState({ offset: 0, sku: '' });
+  const [searchText, setSearchText] = useState('');
+  const sku = useGridSearch(searchText.trim());
+  const exactSearch = screen === 'sizes' || screen === 'variations';
+  const [pagination, setPagination] = useState({ offset: 0, sku: '', revision: 0 });
+  const serverSku = exactSearch ? sku : '';
+  const offset = pagination.sku === serverSku ? pagination.offset : 0;
+  const revision = pagination.revision;
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(Boolean(client));
 
   useEffect(() => {
     if (!client || !Object.hasOwn(views, screen)) return;
     let current = true;
     async function load() {
       try {
-        const pagination = { p_limit: pageSize, p_offset: query.offset };
+        setError('');
+        setLoading(true);
+        const pagination = { p_limit: pageSize, p_offset: offset };
         const { data, error } = movement
           ? await client.rpc('erp_finished_goods_movements', {
               ...pagination,
@@ -125,28 +136,41 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
             ? await client.rpc('erp_finished_stock_valuation', pagination)
             : await client.rpc('erp_finished_goods_summary', {
                 ...pagination,
-                p_sku: query.sku || null,
+                p_sku: serverSku || null,
               });
         if (error) throw error;
         if (current) setResult(movement || screen === 'valuation' ? { [screen]: data } : data);
       } catch (error) {
         if (current) setError(error.message || 'Unable to load finished stock.');
+      } finally {
+        if (current) setLoading(false);
       }
     }
     load();
     return () => {
       current = false;
     };
-  }, [client, movement, query, screen]);
+  }, [client, movement, offset, revision, screen, serverSku]);
 
-  function search(next) {
-    setResult(null);
-    setError('');
-    setQuery(next);
+  function loadPage(nextOffset) {
+    setPagination({ offset: nextOffset, sku: serverSku, revision: revision + 1 });
   }
 
-  const rows = result?.[view] ?? [];
+  const rawRows = result?.[view] ?? emptyRows;
   const { title, columns } = views[view];
+  const rows = useMemo(
+    () =>
+      exactSearch || !sku
+        ? rawRows
+        : rawRows.filter((row) =>
+            columns.some(([key]) =>
+              String(row[key] ?? '')
+                .toLowerCase()
+                .includes(sku.toLowerCase()),
+            ),
+          ),
+    [exactSearch, sku, rawRows, columns],
+  );
   const pageTitle = finishedGoodsPages[screen];
   return h(
     'section',
@@ -207,7 +231,8 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
                   ? `Correction ${id} verified.`
                   : `Stock-in ${id} verified.`,
               );
-              search({ offset: 0, sku: '' });
+              setSearchText('');
+              loadPage(0);
             },
           }),
       ),
@@ -216,26 +241,17 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
       h(
         'div',
         null,
-        !movement &&
-          screen !== 'valuation' &&
+        client &&
           h(
-            'form',
-            {
-              className: 'fabric-actions',
-              onSubmit: (event) => {
-                event.preventDefault();
-                search({ sku: new FormData(event.currentTarget).get('sku').trim(), offset: 0 });
-              },
-            },
-            h('input', {
-              name: 'sku',
-              type: 'search',
-              'aria-label': 'Exact SKU',
-              placeholder: 'Exact SKU',
-              defaultValue: query.sku,
+            'div',
+            { className: 'fabric-actions' },
+            h(GridSearch, {
+              label: exactSearch ? 'Exact SKU' : 'Search this page',
+              value: searchText,
+              onChange: setSearchText,
             }),
-            h('button', { type: 'submit' }, 'Search'),
           ),
+        loading && result && h('p', { role: 'status' }, 'Updating finished stock…'),
         !client
           ? h('p', { role: 'status' }, 'Local preview. Connect to the ERP to load finished stock.')
           : error
@@ -243,13 +259,22 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
                 'div',
                 null,
                 h('p', { role: 'alert' }, error),
-                h('button', { onClick: () => search({ ...query }) }, 'Retry'),
+                h('button', { onClick: () => loadPage(offset) }, 'Retry'),
               )
             : !result
               ? h('p', { role: 'status' }, 'Loading finished stock…')
               : h(
                   FinishedGoodsSheetView,
-                  { page: screen, title, columns, rows, capabilities, view: display },
+                  {
+                    page: screen,
+                    title,
+                    columns,
+                    rows,
+                    capabilities,
+                    view: display,
+                    client,
+                    paged: true,
+                  },
                   rows.length
                     ? h(FinishedGoodsCards, {
                         title: pageTitle,
@@ -282,16 +307,16 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
         h(
           'button',
           {
-            disabled: query.offset === 0,
-            onClick: () => search({ ...query, offset: query.offset - pageSize }),
+            disabled: loading || offset === 0,
+            onClick: () => loadPage(offset - pageSize),
           },
           'Previous',
         ),
         h(
           'button',
           {
-            disabled: rows.length < pageSize,
-            onClick: () => search({ ...query, offset: query.offset + pageSize }),
+            disabled: loading || rawRows.length < pageSize,
+            onClick: () => loadPage(offset + pageSize),
           },
           'Next',
         ),

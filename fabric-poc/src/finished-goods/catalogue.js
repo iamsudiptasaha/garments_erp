@@ -1,3 +1,4 @@
+import { GridSearch, useGridSearch } from '../fabric/grid-toolbar.js';
 import { createElement as h, useEffect, useState } from 'react';
 
 import { RecordSelect } from '../fabric/record-select.js';
@@ -187,6 +188,8 @@ function ProductForm({ data, components, setComponents }) {
 export function FinishedCatalogue({ client, screen, canCreate, capabilities, view }) {
   const [data, setData] = useState(null);
   const [revision, setRevision] = useState(0);
+  const [searchText, setSearchText] = useState('');
+  const query = useGridSearch(searchText.trim().toLowerCase());
   const [productId, setProductId] = useState('');
   const [components, setComponents] = useState([emptyComponent]);
   const [error, setError] = useState('');
@@ -259,7 +262,15 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities, vie
     })),
     prices: data.prices,
     priceTypes: data.types,
-  }[screen];
+  }[screen].filter(
+    (row) =>
+      !query ||
+      columns[screen].some(([key]) =>
+        String(row[key] ?? '')
+          .toLowerCase()
+          .includes(query),
+      ),
+  );
   const title = { products: 'Sellable products', prices: 'Item prices', priceTypes: 'Price types' }[
     screen
   ];
@@ -371,6 +382,15 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities, vie
           ),
       ),
     h(
+      'div',
+      { className: 'fabric-actions' },
+      h(GridSearch, {
+        label: 'Search ' + title.toLowerCase(),
+        value: searchText,
+        onChange: setSearchText,
+      }),
+    ),
+    h(
       FinishedGoodsSheetView,
       {
         page: screen,
@@ -378,6 +398,7 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities, vie
         columns: columns[screen],
         rows,
         capabilities,
+        client,
         view,
       },
       rows.length

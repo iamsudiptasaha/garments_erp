@@ -1,5 +1,12 @@
 {
   "version": 1,
+  "gridPreferences": {
+    "readFunction": "public.erp_grid_preferences",
+    "saveFunction": "public.erp_grid_preferences",
+    "writableTables": ["public.erp_user_grid_preferences"],
+    "owner": "auth.users.id",
+    "scope": "Private presentation settings per authenticated account and grid. No business record writes."
+  },
   "readOnlyScreens": {
     "finishedProducts": {
       "readFunction": "public.erp_warehouse_stock",

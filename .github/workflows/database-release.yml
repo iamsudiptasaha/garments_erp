@@ -59,3 +59,7 @@ jobs:
           BACKUP_CONFIRMED: ${{ inputs.backup_confirmed }}
           BACKUP_EXCEPTION: ${{ inputs.backup_exception }}
           RELEASE_GATE_RESULT: ${{ needs.checks.result }}
+      - name: Publish the applied database manifest for owner attestation
+        run: |
+          digest=$(node scripts/ci/check-db-approval.mjs --print)
+          printf 'Applied database manifest SHA-256: `%s`\n' "$digest" >> "$GITHUB_STEP_SUMMARY"

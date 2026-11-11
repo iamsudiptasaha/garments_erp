@@ -187,6 +187,10 @@ jobs:
       - name: Validate release context and scoped configuration
         run: node --input-type=module -e "import {deploymentConfig} from './scripts/ci/workers-deploy.mjs'; deploymentConfig(process.env)"
       - run: npm --prefix fabric-poc ci
+      - name: Require the applied database manifest before deploying the Worker
+        run: node scripts/ci/check-db-approval.mjs
+        env:
+          APPLIED_DATABASE_MANIFEST_SHA256: ${{ vars.APPLIED_DATABASE_MANIFEST_SHA256 }}
       - name: Build production configuration from the checked commit
         run: node scripts/ci/build-public.mjs
       - run: node scripts/ci/bundle-guard.mjs

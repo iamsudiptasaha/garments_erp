@@ -62,8 +62,9 @@ export function FinishedGoodsSheetView({
   capabilities,
   view,
   children,
+  client,
+  paged,
 }) {
-  const preferences = useRef({});
   const [notice, setNotice] = useState('');
   const spec = useMemo(
     () => ({
@@ -95,22 +96,9 @@ export function FinishedGoodsSheetView({
           page: 'finished-goods-' + page,
           spec,
           records,
-          preferences: preferences.current,
+          client,
+          paged,
           capabilities,
-          onPreferences: (patch) => {
-            const current = preferences.current;
-            preferences.current = {
-              ...current,
-              ...patch,
-              layout: {
-                ...current.layout,
-                ...patch.layout,
-                zoomRatio: patch.styles
-                  ? current.layout?.zoomRatio
-                  : (patch.layout?.zoomRatio ?? current.layout?.zoomRatio),
-              },
-            };
-          },
           onSelect: () => {},
           onNotice: setNotice,
         }),

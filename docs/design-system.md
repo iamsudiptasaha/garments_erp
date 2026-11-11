@@ -38,6 +38,18 @@ The workspace shell has a 235px sidebar and 34px × 38px main padding. Page head
 | Forms and dialogs | Group document lines with `.fabric-line` (22px padding, 10px radius) and align actions with `.editor-actions`. Native `.fabric-dialog` uses 15px radius, 28px padding, 90vh max height, width `min(1000px, 94vw)` and `#17344966` backdrop. Follow [LabEditor](../fabric-poc/src/colours/editor.js) and [BillEditor](../fabric-poc/src/fabric/editor.js) for heading, fields and actions. |
 | Print | Use the workspace print rules as the starting point. Keep the record and hide navigation and interactive controls. [Print CSS](../fabric-poc/src/fabric/styles.css) |
 
+## Record grids
+
+Use FabricSheet for configurable record grids. Use GridSearch for labelled, debounced search with no separate submit button. Keep existing server search semantics and label exact matches explicitly. If a grid sorts or filters a server page locally, disclose that scope next to the controls.
+
+Place search above the grid and the sort column, direction and row count on the next row. Keep the access note at the start of the action row and align Columns, Zoom, Export CSV and Print / PDF on the same baseline. Let controls wrap on narrow viewports and keep horizontal scrolling inside the grid.
+
+Measure column content against the available viewport. Keep stable column keys and store explicit width overrides in pixels. Use the Columns control for order, visibility and width. A blank width restores automatic fitting. Export and print use the visible column order and the existing capability checks.
+
+Use the shared grid preference store with a stable screen-specific grid key. Persist presentation settings per authenticated account and keep sample settings in browser storage. Preserve record and formatting permissions. Use RecordGrid for the Administration account list and Files configuration tables. Keep their row actions available when users hide columns. The Production Studio portal uses the same preference store for its TanStack layout and named views. Compact detail tables and editor matrices follow the parent document’s layout.
+
+Verify reload, isolated browser sessions for the same account, account isolation, both sort directions, and toolbar wrapping on desktop, tablet and phone.
+
 ## Colours browser verification
 
 Chromium measurements at 1440, 1024 and 390 CSS pixels confirm the shared shell padding of `34px 38px`, `25px` and `20px 15px`, respectively. The Lab dips title stays `29px / 600` with `-0.6px` tracking at all three widths. Its eyebrow is `10px / 600` with `1.3px` tracking and `14px` bottom margin. The header gap and bottom margin stay `20px` and `27px`.

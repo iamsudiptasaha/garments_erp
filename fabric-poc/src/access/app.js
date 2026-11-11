@@ -1,3 +1,4 @@
+import { RecordGrid } from '../fabric/record-grid.js';
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { getAccessClient, getLoginMethods } from './client.js';
@@ -778,17 +779,17 @@ function AccountManager({ snapshot, onSaved }) {
           ),
         )
       : h(
-          'table',
-          { className: 'access-table' },
-          h(
-            'thead',
-            null,
-            h(
-              'tr',
-              null,
-              ['Employee', 'Code', 'Roles', 'Access', ''].map((t) => h('th', { key: t }, t)),
-            ),
-          ),
+          RecordGrid,
+          {
+            client: client,
+            grid: 'administration-accounts',
+            fields: [
+              ['employee', 'Employee'],
+              ['code', 'Code'],
+              ['roles', 'Roles'],
+              ['access', 'Access'],
+            ],
+          },
           h(
             'tbody',
             null,

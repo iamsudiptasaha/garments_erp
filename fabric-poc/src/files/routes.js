@@ -1,3 +1,4 @@
+import { RecordGrid } from '../fabric/record-grid.js';
 import React, { useState } from 'react';
 import { prettyBytes } from './model.js';
 const h = React.createElement;
@@ -7,7 +8,7 @@ const types = [
   ['image/png', 'PNG'],
   ['image/webp', 'WebP'],
 ];
-export function UploadRoutes({ routes, registry, onSave }) {
+export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
   const [edit, setEdit] = useState(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
@@ -148,24 +149,18 @@ export function UploadRoutes({ routes, registry, onSave }) {
           'div',
           { className: 'permission-scroll' },
           h(
-            'table',
-            { className: 'access-table' },
-            h(
-              'thead',
-              null,
-              h(
-                'tr',
-                null,
-                [
-                  'Attachment source',
-                  'Bucket group / bucket',
-                  'Allowed files',
-                  'Per file',
-                  'Status',
-                  '',
-                ].map((t) => h('th', { key: t }, t)),
-              ),
-            ),
+            RecordGrid,
+            {
+              client: preferenceClient,
+              grid: 'files-upload-routes',
+              fields: [
+                ['source', 'Attachment source'],
+                ['bucket', 'Bucket group / bucket'],
+                ['types', 'Allowed files'],
+                ['limit', 'Per file'],
+                ['status', 'Status'],
+              ],
+            },
             h(
               'tbody',
               null,

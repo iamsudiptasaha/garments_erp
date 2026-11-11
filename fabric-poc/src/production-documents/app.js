@@ -1,3 +1,4 @@
+import { getAccessClient } from '../access/client.js';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { FabricSheet } from '../fabric/sheet.js';
@@ -81,8 +82,6 @@ import { pages } from '../fabric/catalog.js';
     { key: 'worker', label: 'Job worker' },
     { key: 'lineCount', label: 'Job lines' },
   ];
-  const challanPreferences = { sort: { key: 'id', direction: 'asc' } };
-  const billPreferences = { sort: { key: 'id', direction: 'asc' } };
   const billColumns = [
     { key: 'id', label: 'Worker bill' },
     { key: 'invoiceNumber', label: 'Invoice number' },
@@ -93,7 +92,6 @@ import { pages } from '../fabric/catalog.js';
     { key: 'assignment', label: 'Job variant' },
     { key: 'rate', label: 'Billed rate' },
   ];
-  const sheetPreferences = () => (view === 'billing' ? billPreferences : challanPreferences);
   function billItem(item) {
     const challan = records.find((record) => record.key === item.challan);
     const line = challan.lines.find((line) => line.id === item.line);
@@ -144,26 +142,6 @@ import { pages } from '../fabric/catalog.js';
           .includes(search.toLowerCase()),
       );
   }
-  const sheetMeasure = document.createElement('canvas').getContext('2d');
-  function fitSheetColumns(columns, rows, available) {
-    const minimums = columns.map((column) => {
-      sheetMeasure.font = 'bold 15px Arial';
-      let width = sheetMeasure.measureText('↑ ' + column.label).width;
-      sheetMeasure.font = '15px Arial';
-      for (const row of rows) {
-        for (const value of row.displayValues?.[column.key] || [row[column.key] ?? '']) {
-          width = Math.max(width, sheetMeasure.measureText(String(value)).width);
-        }
-      }
-      return Math.max(92, Math.ceil(width) + 24);
-    });
-    const minimumWidth = minimums.reduce((sum, width) => sum + width, 0);
-    const extra = Math.max(0, available - minimumWidth);
-    return columns.map((column, index) => ({
-      ...column,
-      width: minimums[index] + Math.floor((extra * minimums[index]) / minimumWidth),
-    }));
-  }
   function renderResults() {
     sheetRoot?.unmount();
     sheetRoot = null;
@@ -171,7 +149,6 @@ import { pages } from '../fabric/catalog.js';
     const billing = view === 'billing';
     const matches = billing ? billRecords() : matchingRecords();
     const sheetColumns = billing ? billColumns : columns;
-    const preferences = sheetPreferences();
     if (!matches.length) {
       results.innerHTML = `<p class="fabric-status">No matching ${billing ? 'worker bills' : 'challans'}</p>`;
       return;
@@ -204,19 +181,6 @@ import { pages } from '../fabric/catalog.js';
       <button type="button" data-action="edit-selected" disabled>${billing ? 'Edit selected bill' : 'Edit selected document'}</button>
       <button type="button" data-action="open-selected" disabled>${billing ? 'Open selected bill' : 'Open selected challan'}</button>
     </div>
-    <div class="fabric-sort"><label>Sort complete rows by
-      <select aria-label="Sort column" data-sort="key">${options(
-        sheetColumns.map((c) => [c.key, c.label]),
-        preferences.sort.key,
-      )}</select>
-    </label><select aria-label="Sort direction" data-sort="direction">${options(
-      [
-        ['asc', 'Ascending'],
-        ['desc', 'Descending'],
-      ],
-      preferences.sort.direction,
-    )}</select>
-    <span>${matches.length} rows</span></div>
     <p class="fabric-status" data-sheet-notice role="status"></p><div data-sheet></div>`;
     const actions = results.querySelector('[data-sheet-actions]');
     sheetSelection = null;
@@ -229,26 +193,13 @@ import { pages } from '../fabric/catalog.js';
           employee: r.employeeName,
           lineCount: r.lines.length,
         }));
-    // Leave space for row headers, the vertical scrollbar and the sheet border.
-    const fitted = fitSheetColumns(sheetColumns, sheetRows, host.clientWidth - 56);
     sheetRoot = createRoot(host);
     sheetRoot.render(
       React.createElement(FabricSheet, {
         page: billing ? 'workerBills' : 'productionChallans',
-        spec: { title: billing ? 'Worker bills' : 'Challans', columns: fitted },
+        client: getAccessClient(),
+        spec: { title: billing ? 'Worker bills' : 'Challans', columns: sheetColumns },
         records: sheetRows,
-        preferences,
-        onPreferences: (changes) => {
-          if (
-            !preferences.layout?.widths &&
-            changes.layout?.widths &&
-            fitted.every((column, index) => changes.layout.widths[index] === column.width)
-          ) {
-            const layout = { ...changes.layout };
-            delete layout.widths;
-            Object.assign(preferences, changes, { layout });
-          } else Object.assign(preferences, changes);
-        },
         onSelect: (record) => {
           sheetSelection = record?.key;
           for (const control of actions.querySelectorAll('button'))
@@ -346,12 +297,6 @@ import { pages } from '../fabric/catalog.js';
       model[t.dataset.field] = t.value;
   });
   root.addEventListener('change', ({ target: t }) => {
-    if (t.dataset.sort) {
-      sheetPreferences().sort[t.dataset.sort] = t.value;
-      renderResults();
-      root.querySelector(`[data-sort="${t.dataset.sort}"]`)?.focus();
-      return;
-    }
     if (t.dataset.field === 'worker') {
       if (draft.lines.some((line) => line.job && jobs[line.job][2] !== t.value)) {
         t.value = draft.worker;
@@ -822,18 +767,6 @@ import { pages } from '../fabric/catalog.js';
     }
   }
   window.addEventListener('hashchange', navigate);
-  let lastSheetWidth = root.clientWidth;
-  new ResizeObserver(() => {
-    const width = root.clientWidth;
-    if (width === lastSheetWidth) return;
-    lastSheetWidth = width;
-    if (
-      presentation === 'sheet' &&
-      root.querySelector('[data-sheet]') &&
-      !sheetPreferences().layout?.widths
-    )
-      renderResults();
-  }).observe(root);
   const menu = document.querySelector('.navigation-toggle');
   const sidebar = document.getElementById('challan-sidebar');
   menu.addEventListener('click', () => {

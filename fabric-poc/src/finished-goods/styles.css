@@ -70,14 +70,14 @@
 }
 
 .finished-goods fieldset,
-.finished-goods details {
+.finished-goods details:not(.erp-grid-columns) {
   margin-block: 10px;
   padding: 10px;
   border: 1px solid var(--fg-line);
   border-radius: 8px;
 }
 
-.finished-goods label {
+.finished-goods label:not(.fabric-sort label, .sheet-exports label) {
   display: grid;
   gap: 4px;
 }

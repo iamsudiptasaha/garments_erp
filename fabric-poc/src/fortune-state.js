@@ -3,6 +3,12 @@ export const columns = pages.knitting.columns;
 const displayValue = (record, column) =>
   record.displayValues?.[column.key]?.join(',\n') ?? record[column.key];
 const styleKeys = ['bg', 'fc', 'bl', 'it', 'un', 'cl', 'fs', 'ff', 'ht', 'vt', 'tb', 'tr'];
+const cellStyle = (style) =>
+  Object.fromEntries(
+    styleKeys.flatMap((key) =>
+      ['string', 'number'].includes(typeof style?.[key]) ? [[key, style[key]]] : [],
+    ),
+  );
 export const defaultState = () => ({
   version: 1,
   data: clone(seed),
@@ -44,12 +50,12 @@ export function buildSheet(state) {
         bl: 1,
         fs: 11,
         ht: 1,
-        ...state.styles.header?.[col.key],
+        ...cellStyle(state.styles.header?.[col.key]),
       },
     });
     records.forEach((record, i) => {
       const value = displayValue(record, col),
-        style = state.styles[record.id]?.[col.key] || {},
+        style = cellStyle(state.styles[record.id]?.[col.key]),
         multiline = !!record.displayValues?.[col.key];
       celldata.push({
         r: i + 1,
@@ -117,22 +123,29 @@ export function buildSheet(state) {
     frozen: state.layout.frozen || { type: 'row' },
   };
 }
-export function capturePresentation(sheet, state) {
+export function capturePresentation(sheet, state, { sparse = false } = {}) {
   const records = orderedRecords(state),
     columns = state.columns || pages.knitting.columns,
     styles = clone(state.styles || {});
   const matrix = sheet.data || [];
+  const defaults = sparse ? buildSheet({ ...state, styles: {} }).celldata : null;
   const cellAt = (r, c) => matrix[r]?.[c] ?? sheet.celldata?.find((x) => x.r === r && x.c === c)?.v;
   for (let r = 0; r <= records.length; r++) {
     const id = r === 0 ? 'header' : records[r - 1].id;
-    styles[id] = {};
+    styles[id] = { ...styles[id] };
     columns.forEach((col, c) => {
       const cell = cellAt(r, c) || {},
         style = { ...cell, ...(cell.ct?.t === 'inlineStr' ? cell.ct.s?.[0] : {}) };
-      styles[id][col.key] = Object.fromEntries(
-        styleKeys.filter((k) => style[k] !== undefined).map((k) => [k, clone(style[k])]),
+      const baseline = defaults?.[c * (records.length + 1) + r].v;
+      const attributes = Object.fromEntries(
+        styleKeys
+          .filter((k) => style[k] !== undefined && (!sparse || style[k] !== baseline[k]))
+          .map((k) => [k, clone(style[k])]),
       );
+      if (sparse && !Object.keys(attributes).length) delete styles[id][col.key];
+      else styles[id][col.key] = attributes;
     });
+    if (sparse && !Object.keys(styles[id]).length) delete styles[id];
   }
   const idAt = (r) => (r === 0 ? 'header' : records[r - 1]?.id);
   const visibleIds = new Set(['header', ...records.map((r) => r.id)]);

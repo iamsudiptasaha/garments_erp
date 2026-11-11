@@ -358,11 +358,6 @@ function App({ live }) {
       return false;
     }
   }
-  function prefs(patch) {
-    if (patch.styles && !can('format')) return;
-    const current = state.preferences[page] || {};
-    save({ ...state, preferences: { ...state.preferences, [page]: { ...current, ...patch } } });
-  }
   function navigate(key) {
     if (live && Object.hasOwn(adminPages, key)) {
       location.href = '/access.html#' + key;
@@ -474,10 +469,6 @@ function App({ live }) {
     setSelected(null);
   }
 
-  function sorting(key, direction) {
-    prefs({ sort: { key, direction } });
-    setSelected(null);
-  }
   const groups = useMemo(() => {
     if (!spec) return [];
     const result = new Map();
@@ -809,6 +800,7 @@ function App({ live }) {
       );
     return can('view', 'productionUpdateTaskStatus')
       ? h(PortalTaskBoard, {
+          preferenceClient: live ? getAccessClient() : null,
           data,
           actor,
           mode: 'floor',
@@ -1264,6 +1256,7 @@ function App({ live }) {
                               })
                             : ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(page)
                               ? h(PortalTaskBoard, {
+                                  preferenceClient: live ? getAccessClient() : null,
                                   key: page,
                                   data,
                                   live: !!live,
@@ -1404,64 +1397,21 @@ function App({ live }) {
                                     ),
                                   view === 'overview'
                                     ? overview()
-                                    : h(
-                                        React.Fragment,
-                                        null,
-                                        h(
-                                          'div',
-                                          { className: 'fabric-sort' },
-                                          h(
-                                            'label',
-                                            null,
-                                            'Sort complete rows by ',
-                                            h(
-                                              'select',
-                                              {
-                                                'aria-label': 'Sort column',
-                                                value: preferences.sort?.key || spec.columns[0].key,
-                                                onChange: (e) =>
-                                                  sorting(
-                                                    e.target.value,
-                                                    preferences.sort?.direction || 'asc',
-                                                  ),
-                                              },
-                                              spec.columns.map((c) =>
-                                                h('option', { key: c.key, value: c.key }, c.label),
-                                              ),
-                                            ),
-                                          ),
-                                          h(
-                                            'select',
-                                            {
-                                              'aria-label': 'Sort direction',
-                                              value: preferences.sort?.direction || 'asc',
-                                              onChange: (e) =>
-                                                sorting(
-                                                  preferences.sort?.key || spec.columns[0].key,
-                                                  e.target.value,
-                                                ),
-                                            },
-                                            h('option', { value: 'asc' }, 'Ascending'),
-                                            h('option', { value: 'desc' }, 'Descending'),
-                                          ),
-                                          h('span', null, `${records.length} rows`),
-                                        ),
-                                        h(FabricSheet, {
-                                          key: `${page}:${preferences.sort?.key}:${preferences.sort?.direction}:${sidebarOpen}`,
-                                          page,
-                                          spec,
-                                          records,
-                                          preferences,
-                                          onPreferences: prefs,
-                                          onSelect: setSelected,
-                                          onNotice: setNotice,
-                                          capabilities: {
-                                            format: can('format'),
-                                            export: can('export'),
-                                            print: can('print'),
-                                          },
-                                        }),
-                                      ),
+                                    : h(FabricSheet, {
+                                        key: actor + ':' + page,
+                                        page,
+                                        spec,
+                                        records,
+                                        client: live ? getAccessClient() : null,
+                                        preferences,
+                                        onSelect: setSelected,
+                                        onNotice: setNotice,
+                                        capabilities: {
+                                          format: can('format'),
+                                          export: can('export'),
+                                          print: can('print'),
+                                        },
+                                      }),
                                 ),
       ),
     ),

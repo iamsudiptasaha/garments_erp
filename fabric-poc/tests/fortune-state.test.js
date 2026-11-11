@@ -1,3 +1,4 @@
+import { projectBorders } from '../src/fabric/grid-layout.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -95,4 +96,21 @@ test('only the active column heading shows its persisted sort direction', () => 
   assert.equal(headings[5], 'Yarn consumed · kg');
   assert.equal(headings[6], '↓ Knitted output · kg');
   assert.equal(hasDataChanges(buildSheet(state), state), false);
+});
+
+test('grid border ranges stay continuous when their columns are reordered', () => {
+  const columns = ['a', 'b', 'c', 'd'].map((key) => ({ key }));
+  const border = {
+    kind: 'range',
+    id: 'row-1',
+    column: [0, 2],
+    value: { borderType: 'border-outside' },
+  };
+  assert.deepEqual(projectBorders([border], columns, [columns[2], columns[0], columns[1]]), [
+    border,
+  ]);
+  assert.deepEqual(projectBorders([border], columns, [columns[2], columns[3], columns[1]]), [
+    { ...border, column: [0, 0] },
+    { ...border, column: [2, 2] },
+  ]);
 });
