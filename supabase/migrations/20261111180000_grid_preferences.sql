@@ -1,4 +1,6 @@
 -- Personal presentation settings, independent of ERP record permissions.
+begin;
+
 create table public.erp_user_grid_preferences (
   user_id uuid not null references auth.users(id) on delete cascade,
   grid_key text not null check (grid_key ~ '^[a-zA-Z][a-zA-Z0-9-]{0,79}$'),
@@ -44,3 +46,5 @@ $$;
 
 revoke all on function public.erp_grid_preferences(text, uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.erp_grid_preferences(text, uuid, jsonb) to authenticated;
+
+commit;

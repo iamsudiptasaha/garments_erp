@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { X509Certificate } from 'node:crypto';
 import assert from 'node:assert/strict';
 import {
@@ -10,6 +11,13 @@ import {
 } from './database-release.mjs';
 test('release list covers every tracked migration after the baseline', () => {
   assert.ok(releaseMigrationFiles().length > 0);
+});
+
+test('every release migration has the transaction wrapper required by the runner', () => {
+  for (const file of releaseMigrationFiles()) {
+    const sql = readFileSync(new URL('../../supabase/migrations/' + file, import.meta.url), 'utf8');
+    assert.doesNotThrow(() => migrationBody(sql), file);
+  }
 });
 
 const env = {
