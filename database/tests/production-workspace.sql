@@ -86,4 +86,103 @@ begin
  perform public.erp_file_list('itemImage',(task->>'id')::bigint);
  begin perform public.erp_begin_file_upload('itemImage',(task->>'id')::bigint,'x.png','image/png',1);raise exception 'TEST: task viewer can upload item files';exception when insufficient_privilege then null;end;
 end $$;
+reset role;
+do $$
+declare
+  assignment_id bigint;
+  size_id bigint;
+  pieces_header bigint;
+  repeat_header bigint;
+  pieces_line bigint;
+  repeat_line bigint;
+  sibling_line bigint;
+  bill_one bigint;
+  bill_two bigint;
+  other_size bigint;
+begin
+  insert into garments_erp.variant_item_per_job(job_id, variant_item_id)
+  select job.id, variant.id
+  from garments_erp.item item
+  join garments_erp.item_part part on part.item_id = item.id
+  join garments_erp.production prod on prod.item_part_id = part.id
+  join garments_erp.job job on job.production_id = prod.id
+  join garments_erp.variant_item variant on variant.item_part_id = part.id
+  where item.style_code = 'WORKSPACE-TEST'
+  on conflict (job_id, variant_item_id) do nothing;
+
+  select link.id, sz.id into strict assignment_id, size_id
+  from garments_erp.item item
+  join garments_erp.item_part part on part.item_id = item.id
+  join garments_erp.production prod on prod.item_part_id = part.id
+  join garments_erp.job job on job.production_id = prod.id
+  join garments_erp.variant_item variant on variant.item_part_id = part.id
+  join garments_erp.variant_item_per_job link on link.job_id = job.id and link.variant_item_id = variant.id
+  join garments_erp.item_size_list sz on sz.item_id = item.id
+  where item.style_code = 'WORKSPACE-TEST';
+
+  update garments_erp.stage set track_pieces = true, pp_stage = false where id = 970001;
+  insert into garments_erp.item_size_list(item_id, size_list_id)
+  select item.id, size.id from garments_erp.item item, garments_erp.size_list size
+  where item.style_code = 'WORKSPACE-TEST' and size.size = 'Workspace reference size'
+  returning id into other_size;
+  insert into garments_erp.stage_pieces(variant_item_per_job_id,item_size_list_id,pieces_stock_in)
+    values (assignment_id,size_id,25),(assignment_id,other_size,8);
+
+  set constraints garments_erp.check_challan_stock_in deferred;
+  insert into garments_erp.challan(challan_number) values ('CI-PIECES')
+    returning id into pieces_header;
+  insert into garments_erp.challan(challan_number) values ('CI-REPEAT')
+    returning id into repeat_header;
+  insert into garments_erp.challan_job_item(challan_id, variant_item_per_job_id, rate)
+    values (pieces_header, assignment_id, 100) returning id into pieces_line;
+  insert into garments_erp.challan_job_item(challan_id, variant_item_per_job_id, rate)
+    values (pieces_header, assignment_id, 100) returning id into sibling_line;
+  insert into garments_erp.challan_job_item(challan_id, variant_item_per_job_id, rate, description)
+    values (repeat_header, assignment_id, 200, 'Repeated full issuance') returning id into repeat_line;
+  insert into garments_erp.challan_job_item_pieces(challan_job_item_id, item_size_list_id, issued_pieces)
+    select line_id, stock.item_size_list_id, stock.pieces_stock_in
+    from unnest(array[pieces_line,sibling_line,repeat_line]) as lines(line_id)
+    cross join garments_erp.stage_pieces stock where stock.variant_item_per_job_id = assignment_id;
+
+  insert into garments_erp.job_worker_bill default values returning id into bill_one;
+  insert into garments_erp.job_worker_bill default values returning id into bill_two;
+  insert into garments_erp.job_worker_bill_items(challan_job_item_id, job_worker_bill_id, billed_rate)
+    values (pieces_line, bill_one, 4), (repeat_line, bill_one, 2), (sibling_line, bill_two, 4);
+  begin
+    insert into garments_erp.job_worker_bill_items(challan_job_item_id, job_worker_bill_id, billed_rate)
+      values (pieces_line, bill_two, 1);
+    raise exception 'TEST: same challan line billed twice';
+  exception when unique_violation then null;
+  end;
+
+  if (select reference_rate from garments_erp.item_costing_job_reference
+      where variant_item_per_job_id = assignment_id) is distinct from 10::numeric then
+    raise exception 'TEST: job costing must sum worker bill rates independently of challan rates';
+  end if;
+  set constraints all immediate;
+  begin
+    insert into garments_erp.challan_job_item_pieces(challan_job_item_id, item_size_list_id, issued_pieces)
+      values (pieces_line, size_id, 1);
+    raise exception 'TEST: duplicate challan size accepted';
+  exception when unique_violation then null;
+  end;
+  begin
+    update garments_erp.challan_job_item_pieces set issued_pieces = 24
+      where challan_job_item_id = repeat_line and item_size_list_id = size_id;
+    raise exception 'TEST: partial stock-in accepted';
+  exception when check_violation then null;
+  end;
+  begin
+    delete from garments_erp.challan_job_item_pieces
+      where challan_job_item_id = repeat_line and item_size_list_id = other_size;
+    raise exception 'TEST: missing size accepted';
+  exception when check_violation then null;
+  end;
+  begin
+    update garments_erp.challan_job_item_pieces set issued_pieces = 25.5
+      where challan_job_item_id = repeat_line and item_size_list_id = size_id;
+    raise exception 'TEST: fractional issuance accepted';
+  exception when check_violation then null;
+  end;
+end $$;
 rollback;

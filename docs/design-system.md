@@ -57,3 +57,7 @@ The [approved Finished Goods preview](../fabric-poc/public/finished-goods-previe
 ## Automated drift checks
 
 Run `npm --prefix fabric-poc run build` and `npm --prefix fabric-poc run e2e` for changes to shared UI. The Colours tests pin computed layout and styling at desktop, tablet and phone widths, then compare screenshots before and after the Overview → Sheet → Overview interaction. Finished Goods compares its view toggle against Colours in the same Chromium session. The tests capture both sides in the same environment so platform font rasterization does not require separate screenshot baselines. Spreadsheet values and editing rules are verified by functional tests. [Colours visual checks](../fabric-poc/e2e/colours-visual.spec.js) · [Finished Goods checks](../fabric-poc/e2e/finished-goods-live.spec.js)
+
+## Challan audit
+
+Challans and Worker Bills are sibling pages under Production. The workspace uses the established shell, overview cards, FabricSheet, form groups, tables and dialogs. The worker bill editor selects the challan line it bills against. [Production documents](../fabric-poc/production-challan.html)

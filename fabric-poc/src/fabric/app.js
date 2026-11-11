@@ -915,9 +915,10 @@ function App({ live }) {
                   ),
               ),
             ),
-          Object.entries(pages).some(
+          (Object.entries(pages).some(
             ([key, p]) => p.section === 'production' && can('view', key),
-          ) &&
+          ) ||
+            (live && (can('view', 'productionChallans') || can('view', 'jobWorkerBills')))) &&
             h(
               'details',
               { open: true, className: 'production-nav' },
@@ -948,6 +949,12 @@ function App({ live }) {
                       p.title,
                     ),
                   ),
+                live &&
+                  can('view', 'productionChallans') &&
+                  h('a', { href: '/production-challan.html#challans' }, 'Challans'),
+                live &&
+                  can('view', 'jobWorkerBills') &&
+                  h('a', { href: '/production-challan.html#worker-bills' }, 'Worker bills'),
               ),
             ),
           Object.entries(pages).some(([key, p]) => p.section === 'inventory' && can('view', key)) &&

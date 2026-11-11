@@ -47,7 +47,7 @@ Sources: [live-matched costing views and guards](supabase/migrations/20261108140
 
 | Rule | Formula and source | Verification case |
 | --- | --- | --- |
-| Job reference, legacy live view pending replacement | Per `variant_item_per_job.id`, sum linked `stage_pieces.pieces_stock_out` over sizes and multiply by `per_piece_billed_price`. Missing quantity or rate yields an unknown amount. Final billing basis is pending. | 10 and 15 pieces at 4 per piece yield 100. A missing rate yields null. Multiple bill lines must leave the stage quantity at 25. |
+| Job reference view, pending release | Per job, sum non-null `job_worker_bill_items.billed_rate` across its challan lines and bills. For each job-variant, multiply that currency-per-piece rate by summed stage stock-out. Missing quantity or billed rate yields null. | 25 pieces and bill rates 4 and 6 yield 250. Challan rates contribute nothing. |
 | Rejected quantity, agreed arithmetic | Comparable final-stage output minus accepted `item_produced_pieces.pieces`, aggregated at matching item, scope and size. Source-field selection, multipart conversion and valuation are pending. | 100 output and 94 accepted yield 6. A difference of −2 surfaces a reconciliation exception. |
 | Approved manufacturing cost | Sum approved `item_costing_item.approved_amount` for a single version across Fabric, Trims & Accessories, Production and Peripherals. Live summary defaults the empty sum to zero. Store line amounts and derive totals. | 120 + 30 + 70 + 20 = 240. Another version, reference amounts and profit percentage contribute nothing to this approved sum. |
 | Approved cost per completed unit | Approved total divided by positive `item_costing.completed_units`. Live summary yields null for a missing or zero denominator. The mapping from accepted physical pieces to completed units is pending. | 240 ÷ 12 = 20. Zero or missing completed units yields null. |
@@ -57,11 +57,11 @@ Keep ERP reference and approved values independent. Material rate and net consum
 
 ### Approved costing rules for implementation
 
-These rules describe the approved design. The existing live job-reference view still uses its legacy stock-out amount formula.
+The billing source changes in the [challan migration](supabase/migrations/20261109191200_production_challan_alignment.sql). The view uses stock-out for its reference amount. Draft creation retains the stock-in basis for paid amount.
 
 | Rule | Sources and calculation | Expected test |
 | --- | --- | --- |
-| Job paid amount | Sum `stage_pieces.pieces_stock_in` per `variant_item_per_job.id`, then multiply by `variant_item_per_job.per_piece_billed_price`. Effective rate per piece divides that amount by the same job-variant's summed stock-out. Zero or missing stock-out leaves the effective rate unknown. | 100 in, 96 out and ₹10 job rate yield ₹1,000 paid and ₹10.4166… per output piece. |
+| Job paid amount | Sum `stage_pieces.pieces_stock_in` per `variant_item_per_job.id`, then multiply by the summed job bill rate above. Effective rate per piece divides that amount by the same job-variant's summed stock-out. Zero or missing stock-out leaves the effective rate unknown. | 100 in, 96 out and ₹10 job rate yield ₹1,000 paid and ₹10.4166… per output piece. |
 | Accepted costing units | For each size, take the minimum available part quantity from the current jobs whose stage has `stage_type = Complete`. Use their `pieces_stock_in`. Sum the size quantities across the item. | 23 tops and 22 bottoms in one size yield 22 accepted units. |
 | Stage wastage | Cutting stock-out starts the piece trail. At subsequent tracked jobs, compare stock-in minus stock-out at matching job, variant and size. | 24 in and 22 out yield 2 pieces of wastage. |
 | Approved piece-based amount | `item_costing_item.approved_quantity × approved_rate`. Quantity is total pieces and rate is currency per piece. Store the entered quantity and rate independently of the ERP reference. | 20 pieces at ₹55 yield ₹1,100. |

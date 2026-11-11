@@ -23,6 +23,18 @@ export function inspectBoundaries({schema,catalogue,policy,functions,links=emplo
    if (!contract.referenceTables.includes(mapping.table_name)) errors.push(`${screen}: unreviewed read mapping to ${mapping.table_name}`);
   }
  }
+ const documents = policy.productionDocuments;
+ if (documents) {
+  const read = functions.get(documents.readFunction);
+  const save = functions.get(documents.saveFunction);
+  const writes = code => [...(code || '').matchAll(/\b(?:insert\s+into|update|delete\s+from)\s+garments_erp\.(\w+)/gi)].map(match => match[1]);
+  const hasResources = code => documents.resources.every(resource => code?.includes("'" + resource + "'"));
+  if (!hasResources(read) || !read.includes("has_screen_permission(resource,'view')") || writes(read).length)
+   errors.push('Production documents: unreviewed read boundary');
+  if (!hasResources(save) || !save.includes('has_screen_permission(resource,p_action)') || /\bexecute\b/i.test(save) ||
+      writes(save).some(table => !documents.writableTables.includes(table)))
+   errors.push('Production documents: unreviewed write boundary');
+ }
  const finished = policy.finishedGoodsCatalogue;
  if (finished) {
   const read = functions.get(finished.readFunction);

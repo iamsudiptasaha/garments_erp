@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Production Challans</title>
+<link rel="stylesheet" href="/src/fabric/styles.css">
+<style>
+#challan-sidebar a[aria-current="page"] { background: #d4eafa; color: #205d8c; font-weight: 600; box-shadow: inset 3px 0 #6aa7d2; }
+#challan-review .print-only, #challan-review .form-error:empty { display: none; }
+@media print {
+  #challan-shell { display: block !important; }
+  #challan-sidebar, #challan-review .fabric-status { display: none; }
+  #challan-review button { display: none; }
+  #challan-review .print-only { display: inline; }
+  #challan-review [data-challan-detail] { display: block !important; position: static; width: 100%; max-height: none; overflow: visible; border: 0; }
+  #challan-review [data-challan-detail]::backdrop { display: none; }
+  #challan-review .lab-detail { break-inside: avoid; }
+}
+</style></head><body>
+<div class="fabric-shell" id="challan-shell">
+  <aside class="fabric-sidebar" id="challan-sidebar" aria-label="Workspace navigation">
+    <div class="sidebar-top"><div class="fabric-brand"><span>G</span><div>Garment workspace<small>ERP</small></div></div></div>
+    <div class="sidebar-navigation-scroll">
+      <nav aria-label="Workspace overview"><a href="/fabric.html?live=1">Overview</a></nav>
+      <details><summary>Colours</summary><nav aria-label="Colours"><a href="/fabric.html?live=1#colours">Colour library</a><a href="/fabric.html?live=1#labDips">Lab dips</a></nav></details>
+      <details open><summary>Production</summary><nav aria-label="Production">
+        <span id="production-pages" hidden></span>
+        <a id="challans-nav" href="#challans">Challans</a>
+        <a id="worker-bills-nav" href="#worker-bills">Worker bills</a>
+      </nav></details>
+      <details><summary>Finished Goods</summary><nav aria-label="Finished Goods"><a href="/fabric.html?live=1">Item stock summary</a></nav></details>
+    </div>
+  </aside>
+  <main class="fabric-main">
+    <div class="workspace-toolbar">
+      <button type="button" class="navigation-toggle" aria-controls="challan-sidebar" aria-expanded="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M8 4v16"></path><path id="menu-direction" d="m16 9-3 3 3 3"></path></svg><span>Hide menu</span>
+      </button>
+      <div class="workspace-toolbar-context"><span>Garment workspace</span><small>ERP</small></div>
+    </div>
+    <section id="challan-review" aria-label="Production documents"></section>
+<script type="module" src="/src/production-documents/app.js"></script>
+</main></div></body></html>

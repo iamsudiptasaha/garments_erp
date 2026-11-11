@@ -56,6 +56,14 @@
       }
     }
   },
+  "productionDocuments": {
+    "readFunction": "garments_erp.challan_documents",
+    "saveFunction": "garments_erp.save_challan_document",
+    "resources": ["productionChallans", "jobWorkerBills"],
+    "writableTables": ["challan", "challan_job_item", "challan_job_item_pieces", "job_worker_bill", "job_worker_bill_items"],
+    "links": "Select a job variant through its assigned job worker. Save issued stock size snapshots as children. Select billed challan lines; never rewrite them from the bill editor. Worker and quantities are derived.",
+    "attachments": "workerBill file route owns the private file link. The bill editor can detach that link."
+  },
   "ownership": {
     "contacts": "materialContacts",
     "contact_items": "contactPeople",
