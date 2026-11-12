@@ -6,7 +6,7 @@ Fabric, Colours, Inventory, Miscellaneous and the first Production screens are i
 
 Live Supabase account management is available at access.html: roles, employee assignments, guarded role archiving, account access and activity log. The signed-in navigation now links into fabric.html?live=1 using the authenticated permission snapshot. The sidebar was rebuilt and verified after login, including collapse/reopen; action buttons and inputs were resized.
 
-Applied database SQL and screen/table mappings are recorded under database/applied and database/catalogue. Draft SQL is explicitly separate and must not be assumed applied. Local environment files remain ignored.
+Applied database SQL and screen/table mappings are recorded under supabase/migrations and database/catalogue. Draft SQL is explicitly separate and must not be assumed applied. Local environment files remain ignored.
 
 ## Resume here
 

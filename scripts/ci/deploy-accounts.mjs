@@ -1,43 +1,63 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { assertMainRelease, productionProject } from './migrate-production.mjs';
+import { publishedCommit } from './workers-deploy.mjs';
 
-if (
-  process.env.GITHUB_ACTIONS !== 'true' ||
-  process.env.GITHUB_REF !== 'refs/heads/main' ||
-  process.env.GITHUB_REPOSITORY !== 'iamsudiptasaha/garments_erp' ||
-  !['push', 'workflow_dispatch'].includes(process.env.GITHUB_EVENT_NAME)
-) {
-  throw Error('ERP account deployment requires the protected GitHub main release workflow.');
+export function accountFunctionChanged(deployed, commit) {
+  if (!/^[a-f0-9]{40}$/.test(deployed || '')) return true;
+  return (
+    spawnSync('git', [
+      'diff',
+      '--quiet',
+      deployed,
+      commit,
+      '--',
+      'supabase/functions/erp-accounts',
+      'scripts/ci/deploy-accounts.mjs',
+    ]).status !== 0
+  );
 }
 
-const { SUPABASE_PROJECT_REF, VITE_SUPABASE_URL, SUPABASE_ACCESS_TOKEN } = process.env;
-if (
-  !/^[a-z]{20}$/.test(SUPABASE_PROJECT_REF || '') ||
-  !SUPABASE_ACCESS_TOKEN ||
-  new URL(VITE_SUPABASE_URL).origin !== `https://${SUPABASE_PROJECT_REF}.supabase.co`
-) {
-  throw Error('The protected environment must identify the same Supabase project as the portal.');
+async function deploy() {
+  assertMainRelease(process.env);
+  const { GITHUB_SHA, VITE_SUPABASE_URL, SUPABASE_ACCESS_TOKEN } = process.env;
+  const projectOrigin = `https://${productionProject}.supabase.co`;
+  if (new URL(VITE_SUPABASE_URL).origin !== projectOrigin)
+    throw Error('The portal must use the production Supabase project.');
+
+  // Use the published app rather than the preceding Git commit so a skipped or
+  // failed release cannot silently omit a pending function update.
+  if (!accountFunctionChanged(await publishedCommit(), GITHUB_SHA)) {
+    console.log('The published release already includes this account function.');
+    return;
+  }
+  if (!SUPABASE_ACCESS_TOKEN)
+    throw Error('Configure SUPABASE_ACCESS_TOKEN for function deployment.');
+
+  execFileSync(
+    'npx',
+    [
+      '--yes',
+      'supabase@2.122.0',
+      'functions',
+      'deploy',
+      'erp-accounts',
+      '--project-ref',
+      productionProject,
+      '--use-api',
+      '--no-verify-jwt',
+    ],
+    { stdio: 'inherit' },
+  );
+  const gateway = await fetch(new URL('/functions/v1/erp-accounts', projectOrigin), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+    signal: AbortSignal.timeout(15000),
+  });
+  if (gateway.status !== 401)
+    throw Error('ERP account function did not reject an anonymous request.');
 }
 
-execFileSync(
-  'npx',
-  [
-    '--yes',
-    'supabase@2.122.0',
-    'functions',
-    'deploy',
-    'erp-accounts',
-    '--project-ref',
-    SUPABASE_PROJECT_REF,
-    '--use-api',
-    '--no-verify-jwt',
-  ],
-  { stdio: 'inherit' },
-);
-const gateway = await fetch(new URL('/functions/v1/erp-accounts', VITE_SUPABASE_URL), {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: '{}',
-  signal: AbortSignal.timeout(15000),
-});
-if (gateway.status !== 401)
-  throw Error('ERP account function did not reject an anonymous request.');
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await deploy();

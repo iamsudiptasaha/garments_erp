@@ -9,7 +9,7 @@ node database/ci/seed.mjs /tmp/erp-ci-seed.sql
 docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/ci/baseline.sql >/tmp/erp-ci-baseline.log
 for migration in supabase/migrations/*.sql; do
   version=$(basename "$migration" | cut -d_ -f1)
-  if [[ "$version" > 20261029201439 ]]; then
+  if [[ "$version" > 20261029201541 ]]; then
     if [[ "$version" == 20261108090000 ]]; then
       while IFS= read -r line; do
         if [[ "$line" == '\ir ../../supabase/migrations/20261108090000_sellable_product.sql' ]]; then

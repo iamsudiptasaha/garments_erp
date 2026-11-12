@@ -1,0 +1,1 @@
+ALTER VIEW garments_erp.view_knitting_bill_item_details RENAME TO view_knitted_fabric_name;

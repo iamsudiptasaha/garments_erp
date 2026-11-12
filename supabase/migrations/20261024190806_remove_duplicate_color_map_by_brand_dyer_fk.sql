@@ -1,0 +1,1 @@
+ALTER TABLE garments_erp.color_map_by_brand DROP CONSTRAINT fk_color_map_by_brand_dyer;

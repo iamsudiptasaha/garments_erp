@@ -1,5 +1,5 @@
 -- Schema-only read-only capture, 2026-10-30. No business/Auth rows.
--- Historical migration cutoff: 20261029201439.
+-- Historical migration cutoff: 20261029201541.
 create schema if not exists garments_access;
 create schema if not exists garments_erp;
 create schema if not exists supasheet;

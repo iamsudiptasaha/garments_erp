@@ -28,7 +28,7 @@ docker exec "$container" psql -U supabase_admin -d "$database" -v ON_ERROR_STOP=
 docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 < database/ci/baseline.sql >> "$work/replay.log" 2>&1
 for prior in supabase/migrations/*.sql; do
   version=$(basename "$prior" | cut -d_ -f1)
-  if [[ "$version" > 20261029201439 && "$version" < 20261105135706 ]]; then
+  if [[ "$version" > 20261029201541 && "$version" < 20261105135706 ]]; then
     docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 < "$prior" >> "$work/replay.log" 2>&1
   fi
 done
