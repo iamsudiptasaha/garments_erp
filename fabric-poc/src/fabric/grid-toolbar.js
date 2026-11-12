@@ -11,9 +11,9 @@ export function WorksheetToolbar({ label, value, onChange, children }) {
   );
 }
 
-export function GridSearch({ label, value, onChange, placeholder = label }) {
+export function GridSearch({ label, value, onChange, placeholder = label, sheet = true }) {
   return h('input', {
-    className: 'erp-grid-search',
+    className: sheet ? 'erp-grid-search' : undefined,
     type: 'search',
     'aria-label': label,
     placeholder,

@@ -57,7 +57,7 @@ for (const [route, title, add, edit, form] of [
   });
 }
 
-async function documentFixtures(page) {
+async function documentFixtures(page, referencePages = {}) {
   const actor = '00000000-0000-4000-8000-000000000001';
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
   const exp = Math.floor(Date.now() / 1000) + 3600;
@@ -100,7 +100,11 @@ async function documentFixtures(page) {
       json = {
         actor,
         enabled: true,
-        permissions: { productionChallans: { view: true }, jobWorkerBills: { view: true } },
+        permissions: {
+          productionChallans: { view: true },
+          jobWorkerBills: { view: true },
+          ...referencePages,
+        },
       };
     } else if (name === 'erp_grid_preferences') {
       expect(args.p_owner).toBe(actor);
@@ -404,6 +408,119 @@ test('production document views retain their DOM and cache across workspace navi
   await expect.poll(() => reads).toEqual(['challans', 'bills', 'bills', 'challans', 'bills']);
   expect(await sameNode(survivingBill, billNode)).toBe(true);
   expect(await page.evaluate(() => window.documentViewStats)).toEqual(instrumentation);
+
+  let finishRefresh;
+  pauseReads(
+    () =>
+      new Promise((resolve) => {
+        finishRefresh = resolve;
+      }),
+  );
+  const refresh = activePanel.getByRole('button', { name: 'Refresh records' });
+  await refresh.click();
+  await expect.poll(() => reads.length).toBe(6);
+  await refresh.click();
+  await expect(survivingBill).toBeVisible();
+  await expect(page.getByText('Loading production documents…')).toHaveCount(0);
+  finishRefresh();
+  await page.waitForLoadState('networkidle');
+  expect(reads).toEqual(['challans', 'bills', 'bills', 'challans', 'bills', 'bills']);
+  expect(await sameNode(survivingBill, billNode)).toBe(true);
+  expect(await page.evaluate(() => window.documentViewStats)).toEqual(instrumentation);
   expect(documentRequests).toEqual([]);
   expect(errors).toEqual([]);
+});
+
+test('production document page chrome matches approved record pages at desktop and phone widths', async ({
+  page,
+}) => {
+  test.skip(!!process.env.E2E_BASE_URL, 'Uses authenticated document and reference fixtures');
+  const pages = [
+    ['productionProductTypes', 'Product types'],
+    ['suppliers', 'Suppliers'],
+    ['colours', 'Colour library'],
+    ['challans', 'Challans'],
+    ['worker-bills', 'Worker bills'],
+  ];
+  const access = { view: true, create: true, edit: true, format: true, print: true, export: true };
+  await documentFixtures(
+    page,
+    Object.fromEntries(pages.slice(0, 3).map(([route]) => [route, access])),
+  );
+  const captureDir = process.env.WORKSHEET_SCREENSHOT_DIR;
+  const captureBaseline = !!captureDir && process.env.WORKSHEET_CAPTURE_BASELINE === '1';
+  const style = (locator, props) =>
+    locator.evaluate(
+      (element, names) => names.map((name) => getComputedStyle(element)[name]),
+      props,
+    );
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    let reference;
+    for (const [route, title] of pages) {
+      const documents = route === 'challans' || route === 'worker-bills';
+      await page.goto(
+        documents
+          ? '/production-challan.html?visual=' + route + '#' + route
+          : '/fabric.html?live=1#' + route,
+      );
+      const main = page.locator('main.fabric-main');
+      const header = main.locator('.fabric-page-header:visible');
+      const actions = main.locator('.fabric-actions:visible');
+      const banner = main.locator('.access-info');
+      const refresh = main.getByRole('button', { name: 'Refresh records' });
+      const search = actions.getByRole('searchbox');
+      const toggle = header.locator('.fabric-view-toggle');
+      await expect(header.getByRole('heading', { name: title, exact: true })).toBeVisible();
+      if (!captureBaseline || !documents) {
+        await expect(banner).toHaveText(/Signed in · Fabric, Colours and Production connected/);
+        await expect(header.locator('h1 + p')).toBeVisible();
+        await expect(refresh).toBeVisible();
+        await expect(
+          main.getByText('Live Supabase records · saved changes are shared', { exact: false }),
+        ).toBeVisible();
+      } else {
+        await expect(main.locator('.overview-card:visible').first()).toBeVisible();
+      }
+      if (captureDir)
+        await main.screenshot({
+          path: captureDir + '/' + route + '-' + width + '-overview.png',
+          animations: 'disabled',
+        });
+
+      const chrome = async () => ({
+        header: await style(header, ['gap', 'marginBottom', 'flexWrap']),
+        title: await style(header.locator('h1'), ['fontSize', 'fontWeight', 'letterSpacing']),
+        toggle: await style(toggle, ['backgroundColor', 'borderRadius', 'padding']),
+        actions: await style(actions, ['gap', 'marginBottom', 'flexWrap']),
+        search: await style(search, ['fontSize', 'padding', 'borderRadius', 'width']),
+        banner: await style(banner, ['fontSize', 'padding', 'marginBottom']),
+        refresh: await style(refresh, ['fontSize', 'padding', 'borderRadius']),
+      });
+      const overviewChrome = captureBaseline ? null : await chrome();
+      if (!captureBaseline) {
+        await search.fill('no-such-record-123456789');
+        await expect(main.locator('.empty-state:visible')).toHaveText(
+          'Nothing here yetTry a different search.',
+        );
+        await search.clear();
+      }
+      const searchNode = await search.elementHandle();
+      await toggle.getByRole('button', { name: 'Sheet' }).click();
+      await expect(main.getByRole('combobox', { name: 'Sheet zoom' })).toBeVisible();
+      if (captureDir)
+        await main.screenshot({
+          path: captureDir + '/' + route + '-' + width + '-sheet.png',
+          animations: 'disabled',
+        });
+      if (captureBaseline) continue;
+
+      const sheetChrome = await chrome();
+      reference ||= { overviewChrome, sheetChrome };
+      expect({ overviewChrome, sheetChrome }, title + ' at ' + width).toEqual(reference);
+      expect(await search.evaluate((node, original) => node === original, searchNode)).toBe(true);
+      const bounds = await actions.boundingBox();
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    }
+  }
 });

@@ -1,7 +1,7 @@
 import { AccessApp } from '../access/app.js';
 import { FilesWorkspace } from '../files/app.js';
 import { adminTabs, workspacePath, workspacePathPage } from '../access/workspace-routes.js';
-import { GridSearch, useGridSearch } from './grid-toolbar.js';
+import { useGridSearch } from './grid-toolbar.js';
 import {
   productionDocumentPath,
   productionDocumentRoutes,
@@ -56,7 +56,14 @@ import {
   upgradeFabric,
 } from './domain.js';
 import { FabricSheet } from './sheet.js';
-import { WorkspaceViewToggle } from './view-toggle.js';
+import {
+  liveRecordNotice,
+  RecordPageActions,
+  RecordPageEmpty,
+  RecordPageHeading,
+  RecordPageStatus,
+  WorkspaceConnectionBanner,
+} from './record-page.js';
 import { BillEditor } from './editor.js';
 import './styles.css';
 import { ProductionDocumentWorkspace } from '../production-documents/app.js';
@@ -335,7 +342,7 @@ function App({ live, refreshWorkspaceAccess }) {
         },
       }));
       setLiveReady(true);
-      setNotice('Live Supabase records · saved changes are shared');
+      setNotice(liveRecordNotice);
     } catch (e) {
       setLiveReady(false);
       setLiveError(e.message);
@@ -413,11 +420,7 @@ function App({ live, refreshWorkspaceAccess }) {
       if (url.href !== location.href) history.pushState(null, '', url);
     }
     syncRoute();
-    setNotice(
-      live
-        ? 'Live Supabase records · saved changes are shared'
-        : 'Local workspace · sample data · no live database writes',
-    );
+    setNotice(live ? liveRecordNotice : 'Local workspace · sample data · no live database writes');
   }
   function edit(id) {
     if (live && (!liveReady || !connectedPage(page))) return;
@@ -884,13 +887,7 @@ function App({ live, refreshWorkspaceAccess }) {
         React.Fragment,
         null,
         live
-          ? h(
-              'div',
-              { className: 'access-info' },
-              liveReady
-                ? 'Signed in · Fabric, Colours and Production connected to Supabase'
-                : 'Signed in · loading database records',
-            )
+          ? h(WorkspaceConnectionBanner, { ready: liveReady })
           : h(
               'div',
               { className: 'access-preview' },
@@ -1100,64 +1097,37 @@ function App({ live, refreshWorkspaceAccess }) {
                             : h(
                                 React.Fragment,
                                 null,
+                                h(RecordPageHeading, {
+                                  eyebrow:
+                                    (spec.section === 'colours'
+                                      ? 'COLOURS / '
+                                      : spec.section === 'production'
+                                        ? 'PRODUCTION / '
+                                        : spec.section === 'inventory'
+                                          ? 'RAW MATERIAL INVENTORY / '
+                                          : spec.section === 'miscellaneous'
+                                            ? 'MISCELLANEOUS / '
+                                            : 'FABRIC / ') + spec.title.toUpperCase(),
+                                  title: spec.title,
+                                  description: spec.subtitle,
+                                  view,
+                                  onView: (mode) => {
+                                    setView(mode);
+                                    setSelected(null);
+                                  },
+                                }),
                                 h(
-                                  'header',
-                                  { className: 'fabric-page-header' },
-                                  h(
-                                    'div',
-                                    null,
-                                    h(
-                                      'p',
-                                      { className: 'eyebrow' },
-                                      (spec.section === 'colours'
-                                        ? 'COLOURS / '
-                                        : spec.section === 'production'
-                                          ? 'PRODUCTION / '
-                                          : spec.section === 'inventory'
-                                            ? 'RAW MATERIAL INVENTORY / '
-                                            : spec.section === 'miscellaneous'
-                                              ? 'MISCELLANEOUS / '
-                                              : 'FABRIC / ') + spec.title.toUpperCase(),
-                                    ),
-                                    h('h1', null, spec.title),
-                                    h('p', null, spec.subtitle),
-                                  ),
-                                  h(WorkspaceViewToggle, {
+                                  RecordPageActions,
+                                  {
                                     view,
-                                    onChange: (mode) => {
-                                      setView(mode);
+                                    label: 'Search ' + spec.title,
+                                    placeholder: searchPlaceholder,
+                                    value: query,
+                                    onSearch: (value) => {
+                                      setQuery(value);
                                       setSelected(null);
                                     },
-                                  }),
-                                ),
-                                h(
-                                  'div',
-                                  {
-                                    className:
-                                      view === 'sheet'
-                                        ? 'fabric-actions worksheet-actions'
-                                        : 'fabric-actions',
                                   },
-                                  view === 'sheet'
-                                    ? h(GridSearch, {
-                                        label: 'Search ' + spec.title,
-                                        placeholder: searchPlaceholder,
-                                        value: query,
-                                        onChange: (value) => {
-                                          setQuery(value);
-                                          setSelected(null);
-                                        },
-                                      })
-                                    : h('input', {
-                                        type: 'search',
-                                        'aria-label': 'Search ' + spec.title,
-                                        placeholder: searchPlaceholder,
-                                        value: query,
-                                        onChange: (e) => {
-                                          setQuery(e.target.value);
-                                          setSelected(null);
-                                        },
-                                      }),
                                   !spec.readonly &&
                                     can('create') &&
                                     h(
@@ -1197,32 +1167,18 @@ function App({ live, refreshWorkspaceAccess }) {
                                     },
                                     'Reconcile selected stock',
                                   ),
-                                h(
-                                  'div',
-                                  {
-                                    className: 'fabric-status',
-                                    role: 'status',
-                                    'aria-live': 'polite',
-                                  },
+                                h(RecordPageStatus, {
                                   notice,
-                                  live && h('button', { onClick: refreshLive }, 'Refresh records'),
-                                ),
+                                  onRefresh: live ? refreshLive : undefined,
+                                }),
                                 view === 'overview' &&
                                   records.length === 0 &&
-                                  h(
-                                    'div',
-                                    { className: 'empty-state' },
-                                    h('h2', null, 'Nothing here yet'),
-                                    h(
-                                      'p',
-                                      null,
-                                      query
-                                        ? 'Try a different search.'
-                                        : spec.master
-                                          ? 'Add the first record to get started.'
-                                          : 'Add the first document to get started.',
-                                    ),
-                                  ),
+                                  h(RecordPageEmpty, {
+                                    query,
+                                    prompt: spec.master
+                                      ? 'Add the first record to get started.'
+                                      : 'Add the first document to get started.',
+                                  }),
                                 view === 'overview'
                                   ? overview()
                                   : h(FabricSheet, {
@@ -1287,6 +1243,7 @@ function App({ live, refreshWorkspaceAccess }) {
         'main',
         main,
         toolbar,
+        documentPage && live && h(WorkspaceConnectionBanner, { ready: liveReady }),
         h(ProductionDocumentWorkspace, {
           key: live?.actor,
           page: documentPage ? page : null,
