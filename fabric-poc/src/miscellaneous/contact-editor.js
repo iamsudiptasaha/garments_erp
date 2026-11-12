@@ -1,3 +1,4 @@
+import { fileRecordPath } from '../access/workspace-routes.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { miscellaneousPages } from './catalog.js';
 import { contactSections, contactDraft, saveContact } from './contact-model.js';
@@ -6,10 +7,17 @@ import { optionsFor } from '../fabric/domain.js';
 const h = React.createElement;
 export function ContactEditor({ data, id, onSave, onClose, can = () => true }) {
   const dialog = useRef(null),
+    saving = useRef(false),
     [draft, setDraft] = useState(() => contactDraft(data, id, can)),
+    [activeSection, setActiveSection] = useState('basic'),
+    [detailQuery, setDetailQuery] = useState(''),
     [error, setError] = useState(''),
     [review, setReview] = useState(false),
     [busy, setBusy] = useState(false);
+  const editable = can(id ? 'edit' : 'create', 'materialContacts');
+  const visibleSections = contactSections.filter(
+    ({ table }) => draft.sections[table] !== undefined,
+  );
   useEffect(() => {
     dialog.current.showModal();
   }, []);
@@ -57,6 +65,7 @@ export function ContactEditor({ data, id, onSave, onClose, can = () => true }) {
   }
   async function submit(e) {
     e.preventDefault();
+    if (saving.current || !editable) return;
     setError('');
     try {
       const next = saveContact(data, draft, can);
@@ -64,12 +73,14 @@ export function ContactEditor({ data, id, onSave, onClose, can = () => true }) {
         setReview(true);
         return;
       }
+      saving.current = true;
       setBusy(true);
       await onSave(next);
       onClose();
     } catch (e) {
       setError(e.message);
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
@@ -78,6 +89,7 @@ export function ContactEditor({ data, id, onSave, onClose, can = () => true }) {
     {
       ref: dialog,
       className: 'fabric-dialog contact-editor',
+      'aria-labelledby': 'contact-editor-title',
       onCancel: (e) => (busy ? e.preventDefault() : onClose()),
     },
     h(
@@ -87,7 +99,11 @@ export function ContactEditor({ data, id, onSave, onClose, can = () => true }) {
         'div',
         null,
         h('small', null, 'CONTACTS'),
-        h('h2', null, review ? 'Review contact' : id ? 'Edit contact' : 'Add contact'),
+        h(
+          'h2',
+          { id: 'contact-editor-title' },
+          review ? 'Review Changes' : id ? draft.header.company_name || 'Contact' : 'Add contact',
+        ),
       ),
       h('button', { onClick: onClose, disabled: busy }, 'Close'),
     ),
@@ -95,12 +111,55 @@ export function ContactEditor({ data, id, onSave, onClose, can = () => true }) {
     h(
       'form',
       { onSubmit: submit },
+      !review &&
+        h(
+          'nav',
+          { className: 'contact-section-nav', 'aria-label': 'Contact sections' },
+          [
+            ['basic', 'Basic Information'],
+            ...visibleSections.map(({ table, title }) => [table, title]),
+          ].map(([key, title]) =>
+            h(
+              'button',
+              {
+                key,
+                type: 'button',
+                'aria-pressed': activeSection === key,
+                onClick: () => setActiveSection(key),
+              },
+              title,
+            ),
+          ),
+        ),
       h(
         'section',
-        { className: 'fabric-line' },
-        h('h3', null, 'Contact'),
-        review
-          ? h('p', null, draft.header.company_name || 'Unnamed contact')
+        { className: 'fabric-line', hidden: !review && activeSection !== 'basic' },
+        h('h3', null, 'Basic Information'),
+        review || !editable
+          ? h(
+              'dl',
+              { className: 'fabric-fields' },
+              miscellaneousPages.materialContacts.header.map((f) => {
+                const original = data.contacts.find((row) => row.id === id)?.[f.key];
+                const value = draft.header[f.key];
+                const display = (fieldValue) =>
+                  f.type === 'select'
+                    ? optionsFor(data, f.source).find(([key]) => key === fieldValue)?.[1] || '—'
+                    : fieldValue || '—';
+                return h(
+                  'div',
+                  { key: f.key },
+                  h('dt', null, f.label),
+                  h(
+                    'dd',
+                    null,
+                    id && String(original ?? '') !== String(value ?? '')
+                      ? display(original) + ' → ' + display(value)
+                      : display(value),
+                  ),
+                );
+              }),
+            )
           : h(
               'div',
               { className: 'fabric-fields' },
@@ -111,143 +170,192 @@ export function ContactEditor({ data, id, onSave, onClose, can = () => true }) {
               ),
             ),
       ),
-      contactSections.map((section) => {
+      visibleSections.map((section) => {
         const rows = draft.sections[section.table];
+        const additional = section.table === 'contact_extra';
+        const bank = section.table === 'contact_bank_account';
+        const query = additional && !review ? detailQuery.trim().toLowerCase() : '';
+        const matches = (row) =>
+          !query ||
+          !row.id ||
+          [row.key, row.value].some((value) =>
+            String(value ?? '')
+              .toLowerCase()
+              .includes(query),
+          );
+        const fields = section.fields.filter((field) => field.type !== 'checkbox');
+        const toggles = section.fields.filter((field) => field.type === 'checkbox');
         return h(
           'section',
-          { className: 'fabric-line', key: section.table },
-          h('h3', null, section.title + ' · optional'),
-          rows === undefined
-            ? h('p', null, 'Your role cannot view this section.')
-            : h(
-                React.Fragment,
-                null,
-                rows.length === 0 && h('p', { className: 'editor-note' }, 'Not provided'),
-                rows.map((row, index) =>
-                  h(
-                    'div',
-                    { className: 'contact-entry-row', key: row.id || index },
-                    h('h4', null, section.title + ' ' + (index + 1)),
-                    review
-                      ? h(
-                          'dl',
-                          null,
-                          section.fields.map((f) =>
-                            h(
-                              'div',
-                              { key: f.key },
-                              h('dt', null, f.label),
-                              h(
-                                'dd',
-                                null,
-                                (f.type === 'checkbox'
-                                  ? row[f.key]
-                                    ? 'Yes'
-                                    : 'No'
-                                  : f.type === 'select'
-                                    ? optionsFor(data, f.source).find(
-                                        ([key]) => key === row[f.key],
-                                      )?.[1]
-                                    : row[f.key]) || '—',
-                              ),
-                            ),
-                          ),
-                        )
-                      : h(
+          {
+            className: 'fabric-line',
+            key: section.table,
+            hidden: !review && activeSection !== section.table,
+          },
+          h('h3', null, section.title),
+          additional &&
+            !review &&
+            rows.length > 0 &&
+            h('input', {
+              type: 'search',
+              'aria-label': 'Search additional details',
+              placeholder: 'Search detail names and values',
+              value: detailQuery,
+              onChange: (event) => setDetailQuery(event.target.value),
+            }),
+          h(
+            React.Fragment,
+            null,
+            rows.length === 0 && h('p', { className: 'editor-note' }, 'Not provided'),
+            query &&
+              !rows.some(matches) &&
+              h('p', { className: 'editor-note' }, 'No matching details'),
+            rows.map((row, index) => {
+              if (!matches(row)) return null;
+              const canChange = editable && can(row.id ? 'edit' : 'create', section.resource);
+              const renderField = (field) =>
+                input(
+                  field,
+                  row,
+                  (value) =>
+                    change((d) => ({
+                      ...d,
+                      sections: {
+                        ...d.sections,
+                        [section.table]: changeContactRow(
+                          d.sections[section.table],
+                          index,
+                          field,
+                          value,
+                        ),
+                      },
+                    })),
+                  section.title + ' ' + (index + 1) + ' ',
+                  busy,
+                );
+              return h(
+                'div',
+                { className: 'contact-entry-row', key: row.id || index },
+                h('h4', null, section.title + ' ' + (index + 1)),
+                review || !canChange
+                  ? h(
+                      'dl',
+                      null,
+                      section.fields.map((f) =>
+                        h(
                           'div',
-                          { className: 'fabric-fields' },
-                          section.fields.map((f) =>
-                            input(
-                              f,
-                              row,
-                              (value) =>
-                                change((d) => ({
-                                  ...d,
-                                  sections: {
-                                    ...d.sections,
-                                    [section.table]: changeContactRow(
-                                      d.sections[section.table],
-                                      index,
-                                      f,
-                                      value,
-                                    ),
-                                  },
-                                })),
-                              section.title + ' ' + (index + 1) + ' ',
-                              busy || !can(row.id ? 'edit' : 'create', section.resource),
-                            ),
+                          { key: f.key },
+                          h('dt', null, f.label),
+                          h(
+                            'dd',
+                            null,
+                            (f.type === 'checkbox'
+                              ? row[f.key]
+                                ? 'Yes'
+                                : 'No'
+                              : f.type === 'select'
+                                ? optionsFor(data, f.source).find(
+                                    ([key]) => key === row[f.key],
+                                  )?.[1]
+                                : row[f.key]) || '—',
                           ),
                         ),
-                    !review &&
-                      !row.id &&
-                      h(
-                        'button',
-                        {
-                          type: 'button',
-                          onClick: () =>
-                            change((d) => ({
-                              ...d,
-                              sections: {
-                                ...d.sections,
-                                [section.table]: d.sections[section.table].filter(
-                                  (_, i) => i !== index,
-                                ),
-                              },
-                            })),
-                        },
-                        'Remove row',
                       ),
-                  ),
-                ),
+                    )
+                  : h(
+                      'div',
+                      { className: 'fabric-fields' },
+                      fields.map(renderField),
+                      toggles.length > 0 &&
+                        h('div', { className: 'contact-primary-flags' }, toggles.map(renderField)),
+                    ),
                 !review &&
-                  can('create', section.resource) &&
+                  bank &&
+                  data._live &&
+                  row.id &&
+                  h(
+                    'a',
+                    {
+                      href: fileRecordPath('contactBankDocument', { record: row.id }),
+                      target: '_blank',
+                      rel: 'noopener noreferrer',
+                    },
+                    canChange ? 'Manage supporting document' : 'View supporting document',
+                  ),
+                !review &&
+                  canChange &&
+                  !row.id &&
                   h(
                     'button',
                     {
                       type: 'button',
-                      disabled: busy,
                       onClick: () =>
                         change((d) => ({
                           ...d,
                           sections: {
                             ...d.sections,
-                            [section.table]: [
-                              ...d.sections[section.table],
-                              Object.fromEntries(
-                                section.fields.map((f) => [
-                                  f.key,
-                                  f.type === 'checkbox' ? false : '',
-                                ]),
-                              ),
-                            ],
+                            [section.table]: d.sections[section.table].filter(
+                              (_, i) => i !== index,
+                            ),
                           },
                         })),
                     },
-                    '+ Add ' +
-                      {
-                        contact_items: 'contact item',
-                        contact_bank_account: 'bank account',
-                        contact_extra: 'extra detail',
-                      }[section.table],
+                    'Remove row',
                   ),
+              );
+            }),
+            !review &&
+              editable &&
+              can('create', section.resource) &&
+              h(
+                'button',
+                {
+                  type: 'button',
+                  disabled: busy,
+                  onClick: () =>
+                    change((d) => ({
+                      ...d,
+                      sections: {
+                        ...d.sections,
+                        [section.table]: [
+                          ...d.sections[section.table],
+                          Object.fromEntries(
+                            section.fields.map((f) => [f.key, f.type === 'checkbox' ? false : '']),
+                          ),
+                        ],
+                      },
+                    })),
+                },
+                '+ Add ' +
+                  {
+                    contact_items: 'contact item',
+                    contact_bank_account: 'bank account',
+                    contact_extra: 'detail',
+                  }[section.table],
               ),
+          ),
         );
       }),
       h(
         'div',
         { className: 'editor-actions' },
-        h('button', { type: 'button', onClick: onClose, disabled: busy }, 'Cancel'),
+        h(
+          'button',
+          { type: 'button', onClick: onClose, disabled: busy },
+          editable ? 'Cancel' : 'Close',
+        ),
         review &&
           h(
             'button',
             { type: 'button', disabled: busy, onClick: () => setReview(false) },
             'Back to edit',
           ),
-        h(
-          'button',
-          { type: 'submit', className: 'primary', disabled: busy },
-          review ? 'Confirm & save contact' : 'Review contact',
-        ),
+        editable &&
+          h(
+            'button',
+            { type: 'submit', className: 'primary', disabled: busy },
+            review ? 'Confirm Save' : 'Review Changes',
+          ),
       ),
     ),
   );

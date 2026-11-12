@@ -9,12 +9,21 @@ import './styles.css';
 import { followWorkspaceLink, workspacePath } from '../access/workspace-routes.js';
 const h = React.createElement;
 export function FilesWorkspace({ access, admin, navigate }) {
+  const [initial] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    const record = params.get('record');
+    return {
+      target: params.get('target') || '',
+      query: params.get('query') || '',
+      record: /^[1-9][0-9]*$/.test(record ?? '') ? record : null,
+    };
+  });
   const commands = useMemo(() => liveFileCommands(getAccessClient()), []),
     [registry, setRegistry] = useState([]),
     [routes, setRoutes] = useState([]),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
-    [key, setKey] = useState(''),
+    [key, setKey] = useState(initial.target),
     [query, setQuery] = useState(''),
     [records, setRecords] = useState([]),
     [selected, setSelected] = useState(null),
@@ -37,9 +46,12 @@ export function FilesWorkspace({ access, admin, navigate }) {
     if (!admin || access.administrator) void refresh();
   }, [commands, admin, access.administrator]);
   useEffect(() => {
-    setSelected(null);
+    const linked = target?.key === initial.target;
+    setSelected(
+      linked && initial.record ? { value: initial.record, label: '#' + initial.record } : null,
+    );
     setRecords([]);
-    setQuery('');
+    setQuery(linked ? initial.query : '');
   }, [target?.key]);
   useEffect(() => {
     if (!target || admin) return;
@@ -205,6 +217,7 @@ export function FilesWorkspace({ access, admin, navigate }) {
                     h(Select, {
                       'aria-labelledby': 'saved-record-label',
                       classNamePrefix: 'employee-select',
+                      inputValue: query,
                       options: records.map((r) => ({
                         value: r.id,
                         label: `${r.label} · #${r.id}`,
@@ -229,8 +242,7 @@ export function FilesWorkspace({ access, admin, navigate }) {
                     recordLabel: selected.label,
                     targetDefinition: target,
                     canRead: true,
-                    canWrite:
-                      target.enabled && access.permissions?.[target.resource]?.edit === true,
+                    canWrite: access.permissions?.[target.resource]?.edit === true,
                   }),
               )
             : h('p', null, 'No attachment-enabled screens are available to your role.'),

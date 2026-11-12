@@ -1,7 +1,13 @@
+import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { prettyBytes, targetFor, resolveGroup } from './model.js';
 const h = React.createElement;
-export function FilePanel({
+const isCurrent = (row) => row.current === true || row.current === undefined;
+export function FilePanel(props) {
+  return h(RecordFilePanel, { ...props, key: props.targetKey + ':' + props.recordId });
+}
+
+function RecordFilePanel({
   store,
   registry,
   targetKey,
@@ -21,6 +27,7 @@ export function FilePanel({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
+  const review = useSaveReview();
   let group = null;
   try {
     group = resolveGroup(registry, target.group);
@@ -53,33 +60,101 @@ export function FilePanel({
       generation.current++;
     };
   }, [store, targetKey, recordId, canRead]);
-  async function attach(e) {
-    e.preventDefault();
+  function attach() {
+    if (!canWrite || !file || !group || busy) return;
     const epoch = generation.current;
-    setBusy(true);
-    onBusyChange?.(true);
-    setError('');
-    try {
-      const attachment = await store.attach({ targetKey, recordId, file });
-      if (onAttached) await onAttached(attachment);
-      if (epoch !== generation.current) return;
-      setFile(null);
-      if (picker.current) picker.current.value = '';
-      await refresh(epoch);
-      if (epoch !== generation.current) return;
-      setNotice(store.mode === 'local' ? 'File saved in this browser only.' : 'Attachment saved.');
-    } catch (e) {
-      if (epoch === generation.current) setError(e.message);
-    } finally {
-      if (epoch === generation.current) setBusy(false);
-      onBusyChange?.(false);
-    }
+    const current = rows.find(isCurrent);
+    review.prepare(
+      {
+        targetKey,
+        recordId,
+        previousAttachmentId: current?.id ?? null,
+        attempt: crypto.randomUUID(),
+        filename: file.name,
+        size: file.size,
+        type: file.type,
+        modified: file.lastModified,
+      },
+      [
+        ['Record', recordLabel || recordId],
+        ['Attachment field', target.label],
+        ['Action', current ? 'Replace' : 'Upload'],
+        ['Current file', current?.filename],
+        ['Selected file', file.name],
+        ['File size', prettyBytes(file.size)],
+      ],
+      async (payload, requestId) => {
+        if (epoch !== generation.current)
+          throw Error('The target changed. Return to editing and review again.');
+        onBusyChange?.(true);
+        try {
+          const attachment = await store
+            .attach({
+              targetKey: payload.targetKey,
+              recordId: payload.recordId,
+              file,
+              requestId,
+              previousAttachmentId: payload.previousAttachmentId,
+            })
+            .catch(async (failure) => {
+              if (epoch === generation.current) await refresh(epoch);
+              throw failure;
+            });
+          if (epoch !== generation.current) return;
+          setFile(null);
+          if (picker.current) picker.current.value = '';
+          try {
+            await onAttached?.(attachment);
+          } catch {
+            setError(
+              'File saved, but the record could not be refreshed. Reload before editing it.',
+            );
+            return;
+          }
+          await refresh(epoch);
+          if (epoch === generation.current)
+            setNotice(
+              store.mode === 'local' ? 'File saved in this browser only.' : 'Attachment saved.',
+            );
+        } finally {
+          onBusyChange?.(false);
+        }
+      },
+      'Review attachment',
+    );
   }
-  async function open(row) {
+  function remove(row) {
+    review.prepare(
+      { targetKey, recordId, remove: row.id },
+      [
+        ['Record', recordLabel || recordId],
+        ['Attachment field', target.label],
+        ['Remove file', row.filename],
+        ['File after save', 'None'],
+      ],
+      async (payload) => {
+        onBusyChange?.(true);
+        try {
+          await store.remove(payload.targetKey, payload.recordId, payload.remove);
+          await refresh();
+          setNotice('Attachment removed.');
+          try {
+            await onAttached?.(null);
+          } catch {
+            setError('Attachment removed, but the record could not be refreshed.');
+          }
+        } finally {
+          onBusyChange?.(false);
+        }
+      },
+      'Review attachment removal',
+    );
+  }
+  async function open(row, download = false) {
     setBusy(true);
     setError('');
     try {
-      const result = await store.open(row);
+      const result = await store.open(row, { targetKey, recordId, download });
       if (result instanceof Blob) {
         const url = URL.createObjectURL(result),
           link = document.createElement('a');
@@ -89,8 +164,17 @@ export function FilePanel({
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } else {
         const url = new URL(result?.url);
-        if (url.protocol !== 'https:') throw Error('An authorised download could not be opened.');
-        window.open(url.href, '_blank', 'noopener,noreferrer');
+        const isLoopback = (host) => ['localhost', '127.0.0.1', '[::1]'].includes(host);
+        if (
+          url.protocol !== 'https:' &&
+          !(url.protocol === 'http:' && isLoopback(url.hostname) && isLoopback(location.hostname))
+        )
+          throw Error('An authorised download could not be opened.');
+        const link = document.createElement('a');
+        link.href = url.href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.click();
       }
     } catch (e) {
       setError(e.message);
@@ -128,9 +212,10 @@ export function FilePanel({
     error && h('p', { role: 'alert', className: 'form-error' }, error),
     notice && h('p', { role: 'status', className: 'file-notice' }, notice),
     canWrite &&
+      target.enabled !== false &&
       h(
-        'form',
-        { onSubmit: attach, className: 'file-uploader' },
+        ReviewForm,
+        { review, onSubmit: attach, className: 'file-uploader', key: targetKey + ':' + recordId },
         h(
           'label',
           null,
@@ -160,7 +245,7 @@ export function FilePanel({
             h(
               'button',
               { className: 'primary', type: 'submit', disabled: busy || !group },
-              busy ? 'Saving…' : store.mode === 'local' ? 'Save local file' : 'Attach file',
+              'Review attachment',
             ),
           ),
       ),
@@ -169,33 +254,53 @@ export function FilePanel({
       : h(
           'div',
           { className: 'file-list' },
-          rows.length
-            ? rows.map((row) =>
-                h(
-                  'article',
-                  { key: row.id },
+          rows.some(isCurrent)
+            ? rows
+                .filter((row) => row.current !== false)
+                .map((row) =>
                   h(
-                    'div',
-                    { className: 'file-symbol', 'aria-hidden': true },
-                    row.mime_type === 'application/pdf' ? 'PDF' : 'IMG',
-                  ),
-                  h(
-                    'div',
-                    null,
-                    h('strong', null, row.filename),
+                    'article',
+                    { key: row.id },
                     h(
-                      'small',
-                      null,
-                      `${prettyBytes(row.file_size)} · ${new Date(row.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
+                      'div',
+                      { className: 'file-symbol', 'aria-hidden': true },
+                      row.mime_type === 'application/pdf' ? 'PDF' : 'IMG',
                     ),
+                    h(
+                      'div',
+                      null,
+                      h('strong', null, row.filename),
+                      h(
+                        'small',
+                        null,
+                        `${prettyBytes(row.file_size)} · ${new Date(row.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
+                      ),
+                    ),
+                    h(
+                      'button',
+                      { disabled: busy || review.busy, onClick: () => open(row) },
+                      store.mode === 'local' ? 'Download' : 'Open',
+                    ),
+                    store.mode === 'supabase' &&
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          disabled: busy || review.busy,
+                          onClick: () => open(row, true),
+                        },
+                        'Download',
+                      ),
+                    canWrite &&
+                      store.remove &&
+                      !review.pending &&
+                      h(
+                        'button',
+                        { type: 'button', disabled: busy, onClick: () => remove(row) },
+                        'Remove',
+                      ),
                   ),
-                  h(
-                    'button',
-                    { disabled: busy, onClick: () => open(row) },
-                    store.mode === 'local' ? 'Download' : 'Open',
-                  ),
-                ),
-              )
+                )
             : h(
                 'div',
                 { className: 'file-empty' },

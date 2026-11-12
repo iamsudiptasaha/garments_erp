@@ -190,13 +190,18 @@ test('failed live handover keeps entered numbers and reports the server error', 
 test('live Items selects shared variants and persists batch number through the setup command', async ({
   page,
 }) => {
-  const { calls } = await liveWorkspace(page);
+  const { calls, snapshot } = await liveWorkspace(page);
   await page.goto('/fabric.html?live=1#productionItems');
   await page.getByRole('button', { name: 'Edit →', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Edit item', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Manage item image' })).toHaveAttribute(
+    'href',
+    `/files.html?target=itemImage&record=${snapshot.item[0].id}`,
+  );
   await expect(page.getByLabel('Variant 1', { exact: true })).toHaveValue('101');
   await page.getByLabel('Batch number', { exact: true }).fill('000987');
-  await page.getByRole('button', { name: 'Save item', exact: true }).click();
+  await page.getByRole('button', { name: 'Review item', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm save' }).click();
   await expect
     .poll(() => calls.filter((c) => c.name === 'erp_save_production_setup').length)
     .toBe(1);

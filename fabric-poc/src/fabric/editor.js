@@ -1,3 +1,4 @@
+import { fileRecordPath } from '../access/workspace-routes.js';
 import { CheckoutVariantPicker } from './checkout-variant-picker.js';
 import { RichCommentEditor, RichComment } from './rich-comment.js';
 import { LabRecordSelect } from './lab-record-select.js';
@@ -25,6 +26,12 @@ const today = () =>
     month: '2-digit',
     day: '2-digit',
   }).format(new Date());
+const billAttachmentTargets = {
+  yarn: 'yarnBill',
+  knitting: 'knittingBill',
+  dyeBills: 'dyedBill',
+  materialReceipts: 'rawMaterialBill',
+};
 const fresh = (spec) => Object.fromEntries(spec.lineFields.map((f) => [f.key, '']));
 export function BillEditor({
   page,
@@ -100,6 +107,8 @@ export function BillEditor({
       : entrySpec;
   const [error, setError] = useState(''),
     [review, setReview] = useState(false),
+    reviewedSave = useRef(null),
+    saving = useRef(false),
     [busy, setBusy] = useState(false),
     [verifier, setVerifier] = useState(''),
     [password, setPassword] = useState(''),
@@ -307,8 +316,8 @@ export function BillEditor({
     try {
       if (page === 'materialReceipts' && !receiptMode)
         throw Error('Choose Purchase order or Fabric first.');
-      if (page === 'suppliers') saveSupplier(data, supplier);
-      else saveDocument(data, page, draft);
+      reviewedSave.current =
+        page === 'suppliers' ? saveSupplier(data, supplier) : saveDocument(data, page, draft);
       setError('');
       setReview(true);
     } catch (e) {
@@ -316,21 +325,41 @@ export function BillEditor({
     }
   }
   async function commit() {
+    if (!reviewedSave.current || saving.current) return;
+    saving.current = true;
     setBusy(true);
     try {
-      const next =
-        page === 'suppliers' ? saveSupplier(data, supplier) : saveDocument(data, page, draft);
       if (page === 'dyeBills' && (!verifier || !password))
         throw Error('Select an employee and enter their password to verify this save.');
-      await onSave(next, page === 'dyeBills' ? { employee: verifier, password } : undefined);
+      await onSave(
+        reviewedSave.current,
+        page === 'dyeBills' ? { employee: verifier, password } : undefined,
+      );
       onClose();
     } catch (e) {
       setError(e.message);
-      setBusy(false);
     } finally {
+      saving.current = false;
+      setBusy(false);
       setPassword('');
       setShowPassword(false);
     }
+  }
+  const original = review && id && page !== 'suppliers' ? documentFor(data, page, id) : null;
+  function reviewValue(field, current, previous, editing, resolve) {
+    const display = (value) => {
+      if (field.type === 'checkbox') return value ? 'Yes' : 'No';
+      if (field.type === 'select') return resolve(value) || '—';
+      if (field.type === 'date' && value) return String(value).slice(0, 10);
+      return value === '' || value == null
+        ? field.generated
+          ? 'Assigned automatically on database save'
+          : '—'
+        : value;
+    };
+    const next = display(current);
+    const before = display(previous);
+    return editing && String(before) !== String(next) ? before + ' → ' + next : next;
   }
   const totals =
     spec.lines && !spec.inventory
@@ -372,7 +401,14 @@ export function BillEditor({
         );
   return h(
     'dialog',
-    { ref: dialog, className: 'fabric-dialog', onCancel: onClose },
+    {
+      ref: dialog,
+      className: 'fabric-dialog',
+      onCancel: (event) => {
+        if (saving.current) event.preventDefault();
+        else onClose();
+      },
+    },
     h(
       'div',
       { className: 'editor-heading' },
@@ -394,8 +430,28 @@ export function BillEditor({
           `${review ? 'Review' : id ? 'Edit' : 'New'} ${page === 'suppliers' ? 'supplier' : spec.singular || spec.title.toLowerCase().replace(/s$/, '')}`,
         ),
       ),
-      h('button', { type: 'button', onClick: onClose }, 'Close'),
+      h('button', { type: 'button', disabled: busy, onClick: onClose }, 'Close'),
     ),
+    data._live &&
+      !review &&
+      billAttachmentTargets[page] &&
+      h(
+        'p',
+        { className: 'editor-note' },
+        id
+          ? h(
+              'a',
+              {
+                href: fileRecordPath(billAttachmentTargets[page], { record: id }),
+                target: '_blank',
+                rel: 'noopener noreferrer',
+              },
+              'Manage bill attachments',
+            )
+          : page === 'materialReceipts'
+            ? 'Save the receipt, then reopen it to attach its bill.'
+            : 'Save the bill, then reopen it to add its attachment.',
+      ),
     reconciliation &&
       h(
         'p',
@@ -474,16 +530,16 @@ export function BillEditor({
                     h(
                       'strong',
                       null,
-                      f.type === 'checkbox'
-                        ? draft.header[f.key]
-                          ? 'Yes'
-                          : 'No'
-                        : f.type === 'select'
-                          ? (f.options || optionsFor(data, f.source)).find(
-                              ([v]) => v === draft.header[f.key],
-                            )?.[1] || '—'
-                          : draft.header[f.key] ||
-                            (f.generated ? 'Assigned automatically on database save' : '—'),
+                      reviewValue(
+                        f,
+                        draft.header[f.key],
+                        original?.header[f.key],
+                        original,
+                        (value) =>
+                          (f.options || optionsFor(data, f.source)).find(
+                            ([key]) => key === value,
+                          )?.[1],
+                      ),
                     ),
                   ),
                 ),
@@ -541,11 +597,19 @@ export function BillEditor({
                         h(
                           'td',
                           { key: f.key },
-                          f.type === 'select'
-                            ? f.key === 'dyeing_program_item_id'
-                              ? programOptions(data).find((o) => o.value === line[f.key])?.label
-                              : optionsFor(data, f.source).find(([v]) => v === line[f.key])?.[1]
-                            : line[f.key],
+                          reviewValue(
+                            f,
+                            line[f.key],
+                            original?.lines.find(({ id }) => id === line.id)?.[f.key],
+                            Boolean(line.id && original?.lines.some(({ id }) => id === line.id)),
+                            (value) =>
+                              f.key === 'dyeing_program_item_id'
+                                ? programOptions(data).find((option) => option.value === value)
+                                    ?.label
+                                : (f.options || optionsFor(data, f.source)).find(
+                                    ([key]) => key === value,
+                                  )?.[1],
+                          ),
                         ),
                       ),
                     ),

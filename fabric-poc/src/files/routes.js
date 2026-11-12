@@ -1,3 +1,4 @@
+import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import { RecordGrid } from '../fabric/record-grid.js';
 import React, { useState } from 'react';
 import { prettyBytes } from './model.js';
@@ -9,21 +10,41 @@ const types = [
   ['image/webp', 'WebP'],
 ];
 export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
-  const [edit, setEdit] = useState(null),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false);
-  async function submit(e) {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      await onSave(edit);
-      setEdit(null);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
+  const [edit, setEdit] = useState(null);
+  const review = useSaveReview();
+  function submit() {
+    const prior = routes.find((route) => route.key === edit.key);
+    const groupLabel = (id) => registry.find((group) => group.id === id)?.group;
+    const changed = (before, after) =>
+      before != null && before !== after ? before + ' → ' + after : after;
+    review.prepare(
+      edit,
+      [
+        ['Attachment field', edit.label],
+        ['Source', edit.table + '.' + edit.slot],
+        [
+          'Bucket group',
+          changed(groupLabel(prior?.bucket_group_id), groupLabel(edit.bucket_group_id)),
+        ],
+        ['File types', changed(prior?.mime?.join(', '), edit.mime.join(', '))],
+        [
+          'Maximum file size',
+          changed(prior && prettyBytes(prior.max_bytes), prettyBytes(edit.max_bytes)),
+        ],
+        [
+          'Uploads',
+          changed(
+            prior && (prior.enabled ? 'Enabled' : 'Paused'),
+            edit.enabled ? 'Enabled' : 'Paused',
+          ),
+        ],
+      ],
+      async (payload) => {
+        await onSave(payload);
+        setEdit(null);
+      },
+      'Review upload route',
+    );
   }
   return h(
     'section',
@@ -39,11 +60,10 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
       { className: 'file-help' },
       'Choose where each attachment field uploads. These rules apply to new uploads; existing files keep their original locations. Source fields and access rules are registered integrations.',
     ),
-    error && h('p', { role: 'alert', className: 'form-error' }, error),
     edit
       ? h(
-          'form',
-          { onSubmit: submit },
+          ReviewForm,
+          { review, onSubmit: submit },
           h('h3', null, edit.label),
           h('p', { className: 'route-source' }, `garments_erp.${edit.table} → ${edit.slot}`),
           h(
@@ -130,18 +150,17 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
               'button',
               {
                 type: 'button',
-                disabled: busy,
+                disabled: review.busy,
                 onClick: () => {
                   setEdit(null);
-                  setError('');
                 },
               },
               'Cancel',
             ),
             h(
               'button',
-              { type: 'submit', className: 'primary', disabled: busy || !edit.mime.length },
-              busy ? 'Saving…' : 'Save upload route',
+              { type: 'submit', className: 'primary', disabled: review.busy || !edit.mime.length },
+              'Review upload route',
             ),
           ),
         )
@@ -196,7 +215,6 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
                       'button',
                       {
                         onClick: () => {
-                          setError('');
                           setEdit({ ...r, mime: [...r.mime] });
                         },
                       },

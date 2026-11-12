@@ -9,7 +9,7 @@ Deno.serve(async(req:Request)=>{
  const url=Deno.env.get('SUPABASE_URL')!,user=createClient(url,Deno.env.get('SUPABASE_ANON_KEY')!,{global:{headers:{Authorization:authorization}},auth:{persistSession:false}});
  const {data:auth,error:authError}=await user.auth.getUser();if(authError||!auth.user)return json({error:'Sign in required'},401);
  const service=createClient(url,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false}});
- async function rpc(name:string,args:Record<string,unknown>={}){const {data,error}=await user.rpc('erp_'+name,args);if(error)throw Error(error.message);return data}
+ async function rpc(name:string,args:Record<string,unknown>={}){const {data,error}=await user.rpc('erp_'+name,args);if(error)throw Object.assign(Error(error.message),{code:error.code});return data}
  async function removePending(ticket:{id:string,bucket_id:string,storage_path:string}){
   const state=await rpc('file_cleanup',{p_ticket:ticket.id});
   if(state.status!=='cleanup_required')throw Error('Cleanup no longer allowed');
@@ -23,6 +23,31 @@ Deno.serve(async(req:Request)=>{
    const form=await req.formData(),file=form.get('file');
    if(!(file instanceof File)||file.size<=0||file.size>10*1024*1024)throw Error('Choose a file up to 10 MB');
    const bytes=new Uint8Array(await file.arrayBuffer());if(!matchesContent(bytes,file.type))throw Error('File content does not match its PDF/image type');
+   const requestId=form.get('requestId');
+   if(typeof requestId==='string'){
+    const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),
+      (byte)=>byte.toString(16).padStart(2,'0')).join('');
+    const reservation=await rpc('stage_file_upload',{
+     p_request:requestId,p_key:String(form.get('targetKey')),p_record_id:String(form.get('recordId')),
+     p_previous:form.get('previousAttachmentId')||null,p_filename:file.name,p_mime:file.type,
+     p_size:file.size,p_digest:digest,
+    });
+    if(reservation.status!=='ready'){
+     const {error}=await service.storage.from(reservation.bucket_id).upload(
+      reservation.storage_path,bytes,{contentType:file.type,upsert:false});
+     // A duplicate object or lost Storage reply can still be finalized.
+     try{return json(await rpc('finish_file_upload',{p_ticket:reservation.id}));}
+     catch(failure){
+      if(failure instanceof Error && 'code' in failure && failure.code==='40001'){
+       ticket=reservation;
+       throw failure;
+      }
+      if(error && !String(error.message).match(/already exists|duplicate/i))throw Error(error.message);
+      throw failure;
+     }
+    }
+    return json(await rpc('finish_file_upload',{p_ticket:reservation.id}));
+   }
    ticket=await rpc('begin_file_upload',{p_key:String(form.get('targetKey')),p_record_id:String(form.get('recordId')),p_filename:file.name,p_mime:file.type,p_size:file.size});
    const {error}=await service.storage.from(ticket!.bucket_id).upload(ticket!.storage_path,bytes,{contentType:file.type,upsert:false});if(error)throw error;
    const attachment=await rpc('finish_file_upload',{p_ticket:ticket!.id});ticket=null;return json(attachment);
@@ -34,8 +59,12 @@ Deno.serve(async(req:Request)=>{
    catch(error){await rpc('cancel_bucket_removal',{p_group_id:reservation.id,p_token:reservation.token}).catch(()=>{});throw error;}
   }
   if(input.action==='read'){
-   const path=await rpc('file_read',{p_id:String(input.attachmentId)});
-   const {data,error}=await service.storage.from(path.bucket_id).createSignedUrl(path.storage_path,60);if(error)throw error;
+   const p_id=String(input.attachmentId);
+   const path=input.targetKey
+    ? await rpc('read_linked_file',{p_key:input.targetKey,p_record_id:String(input.recordId),p_id})
+    : await rpc('file_read',{p_id});
+   const {data,error}=await service.storage.from(path.bucket_id).createSignedUrl(
+    path.storage_path,60,{download:input.download===true});if(error)throw error;
    return json({url:data.signedUrl});
   }
   if(input.action==='cleanup'){

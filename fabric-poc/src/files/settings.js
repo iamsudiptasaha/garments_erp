@@ -1,3 +1,4 @@
+import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import { RecordGrid } from '../fabric/record-grid.js';
 import React, { useState } from 'react';
 import { FILE_GROUPS, prettyBytes } from './model.js';
@@ -19,6 +20,7 @@ export function BucketSettings({
     [confirmation, setConfirmation] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
+  const review = useSaveReview();
   if (!isAdministrator)
     return h(
       'section',
@@ -40,6 +42,52 @@ export function BucketSettings({
     } finally {
       setBusy(false);
     }
+  }
+  function prepareCreate() {
+    if (!creating.mime.length) return;
+    review.prepare(
+      creating,
+      [
+        ['Group key', creating.group],
+        ['Description', creating.description],
+        ['Allowed file types', creating.mime.join(', ')],
+        ['Upload limit', prettyBytes(creating.max_bytes)],
+      ],
+      async (payload) => {
+        await onCreate(payload);
+        cancel();
+      },
+      'Review private bucket',
+    );
+  }
+
+  function prepareEdit() {
+    const prior = registry.find(({ group }) => group === selected.group);
+    const change = (before, after) =>
+      before !== after ? (before ?? '—') + ' → ' + (after ?? '—') : after;
+    review.prepare(
+      {
+        groupKey: selected.group,
+        description: selected.description,
+        bucketId: selected.bucket_id,
+        maxBytes: Number(selected.max_bytes),
+        expectedVersion: selected.version || 1,
+      },
+      [
+        ['Group key', selected.group],
+        ['Description', change(prior?.description, selected.description)],
+        ['Private bucket', change(prior?.bucket_id, selected.bucket_id)],
+        [
+          'Upload limit',
+          change(prettyBytes(prior?.max_bytes || 0), prettyBytes(selected.max_bytes)),
+        ],
+      ],
+      async (payload) => {
+        await onSave(payload);
+        cancel();
+      },
+      'Review bucket settings',
+    );
   }
   function cancel() {
     setSelected(null);
@@ -94,13 +142,8 @@ export function BucketSettings({
     error && h('p', { className: 'form-error', role: 'alert' }, error),
     creating
       ? h(
-          'form',
-          {
-            onSubmit: (e) => {
-              e.preventDefault();
-              void run(() => onCreate(creating));
-            },
-          },
+          ReviewForm,
+          { review, onSubmit: prepareCreate },
           h('h3', null, 'Create a private bucket'),
           h(
             'div',
@@ -155,7 +198,7 @@ export function BucketSettings({
             { className: 'file-help' },
             'A private bucket address is generated automatically. Creating a bucket does not assign any upload routes.',
           ),
-          controls(null, 'Create private bucket', !creating.mime.length),
+          controls(null, 'Review private bucket', !creating.mime.length),
         )
       : removing
         ? h(
@@ -187,21 +230,8 @@ export function BucketSettings({
           )
         : selected
           ? h(
-              'form',
-              {
-                onSubmit: (e) => {
-                  e.preventDefault();
-                  void run(() =>
-                    onSave({
-                      groupKey: selected.group,
-                      description: selected.description,
-                      bucketId: selected.bucket_id,
-                      maxBytes: Number(selected.max_bytes),
-                      expectedVersion: selected.version || 1,
-                    }),
-                  );
-                },
-              },
+              ReviewForm,
+              { review, onSubmit: prepareEdit },
               h(
                 'h3',
                 null,
@@ -256,7 +286,7 @@ export function BucketSettings({
                   ),
                 ),
               ),
-              controls(null, 'Save bucket settings'),
+              controls(null, 'Review bucket settings'),
             )
           : h(
               'div',
