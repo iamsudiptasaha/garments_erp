@@ -4,7 +4,7 @@ import { saveDocument } from '../fabric/domain.js';
 export const contactSections = [
   { table: 'contact_items', resource: 'contactPeople', title: 'Contact items' },
   { table: 'contact_bank_account', resource: 'contactBankAccounts', title: 'Bank accounts' },
-  { table: 'contact_extra', resource: 'contactDetails', title: 'Extra data' },
+  { table: 'contact_extra', resource: 'contactDetails', title: 'Additional Details' },
 ].map((section) => ({
   ...section,
   foreign: 'contact_id',
