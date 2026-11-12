@@ -385,6 +385,18 @@ select {
   max-width: 370px;
   margin-right: auto;
 }
+.worksheet-actions {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.worksheet-actions > .fg-create-actions {
+  margin-bottom: 0;
+}
+.worksheet-actions [data-sheet-actions] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .fabric-status {
   font-size: 11px;
   color: #7892a7;

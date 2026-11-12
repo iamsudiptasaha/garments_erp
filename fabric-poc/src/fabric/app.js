@@ -1,3 +1,4 @@
+import { GridSearch, useGridSearch } from './grid-toolbar.js';
 import { useNavigationPreferences } from '../access/navigation-preferences.js';
 import { inventoryCommands, liveInventoryPage } from './inventory-live.js';
 import { ProductionItemEditor } from '../production-task-board/item-editor.js';
@@ -333,6 +334,14 @@ function App({ live }) {
   const spec = pages[page],
     preferences = state.preferences[page] || {},
     totals = useMemo(() => fabricTotals(data), [data]);
+  const sheetQuery = useGridSearch(query);
+  const recordQuery = view === 'sheet' ? sheetQuery : query;
+  const searchPlaceholder =
+    page === 'productionJobs'
+      ? 'Scan QR / enter item style code…'
+      : page === 'batches'
+        ? 'Find a batch, fabric or bill…'
+        : 'Search ' + spec?.title.toLowerCase() + '…';
   const records = useMemo(
     () =>
       spec
@@ -340,11 +349,11 @@ function App({ live }) {
             Object.values(r).some((v) =>
               String(v ?? '')
                 .toLowerCase()
-                .includes(query.toLowerCase()),
+                .includes(recordQuery.toLowerCase()),
             ),
           )
         : [],
-    [data, page, spec, query],
+    [data, page, spec, recordQuery],
   );
   function save(next) {
     if (live) {
@@ -1322,22 +1331,32 @@ function App({ live }) {
                                   ),
                                   h(
                                     'div',
-                                    { className: 'fabric-actions' },
-                                    h('input', {
-                                      type: 'search',
-                                      'aria-label': 'Search ' + spec.title,
-                                      placeholder:
-                                        page === 'productionJobs'
-                                          ? 'Scan QR / enter item style code…'
-                                          : page === 'batches'
-                                            ? 'Find a batch, fabric or bill…'
-                                            : 'Search ' + spec.title.toLowerCase() + '…',
-                                      value: query,
-                                      onChange: (e) => {
-                                        setQuery(e.target.value);
-                                        setSelected(null);
-                                      },
-                                    }),
+                                    {
+                                      className:
+                                        view === 'sheet'
+                                          ? 'fabric-actions worksheet-actions'
+                                          : 'fabric-actions',
+                                    },
+                                    view === 'sheet'
+                                      ? h(GridSearch, {
+                                          label: 'Search ' + spec.title,
+                                          placeholder: searchPlaceholder,
+                                          value: query,
+                                          onChange: (value) => {
+                                            setQuery(value);
+                                            setSelected(null);
+                                          },
+                                        })
+                                      : h('input', {
+                                          type: 'search',
+                                          'aria-label': 'Search ' + spec.title,
+                                          placeholder: searchPlaceholder,
+                                          value: query,
+                                          onChange: (e) => {
+                                            setQuery(e.target.value);
+                                            setSelected(null);
+                                          },
+                                        }),
                                     !spec.readonly &&
                                       can('create') &&
                                       h(
@@ -1354,7 +1373,10 @@ function App({ live }) {
                                       h(
                                         'button',
                                         {
-                                          disabled: !selected,
+                                          disabled:
+                                            query !== sheetQuery ||
+                                            !selected?.documentId ||
+                                            !records.includes(selected),
                                           onClick: () => edit(selected.documentId),
                                         },
                                         spec.master
@@ -1385,7 +1407,8 @@ function App({ live }) {
                                     live &&
                                       h('button', { onClick: refreshLive }, 'Refresh records'),
                                   ),
-                                  records.length === 0 &&
+                                  view === 'overview' &&
+                                    records.length === 0 &&
                                     h(
                                       'div',
                                       { className: 'empty-state' },

@@ -317,79 +317,98 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities, vie
     );
   }
 
-  return h(
-    'div',
-    null,
+  const add =
     canCreate &&
-      h(
-        FinishedGoodsEditor,
-        {
-          label: {
-            products: '+ Add sellable product',
-            prices: '+ Add price version',
-            priceTypes: '+ Add price type',
-          }[screen],
-          title: {
-            products: 'New sellable product',
-            prices: 'New price version',
-            priceTypes: 'New price type',
-          }[screen],
-        },
-        (close) =>
+    h(
+      FinishedGoodsEditor,
+      {
+        label: {
+          products: '+ Add sellable product',
+          prices: '+ Add price version',
+          priceTypes: '+ Add price type',
+        }[screen],
+        title: {
+          products: 'New sellable product',
+          prices: 'New price version',
+          priceTypes: 'New price type',
+        }[screen],
+      },
+      (close) =>
+        h(
+          'form',
+          { key: revision, onSubmit: (event) => submit(event, close) },
           h(
-            'form',
-            { key: revision, onSubmit: (event) => submit(event, close) },
-            h(
-              'fieldset',
-              { disabled: saving },
-              costingLookup,
-              screen === 'products' && h(ProductForm, { data, components, setComponents }),
-              screen === 'priceTypes' &&
+            'fieldset',
+            { disabled: saving },
+            costingLookup,
+            screen === 'products' && h(ProductForm, { data, components, setComponents }),
+            screen === 'priceTypes' &&
+              h(
+                'div',
+                { className: 'fg-fields' },
+                field('Name', 'name'),
+                field('Description', 'description', { required: false }),
+              ),
+            screen === 'prices' &&
+              h(
+                'div',
+                null,
                 h(
                   'div',
                   { className: 'fg-fields' },
-                  field('Name', 'name'),
-                  field('Description', 'description', { required: false }),
+                  choice('Price type', 'type_id', data.types, ({ name }) => name),
+                  field('Version', 'version'),
+                  field('Price per piece', 'price_per_piece', {
+                    type: 'number',
+                    min: 0,
+                    step: 'any',
+                  }),
+                  field('Date', 'date', { type: 'date' }),
                 ),
-              screen === 'prices' &&
-                h(
-                  'div',
-                  null,
-                  h(
-                    'div',
-                    { className: 'fg-fields' },
-                    choice('Price type', 'type_id', data.types, ({ name }) => name),
-                    field('Version', 'version'),
-                    field('Price per piece', 'price_per_piece', {
-                      type: 'number',
-                      min: 0,
-                      step: 'any',
-                    }),
-                    field('Date', 'date', { type: 'date' }),
-                  ),
-                ),
-              h(
-                'button',
-                { type: 'submit', className: 'primary' },
-                {
-                  products: 'Verify composition',
-                  prices: 'Add price version',
-                  priceTypes: 'Save price type',
-                }[screen],
               ),
+            h(
+              'button',
+              { type: 'submit', className: 'primary' },
+              {
+                products: 'Verify composition',
+                prices: 'Add price version',
+                priceTypes: 'Save price type',
+              }[screen],
             ),
-            error && h('p', { role: 'alert' }, error),
           ),
-      ),
-    h(
-      'div',
-      { className: 'fabric-actions' },
-      h(GridSearch, {
-        label: 'Search ' + title.toLowerCase(),
-        value: searchText,
-        onChange: setSearchText,
-      }),
-    ),
+          error && h('p', { role: 'alert' }, error),
+        ),
+    );
+  const search = {
+    label: 'Search ' + title.toLowerCase(),
+    value: searchText,
+    onChange: setSearchText,
+  };
+  const source = {
+    label: screen === 'priceTypes' ? 'Open selected price type' : 'View selected contents',
+    title: screen === 'priceTypes' ? 'Price type' : 'Sellable product contents',
+    resolve(row) {
+      if (screen === 'priceTypes')
+        return h('div', null, h('h3', null, row.name), h('p', null, row.description || '—'));
+      const record =
+        screen === 'products' ? row : data.products.find(({ sku }) => sku === row.product);
+      return (
+        record &&
+        h(
+          'div',
+          null,
+          h('p', null, record.sku + ' · ' + record.name),
+          productContents(record, screen === 'prices'),
+        )
+      );
+    },
+  };
+
+  return h(
+    'div',
+    null,
+    view === 'overview' && add,
+    view === 'overview' && h('div', { className: 'fabric-actions' }, h(GridSearch, search)),
     h(
       FinishedGoodsSheetView,
       {
@@ -400,6 +419,10 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities, vie
         capabilities,
         client,
         view,
+        search,
+        add,
+        source,
+        searchPending: searchText.trim().toLowerCase() !== query,
       },
       rows.length
         ? h(FinishedGoodsCards, {

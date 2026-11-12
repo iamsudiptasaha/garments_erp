@@ -1,11 +1,22 @@
 import { createElement as h, useEffect, useState } from 'react';
 
-export function GridSearch({ label, value, onChange }) {
+export const worksheetSearchDelay = 250;
+
+export function WorksheetToolbar({ label, value, onChange, children }) {
+  return h(
+    'div',
+    { className: 'fabric-actions worksheet-actions' },
+    h(GridSearch, { label, value, onChange }),
+    children,
+  );
+}
+
+export function GridSearch({ label, value, onChange, placeholder = label }) {
   return h('input', {
     className: 'erp-grid-search',
     type: 'search',
     'aria-label': label,
-    placeholder: label,
+    placeholder,
     value,
     onChange: (event) => onChange(event.target.value),
   });
@@ -14,7 +25,7 @@ export function GridSearch({ label, value, onChange }) {
 export function useGridSearch(value) {
   const [query, setQuery] = useState(value);
   useEffect(() => {
-    const timeout = setTimeout(() => setQuery(value), 250);
+    const timeout = setTimeout(() => setQuery(value), worksheetSearchDelay);
     return () => clearTimeout(timeout);
   }, [value]);
   return query;

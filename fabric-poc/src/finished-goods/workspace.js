@@ -171,6 +171,59 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
           ),
     [exactSearch, sku, rawRows, columns],
   );
+  const add =
+    canCreate &&
+    ['receipt', 'adjustment'].includes(command) &&
+    h(
+      FinishedGoodsEditor,
+      {
+        label: command === 'adjustment' ? '+ Add adjustment' : '+ Record stock-in',
+        title: command === 'adjustment' ? 'New adjustment' : 'New stock-in',
+      },
+      (close) =>
+        h(StockForm, {
+          key: notice,
+          client,
+          adjustment: command === 'adjustment',
+          onSaved: (id) => {
+            close();
+            setNotice(
+              command === 'adjustment' ? `Correction ${id} verified.` : `Stock-in ${id} verified.`,
+            );
+            setSearchText('');
+            loadPage(0);
+          },
+        }),
+    );
+  const search = {
+    label: exactSearch ? 'Exact SKU' : 'Search this page',
+    value: searchText,
+    onChange: setSearchText,
+  };
+  const source = movement
+    ? {
+        label: screen === 'receipt' ? 'Open selected stock-in' : 'Open selected adjustment',
+        title,
+        resolve: (row) =>
+          row.id &&
+          h(
+            'dl',
+            { className: 'fg-card-fields' },
+            columns.map(([key, label]) =>
+              h('div', { key }, h('dt', null, label), h('dd', null, row[key] ?? '—')),
+            ),
+          ),
+      }
+    : {
+        label: 'View selected costing history',
+        title: 'Item costing history',
+        resolve(row) {
+          const ids =
+            screen === 'variations' ? row.components?.map(({ item_id }) => item_id) : [row.item_id];
+          const itemIds = [...new Set((ids ?? []).filter(Boolean).map(String))];
+          return itemIds.length > 0 && h(CostingHistory, { client, itemIds, canEdit: false });
+        },
+      };
   const pageTitle = finishedGoodsPages[screen];
   return h(
     'section',
@@ -211,46 +264,15 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
       ),
     notice && h('p', { role: 'status' }, notice),
     !client && screen === 'costing' && h(ItemCostingPreview),
-    canCreate &&
-      ['receipt', 'adjustment'].includes(command) &&
-      h(
-        FinishedGoodsEditor,
-        {
-          label: command === 'adjustment' ? '+ Add adjustment' : '+ Record stock-in',
-          title: command === 'adjustment' ? 'New adjustment' : 'New stock-in',
-        },
-        (close) =>
-          h(StockForm, {
-            key: notice,
-            client,
-            adjustment: command === 'adjustment',
-            onSaved: (id) => {
-              close();
-              setNotice(
-                command === 'adjustment'
-                  ? `Correction ${id} verified.`
-                  : `Stock-in ${id} verified.`,
-              );
-              setSearchText('');
-              loadPage(0);
-            },
-          }),
-      ),
+    display === 'overview' && add,
     Object.hasOwn(views, screen) &&
       (movement || !command) &&
       h(
         'div',
         null,
         client &&
-          h(
-            'div',
-            { className: 'fabric-actions' },
-            h(GridSearch, {
-              label: exactSearch ? 'Exact SKU' : 'Search this page',
-              value: searchText,
-              onChange: setSearchText,
-            }),
-          ),
+          display === 'overview' &&
+          h('div', { className: 'fabric-actions' }, h(GridSearch, search)),
         loading && result && h('p', { role: 'status' }, 'Updating finished stock…'),
         !client
           ? h('p', { role: 'status' }, 'Local preview. Connect to the ERP to load finished stock.')
@@ -274,6 +296,10 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
                     view: display,
                     client,
                     paged: true,
+                    search,
+                    add,
+                    source,
+                    searchPending: loading || searchText.trim() !== sku,
                   },
                   rows.length
                     ? h(FinishedGoodsCards, {

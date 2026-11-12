@@ -52,6 +52,19 @@ Use the shared grid preference store with a stable screen-specific grid key. Per
 
 Verify reload, isolated browser sessions for the same account, account isolation, both sort directions, and toolbar wrapping on desktop, tablet and phone.
 
+### Mandatory Sheet-view contract
+
+Use Suppliers and Colours as the reference for selection and the transition from a worksheet to an existing record form. The Sheet contract applies to record worksheets. Overview views retain their own interactions. Dedicated editors such as Item Costing follow their form contract, including draft and finalized states.
+
+| Area | Required Sheet behavior |
+| --- | --- |
+| Search and actions | Use labelled, debounced search without a submit button. Place permitted Add and selected-record actions beside search. Keep controls visible with zero matches. Use the shared toolbar layout and wrap controls within the content width. |
+| Selection and identity | A single data row supplies the stable record key from the currently displayed sort and filter order. Headers, blank rows and multi-row selections cannot activate a record action. Clear or revalidate selection when the records, sort, view or query change. Keep actions usable if an identifying column is hidden. |
+| Add, Open and Edit | Add opens the existing create form. Edit opens the existing edit form for that exact eligible record. Open or View source shows the selected record or authorized underlying records. Calculated summaries and posted records offer inspection only. A create-only route cannot reuse its create form as Edit. |
+| Forms and access | Enforce view, create, edit, format, export and print independently using the existing permission checks and backend authorization. Preserve the form's validation, save, cancel and return behavior. A failed save keeps the form available for correction. |
+| Worksheet and preferences | Keep sorting, Columns, Zoom, formatting, export and print in the shared worksheet. Save supported presentation settings per authenticated account and worksheet. Protect worksheet values, including calculations, from direct entry, paste, cut, fill and drag. Formatting changes presentation only. |
+| Regression checks | Exercise the real worksheet with populated and empty fixtures. Verify the record opened after sorting or filtering, permitted and denied actions, protected values and preference restoration. Check toolbar fit at desktop, tablet and phone widths. For shared changes, compare Overview visuals and exercise its existing interactions. |
+
 ## Colours browser verification
 
 Chromium measurements at 1440, 1024 and 390 CSS pixels confirm the shared shell padding of `34px 38px`, `25px` and `20px 15px`, respectively. The Lab dips title stays `29px / 600` with `-0.6px` tracking at all three widths. Its eyebrow is `10px / 600` with `1.3px` tracking and `14px` bottom margin. The header gap and bottom margin stay `20px` and `27px`.
