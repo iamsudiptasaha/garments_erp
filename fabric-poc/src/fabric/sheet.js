@@ -46,6 +46,7 @@ function GridWorkbook({
   const [print, setPrint] = useState(null);
   const [available, setAvailable] = useState(0);
   const printDialog = useRef(null);
+  const printedTable = useRef(null);
   const zoom = zoomLevels.includes(preferences.layout?.zoomRatio)
     ? preferences.layout.zoomRatio
     : 1;
@@ -96,9 +97,10 @@ function GridWorkbook({
   }, [page, spec, visible, records, sort.key, sort.direction, revision, zoom, available]);
 
   useEffect(() => {
-    const observer = new ResizeObserver(([entry]) =>
-      setAvailable(Math.floor(entry.contentRect.width)),
-    );
+    const observer = new ResizeObserver(([entry]) => {
+      const width = Math.floor(entry.contentRect.width);
+      if (width > 0) setAvailable(width);
+    });
     observer.observe(host.current);
     return () => observer.disconnect();
   }, []);
@@ -216,11 +218,10 @@ function GridWorkbook({
   }
   useEffect(() => {
     function beforePrint() {
-      if (!capabilities.print) return;
+      if (!capabilities.print || host.current?.closest('[hidden]')) return;
       try {
         const report = formattedReport(book.current, state.current.columns, records.length);
-        const surface = document.getElementById('fabric-printed-table');
-        if (surface) surface.innerHTML = report;
+        if (printedTable.current) printedTable.current.innerHTML = report;
       } catch {
         /* No active sheet to print. */
       }
@@ -321,9 +322,8 @@ function GridWorkbook({
       'dialog',
       {
         ref: printDialog,
-        id: 'fabric-print-dialog',
         className: 'fabric-print-dialog',
-        onCancel: () => setPrint(null),
+        onClose: () => setPrint(null),
       },
       h(
         'div',
@@ -345,7 +345,7 @@ function GridWorkbook({
         { className: 'fabric-print-surface' },
         h('h2', null, spec.title),
         h('p', null, `${records.length} rows · current sorting and formatting`),
-        h('div', { id: 'fabric-printed-table', dangerouslySetInnerHTML: { __html: print || '' } }),
+        h('div', { ref: printedTable, dangerouslySetInnerHTML: { __html: print || '' } }),
       ),
       h(
         'div',

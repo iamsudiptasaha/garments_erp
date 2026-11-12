@@ -59,7 +59,7 @@ import { FabricSheet } from './sheet.js';
 import { WorkspaceViewToggle } from './view-toggle.js';
 import { BillEditor } from './editor.js';
 import './styles.css';
-import { ProductionDocuments } from '../production-documents/app.js';
+import { ProductionDocumentWorkspace } from '../production-documents/app.js';
 import { adminPages, initialAccess, allowed, upgradeAccess } from '../admin/model.js';
 import { AdminPanel } from '../admin/panel.js';
 import { HRPanel } from '../hr/panel.js';
@@ -155,7 +155,6 @@ function App({ live, refreshWorkspaceAccess }) {
     () => !isManagementPage(page, live),
   );
   const routeHref = useRef(location.href);
-  const documentListState = useRef({ productionChallans: {}, jobWorkerBills: {} });
   const [sidebarOpen, setSidebarOpen] = useWorkspaceMenu();
   const [access, setAccess] = useState(() => (live ? sessionAccessModel(live) : loadAccess())),
     [actor, setActor] = useState(live?.actor || 'owner');
@@ -165,6 +164,7 @@ function App({ live, refreshWorkspaceAccess }) {
       setActor(live.actor);
     }
   }, [live]);
+  const productionDocumentChanges = useMemo(() => new EventTarget(), [live?.actor]);
   const can = (action, key = page) =>
     allowed(
       access,
@@ -276,6 +276,7 @@ function App({ live, refreshWorkspaceAccess }) {
       data: mergeProductionSnapshot(previous.data, snapshot),
     }));
     setNotice(message);
+    productionDocumentChanges.dispatchEvent(new Event('changed'));
   }
   async function commitProduction(before, after) {
     let snapshot = state.data;
@@ -1244,11 +1245,7 @@ function App({ live, refreshWorkspaceAccess }) {
     }
     if (floor) return renderFloor();
     return can('view')
-      ? h(ProductionDocuments, {
-          key: page,
-          billing: page === 'jobWorkerBills',
-          listState: documentListState.current[page],
-        })
+      ? null
       : h('section', { className: 'access-denied' }, h('h1', null, 'Access restricted'));
   }
   const shell = {
@@ -1282,7 +1279,23 @@ function App({ live, refreshWorkspaceAccess }) {
   return h(
     React.Fragment,
     null,
-    h('div', shell, sidebar, h('main', main, toolbar, renderWorkspace())),
+    h(
+      'div',
+      shell,
+      sidebar,
+      h(
+        'main',
+        main,
+        toolbar,
+        h(ProductionDocumentWorkspace, {
+          key: live?.actor,
+          page: documentPage ? page : null,
+          can,
+          changes: productionDocumentChanges,
+        }),
+        renderWorkspace(),
+      ),
+    ),
     editor &&
       h(
         editor.page === 'labDips'

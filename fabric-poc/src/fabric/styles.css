@@ -916,7 +916,7 @@ select {
   .fabric-dialog {
     display: none !important;
   }
-  #fabric-print-dialog {
+  .fabric-print-dialog {
     display: block !important;
     position: static !important;
     inset: auto !important;
@@ -944,7 +944,7 @@ select {
   .fabric-print-surface tr {
     break-inside: avoid;
   }
-  #fabric-print-dialog::backdrop {
+  .fabric-print-dialog::backdrop {
     display: none;
   }
 }

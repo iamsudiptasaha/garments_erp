@@ -15,6 +15,7 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
   let documentsAdministrator = false;
   let securityReady = true;
   const fileRequests = [];
+  const documentReads = [];
 
   async function open(viewport) {
     const context = await browser.newContext({ viewport });
@@ -118,6 +119,7 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
           json = [];
           break;
         case 'erp_challan_documents':
+          documentReads.push({ actor, billing: args.p_billing });
           json = {
             assignments: [],
             employees: [],
@@ -216,6 +218,14 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
     await expect(disclosure(phone, 'colours')).toHaveJSProperty('open', false);
     await expect(disclosure(phone, 'production')).toHaveJSProperty('open', false);
 
+    await disclosure(desktop, 'production').locator('summary').click();
+    await desktop.getByRole('link', { name: 'Challans', exact: true }).click();
+    await expect(desktop.getByText('No matching challans')).toBeVisible();
+    await desktop.getByRole('searchbox', { name: 'Search challans' }).fill('first account only');
+    await disclosure(desktop, 'production').locator('summary').click();
+    await expect.poll(() => saved.get(first)?.production).toBe(false);
+    expect(documentReads).toContainEqual({ actor: first, billing: false });
+
     await disclosure(desktop, 'account').locator('summary').click();
     await desktop.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(desktop.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
@@ -225,7 +235,9 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
     await expect(disclosure(desktop, 'production')).toHaveJSProperty('open', true);
     await expect(disclosure(desktop, 'account')).toHaveJSProperty('open', false);
     await desktop.getByRole('link', { name: 'Challans', exact: true }).click();
-    await expect(desktop.getByRole('heading', { name: 'Challans', exact: true })).toBeVisible();
+    await expect(desktop.getByText('No matching challans')).toBeVisible();
+    await expect(desktop.getByRole('searchbox', { name: 'Search challans' })).toHaveValue('');
+    expect(documentReads).toContainEqual({ actor: second, billing: false });
     await expect(desktop.getByRole('link', { name: 'Challans', exact: true })).toBeVisible();
     for (const key of ['administration', 'miscellaneous', 'hr']) {
       await expect(disclosure(desktop, key)).toHaveCount(0);
@@ -247,6 +259,7 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
     await expect(desktop.locator('input[type=file]')).toHaveCount(0);
     await desktop.goto('/production-challan.html#worker-bills');
     await expect(desktop.getByRole('heading', { name: 'Access restricted' })).toBeVisible();
+    expect(documentReads).not.toContainEqual({ actor: second, billing: true });
     await disclosure(desktop, 'account').locator('summary').click();
     await desktop.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(desktop.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();

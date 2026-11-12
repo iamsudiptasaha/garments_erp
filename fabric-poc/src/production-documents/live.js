@@ -5,7 +5,7 @@ export function challanDocuments(client = getAccessClient()) {
   const files = liveFileCommands(client);
   async function rpc(name, args) {
     const { data, error } = await client.rpc(name, args);
-    if (error) throw Error(error.message);
+    if (error) throw Object.assign(Error(error.message), { code: error.code });
     return data;
   }
   return {
