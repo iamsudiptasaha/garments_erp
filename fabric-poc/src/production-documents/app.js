@@ -1,6 +1,7 @@
-import { AccessNavigation } from '../access/navigation.js';
+import { WorkspaceMenuToolbar, WorkspaceSidebar, useWorkspaceMenu } from '../access/navigation.js';
 import { getAccessClient } from '../access/client.js';
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { FabricSheet } from '../fabric/sheet.js';
 import { worksheetSearchDelay } from '../fabric/grid-toolbar.js';
@@ -778,25 +779,31 @@ import { challanDocuments } from './live.js';
     }
   }
   window.addEventListener('hashchange', navigate);
-  const menu = document.querySelector('.navigation-toggle');
   const navigation = createRoot(document.getElementById('challan-navigation'));
-  let menuOpen = true;
-  let access;
+  const toolbar = document.getElementById('challan-toolbar');
+  const shell = document.getElementById('challan-shell');
   let accessRequest;
-  function renderNavigation() {
-    if (!access?.enabled) return;
-    navigation.render(
-      React.createElement(AccessNavigation, {
-        access,
-        productionPage: location.hash === '#worker-bills' ? 'worker-bills' : 'challans',
-        open: menuOpen,
-        onClose: () => setMenu(false),
-        onTab: (key) => {
-          location.href =
-            '/access.html#' +
-            { roles: 'adminRoles', accounts: 'adminAccess', audit: 'adminAudit' }[key];
-        },
+  function DocumentNavigation({ access, page }) {
+    const [open, setOpen] = useWorkspaceMenu();
+    React.useLayoutEffect(() => {
+      shell.classList.toggle('sidebar-collapsed', !open);
+    }, [open]);
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(WorkspaceSidebar, {
+        live: access,
+        page,
+        open,
+        onClose: () => setOpen(false),
       }),
+      createPortal(
+        React.createElement(WorkspaceMenuToolbar, {
+          open,
+          onToggle: () => setOpen((value) => !value),
+        }),
+        toolbar,
+      ),
     );
   }
   async function refreshNavigation() {
@@ -809,19 +816,13 @@ import { challanDocuments } from './live.js';
       );
       return;
     }
-    access = data;
-    renderNavigation();
+    if (data?.enabled)
+      navigation.render(
+        React.createElement(DocumentNavigation, {
+          access: data,
+          page: location.hash === '#worker-bills' ? 'jobWorkerBills' : 'productionChallans',
+        }),
+      );
   }
-  function setMenu(open) {
-    menuOpen = open;
-    document.getElementById('challan-shell').classList.toggle('sidebar-collapsed', !open);
-    menu.setAttribute('aria-expanded', String(open));
-    menu.querySelector('span').textContent = open ? 'Hide menu' : 'Show menu';
-    document
-      .getElementById('menu-direction')
-      .setAttribute('d', open ? 'm16 9-3 3 3 3' : 'm13 9 3 3-3 3');
-    renderNavigation();
-  }
-  menu.addEventListener('click', () => setMenu(!menuOpen));
   navigate();
 })();

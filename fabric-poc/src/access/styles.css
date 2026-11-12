@@ -83,14 +83,6 @@
   outline: 3px solid #7bbcf1;
   outline-offset: 3px;
 }
-.access-workspace {
-  display: grid;
-  grid-template-columns: 235px minmax(0, 1fr);
-  min-height: 100vh;
-}
-.access-workspace.access-menu-closed {
-  grid-template-columns: minmax(0, 1fr);
-}
 .access-workspace > .access-live-shell {
   width: 100%;
   max-width: none;
@@ -98,38 +90,9 @@
   min-width: 0;
   padding: 28px 36px;
 }
-.access-navigation nav a {
-  display: block;
-  text-decoration: none;
-  color: inherit;
-  padding: 8px 10px;
-  font-size: 12px;
-  border-radius: 7px;
-}
-.access-navigation nav a:hover {
-  background: #dfedfa;
-}
-.access-navigation .fabric-brand {
-  text-decoration: none;
-  color: inherit;
-}
-.access-navigation[hidden] {
-  display: none !important;
-}
 @media (max-width: 700px) {
-  .access-workspace {
-    display: block;
-  }
   .access-workspace > .access-live-shell {
     padding: 22px 15px;
-  }
-  .access-navigation {
-    height: auto;
-    max-height: 65vh;
-    overflow: auto;
-  }
-  .access-navigation > details {
-    display: block !important;
   }
 }
 

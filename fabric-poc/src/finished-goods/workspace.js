@@ -6,6 +6,7 @@ import { FinishedCatalogue } from './catalogue.js';
 import { ItemCostingPreview } from './costing-preview.js';
 import { CostingHistory } from './item-costing.js';
 import { FinishedGoodsCards, FinishedGoodsEditor, FinishedGoodsSheetView } from './sheet-view.js';
+import { finishedGoodsPages } from './pages.js';
 import { StockForm } from './stock-form.js';
 import './styles.css';
 
@@ -71,18 +72,6 @@ const views = {
       ['available_percent', 'Available %'],
     ],
   },
-};
-
-export const finishedGoodsPages = {
-  sizes: 'Item stock summary',
-  variations: 'Sellable summary',
-  valuation: 'Stock valuation',
-  receipt: 'Items produced',
-  adjustment: 'Stock adjustments',
-  products: 'Sellable products',
-  prices: 'Item prices',
-  priceTypes: 'Price types',
-  costing: 'Item costing',
 };
 
 const descriptions = {

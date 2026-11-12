@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import Select from 'react-select';
 import { getAccessClient } from '../access/client.js';
 import { WorkspaceGate } from '../access/workspace-gate.js';
-import { AccessNavigation } from '../access/navigation.js';
+import { WorkspaceMenuToolbar, WorkspaceSidebar, useWorkspaceMenu } from '../access/navigation.js';
 import { UploadRoutes } from './routes.js';
 import { liveFileCommands } from './live.js';
 import { BucketSettings } from './settings.js';
@@ -20,13 +20,13 @@ function FilesWorkspace({ access }) {
     [routes, setRoutes] = useState([]),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
-    [open, setOpen] = useState(true),
     [key, setKey] = useState(''),
     [query, setQuery] = useState(''),
     [records, setRecords] = useState([]),
     [selected, setSelected] = useState(null),
     [loading, setLoading] = useState(false),
     [busy, setBusy] = useState(false);
+  const [open, setOpen] = useWorkspaceMenu();
   const targets = routes.filter((t) => access.permissions?.[t.resource]?.view),
     target = targets.find((t) => t.key === key) || targets[0],
     store = useMemo(() => commands.store(registry, routes), [commands, registry, routes]);
@@ -126,31 +126,20 @@ function FilesWorkspace({ access }) {
   }
   return h(
     'div',
-    { className: `access-workspace${open ? '' : ' access-menu-closed'}` },
-    h(AccessNavigation, {
-      access,
-      tab: 'files',
-      onTab: (key) => {
-        location.href =
-          '/access.html#' +
-          { roles: 'adminRoles', accounts: 'adminAccess', audit: 'adminAudit' }[key];
-      },
+    { className: `fabric-shell access-workspace${open ? '' : ' sidebar-collapsed'}` },
+    h(WorkspaceSidebar, {
+      live: access,
+      page: admin ? 'files-admin' : 'files',
       open,
       onClose: () => setOpen(false),
     }),
     h(
       'main',
       { className: 'access-live-shell files-live' },
-      h(
-        'div',
-        { className: 'workspace-toolbar' },
-        h(
-          'button',
-          { 'aria-expanded': open, onClick: () => setOpen((v) => !v) },
-          open ? '‹ Hide menu' : '› Show menu',
-        ),
-        h('a', { href: '/fabric.html?live=1' }, 'Workspace'),
-      ),
+      h(WorkspaceMenuToolbar, {
+        open,
+        onToggle: () => setOpen((value) => !value),
+      }),
       h(
         'header',
         null,

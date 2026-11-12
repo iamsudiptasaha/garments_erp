@@ -222,7 +222,10 @@ for (const [route, title, open, edit, add, record] of [
         expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
       }
       await page.setViewportSize({ width: 1280, height: 720 });
-      await page.getByRole('button', { name: 'Overview', exact: true }).click();
+      await page
+        .getByRole('region', { name: 'Production documents' })
+        .getByRole('button', { name: 'Overview', exact: true })
+        .click();
       await page.mouse.move(0, 0);
       expect(await overview.screenshot(screenshot)).toEqual(before);
       permissions = {

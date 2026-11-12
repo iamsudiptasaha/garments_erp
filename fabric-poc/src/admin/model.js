@@ -309,3 +309,5 @@ export function archiveRole(state, actor, roleId, expected) {
   role.archived = true;
   return record(next, actor, 'Archived role', role.name);
 }
+
+export const adminPages = { adminRoles: 'Roles & permissions', adminAudit: 'Activity log' };

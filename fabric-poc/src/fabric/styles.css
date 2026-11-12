@@ -121,6 +121,10 @@ select {
   font-weight: 400;
   margin-top: 5px;
 }
+.fabric-sidebar .admin-nav {
+  border-top: 1px solid #d7e4ef;
+  padding-top: 10px;
+}
 .fabric-sidebar summary {
   cursor: pointer;
   padding: 10px 7px;
@@ -148,7 +152,7 @@ select {
   text-decoration: none;
   font-family: inherit;
 }
-.fabric-sidebar nav button[aria-current='page'] {
+.fabric-sidebar nav :is(button, a)[aria-current='page'] {
   background: #d1e8fa;
   color: #205d8c;
   font-weight: 600;
@@ -1101,7 +1105,7 @@ select {
   background: #e2eef9;
   color: #2c648e;
 }
-.fabric-sidebar nav button[aria-current='page'] {
+.fabric-sidebar nav :is(button, a)[aria-current='page'] {
   background: #d4eafa;
   box-shadow: inset 3px 0 #6aa7d2;
 }
@@ -1623,13 +1627,6 @@ select {
   grid-template-columns: 1fr;
   gap: 2px;
 }
-@media (max-width: 700px) {
-  .access-navigation {
-    height: 65dvh;
-    overflow: hidden;
-  }
-}
-
 /* Shared record-grid controls. Keep actions aligned while letting them wrap. */
 .sheet-exports {
   flex-wrap: wrap;
