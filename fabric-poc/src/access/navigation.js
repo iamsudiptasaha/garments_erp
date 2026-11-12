@@ -1,42 +1,162 @@
+import React, { useEffect, useRef, useState } from 'react';
 import { AccountFooter } from './account-footer.js';
-import React, { useRef } from 'react';
 import { getAccessClient } from './client.js';
 import { useNavigationPreferences } from './navigation-preferences.js';
-import { pages } from '../fabric/catalog.js';
+import { adminPages, allowed, isAdministrator } from '../admin/model.js';
+import { otherModules, pages } from '../fabric/catalog.js';
+import { finishedGoodsPages } from '../finished-goods/pages.js';
 import { hrPages } from '../hr/model.js';
+import { sessionAccessModel } from './workspace-gate.js';
+
 const h = React.createElement;
-const groups = [
-  ['fabric', 'Fabric'],
-  ['colours', 'Colours'],
-  ['production', 'Production'],
-  ['inventory', 'Raw Material Inventory'],
-  ['miscellaneous', 'Miscellaneous'],
-];
-export function AccessNavigation({
-  access,
-  tab,
-  onTab,
+const workspaceUrl = '/fabric.html?live=1';
+const adminUrl = '/access.html';
+const adminDestinations = {
+  adminRoles: adminPages.adminRoles,
+  adminAccess: 'Account access',
+  adminAudit: adminPages.adminAudit,
+};
+const productionPriority = ['productionTaskBoard', 'productionUpdateTaskStatus'];
+const productionRank = (key) =>
+  productionPriority.includes(key) ? productionPriority.indexOf(key) : productionPriority.length;
+
+const sidebarIcon = (expanded) =>
+  h(
+    'svg',
+    {
+      width: 20,
+      height: 20,
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: 1.7,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      'aria-hidden': true,
+      focusable: 'false',
+    },
+    h('rect', { x: 3, y: 4, width: 18, height: 16, rx: 2 }),
+    h('path', { d: 'M8 4v16' }),
+    h('path', { d: expanded ? 'm16 9-3 3 3 3' : 'm13 9 3 3-3 3' }),
+  );
+function loadSidebar() {
+  try {
+    const saved = localStorage.getItem('garments-sidebar-open');
+    if (saved !== null) return saved === 'true';
+  } catch {
+    /* Navigation works without storage. */
+  }
+  return !window.matchMedia('(max-width:700px)').matches;
+}
+
+export function useWorkspaceMenu() {
+  const [sidebarOpen, setSidebarOpen] = useState(loadSidebar);
+  useEffect(() => {
+    try {
+      localStorage.setItem('garments-sidebar-open', String(sidebarOpen));
+    } catch {
+      /* Personal menu preference is optional. */
+    }
+  }, [sidebarOpen]);
+  useEffect(() => {
+    const closeOnEscape = (event) => {
+      if (
+        event.key === 'Escape' &&
+        sidebarOpen &&
+        window.matchMedia('(max-width:700px)').matches &&
+        !document.querySelector('dialog[open]')
+      ) {
+        setSidebarOpen(false);
+        requestAnimationFrame(() => document.getElementById('navigation-toggle')?.focus());
+      }
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [sidebarOpen]);
+  return [sidebarOpen, setSidebarOpen];
+}
+
+export function WorkspaceMenuToolbar({ open, onToggle }) {
+  return h(
+    'div',
+    { className: 'workspace-toolbar' },
+    h(
+      'button',
+      {
+        id: 'navigation-toggle',
+        type: 'button',
+        className: 'navigation-toggle',
+        'aria-controls': 'workspace-sidebar',
+        'aria-expanded': open,
+        onClick: onToggle,
+      },
+      sidebarIcon(open),
+      open ? 'Hide menu' : 'Show menu',
+    ),
+    h(
+      'div',
+      { className: 'workspace-toolbar-context' },
+      h('span', null, 'Garment workspace'),
+      h('small', null, 'Fabric pilot'),
+    ),
+  );
+}
+
+export function WorkspaceSidebar({
+  live,
+  access = sessionAccessModel(live),
+  actor = live?.actor,
+  page,
+  finishedGoodsPage,
   open,
   onClose,
-  accountName,
+  onPage = (key) => location.assign(workspaceUrl + (key === 'home' ? '' : '#' + key)),
+  onFinishedGoods = (key) =>
+    location.assign(workspaceUrl + '&finishedGoods=' + key + '#finishedProducts'),
+  onAdmin = (key) => location.assign(adminUrl + '#' + key),
   onSignOut,
-  productionPage,
 }) {
   const sidebar = useRef(null);
-  const notice = useNavigationPreferences(getAccessClient(), sidebar);
-  const can = (key) => access.permissions?.[key]?.view === true;
-  const documentLinks = productionPage
+  const notice = useNavigationPreferences(live ? getAccessClient() : null, sidebar);
+  const can = (key) =>
+    allowed(access, actor, productionPriority.includes(key) ? 'productionJobs' : key, 'view');
+  const current = (key) => (page === key ? 'page' : undefined);
+  const button = (key, title, action = onPage, active = current(key)) =>
+    h('button', { key, type: 'button', 'aria-current': active, onClick: () => action(key) }, title);
+  const link = (key, title, href) => h('a', { key, href, 'aria-current': current(key) }, title);
+  const section = (key, title, label, entries, className) =>
+    entries.length > 0 &&
+    h(
+      'details',
+      { key, open: true, className, 'data-nav-section': key },
+      h('summary', null, title),
+      h('nav', { 'aria-label': label }, entries),
+    );
+  const entries = (group) =>
+    Object.entries(pages).filter(([, p]) => (p.section || 'fabric') === group);
+  const pageButtons = (group) =>
+    entries(group)
+      .filter(([key, p]) => can(key) && !p.hiddenNavigation)
+      .sort(([a], [b]) => (group === 'production' ? productionRank(a) - productionRank(b) : 0))
+      .map(([key, p]) => button(key, p.title));
+  const productionLinks = live
     ? [
-        ['productionChallans', 'challans', 'Challans'],
-        ['jobWorkerBills', 'worker-bills', 'Worker bills'],
-      ].filter(([key]) => can(key))
+        ['productionChallans', 'Challans', '/production-challan.html#challans'],
+        ['jobWorkerBills', 'Worker bills', '/production-challan.html#worker-bills'],
+      ]
+        .filter(([key]) => can(key))
+        .map(([key, title, href]) => link(key, title, href))
     : [];
+  const adminLinks = Object.entries(live ? adminDestinations : adminPages)
+    .filter(([key]) => key === 'adminAccess' || can(key))
+    .map(([key, title]) => button(key, title, live ? onAdmin : onPage));
+
   return h(
     'aside',
     {
       ref: sidebar,
-      id: 'live-workspace-sidebar',
-      className: 'fabric-sidebar access-navigation',
+      id: 'workspace-sidebar',
+      className: 'fabric-sidebar',
       hidden: !open,
       'aria-label': 'Workspace navigation',
     },
@@ -44,10 +164,10 @@ export function AccessNavigation({
       'div',
       { className: 'sidebar-top' },
       h(
-        'a',
-        { className: 'fabric-brand', href: '/fabric.html?live=1' },
+        'button',
+        { type: 'button', className: 'fabric-brand', onClick: () => onPage('home') },
         h('span', null, 'G'),
-        h('div', null, 'Garment workspace', h('small', null, 'Signed in')),
+        h('div', null, 'Garment workspace', h('small', null, 'Fabric pilot')),
       ),
     ),
     h(
@@ -56,115 +176,83 @@ export function AccessNavigation({
       h(
         'nav',
         { className: 'overview-navigation', 'aria-label': 'Workspace overview' },
-        h('a', { href: '/fabric.html?live=1' }, 'Overview'),
+        button('home', 'Overview'),
       ),
-      groups.map(([group, title]) => {
-        const entries = Object.entries(pages).filter(
-          ([key, p]) =>
-            (p.section || 'fabric') === group &&
-            can(key) &&
-            (!productionPage || !p.hiddenNavigation),
-        );
-        return (
-          (entries.length > 0 ||
-            (productionPage && group === 'fabric') ||
-            (group === 'production' && documentLinks.length > 0)) &&
+      section('fabric', 'Fabric', 'Fabric sections', [
+        button('fabricOverview', 'Fabric overview'),
+        ...pageButtons('fabric'),
+      ]),
+      section('colours', 'Colours', 'Colour sections', pageButtons('colours'), 'colour-nav'),
+      section(
+        'production',
+        'Production',
+        'Production pages',
+        [...pageButtons('production'), ...productionLinks],
+        'production-nav',
+      ),
+      section(
+        'inventory',
+        'Raw Material Inventory',
+        'Raw Material Inventory pages',
+        pageButtons('inventory'),
+        'inventory-nav',
+      ),
+      section(
+        'miscellaneous',
+        'Miscellaneous',
+        'Miscellaneous pages',
+        pageButtons('miscellaneous'),
+        'miscellaneous-nav',
+      ),
+      can('finishedProducts') &&
+        section(
+          'finished-goods',
+          'Finished Goods',
+          'Finished Goods pages',
+          Object.entries(finishedGoodsPages).map(([key, title]) =>
+            button(
+              key,
+              title,
+              onFinishedGoods,
+              page === 'finishedProducts' && finishedGoodsPage === key ? 'page' : undefined,
+            ),
+          ),
+        ),
+      otherModules
+        .filter((name) => name !== 'Billing' || !live)
+        .map((name) =>
           h(
             'details',
-            { open: true, key: group, 'data-nav-section': group },
-            h('summary', null, title),
-            h(
-              'nav',
-              { 'aria-label': title + ' pages' },
-              productionPage &&
-                group === 'fabric' &&
-                h('a', { href: '/fabric.html?live=1#fabricOverview' }, 'Fabric overview'),
-              entries.map(([key, p]) =>
-                h('a', { key, href: '/fabric.html?live=1#' + key }, p.title),
-              ),
-              group === 'production' &&
-                documentLinks.map(([key, hash, label]) =>
-                  h(
-                    'a',
-                    {
-                      key,
-                      href: '#' + hash,
-                      'aria-current': productionPage === hash ? 'page' : undefined,
-                    },
-                    label,
-                  ),
-                ),
-            ),
-          )
-        );
-      }),
-      productionPage &&
-        can('finishedProducts') &&
-        h(
-          'details',
-          { open: true, 'data-nav-section': 'finished-goods' },
-          h('summary', null, 'Finished Goods'),
-          h(
-            'nav',
-            { 'aria-label': 'Finished Goods pages' },
-            h('a', { href: '/fabric.html?live=1#finishedProducts' }, 'Item stock summary'),
+            { key: name, 'data-nav-section': 'preview-' + name },
+            h('summary', null, name),
+            h('p', { className: 'phase-note' }, 'Next phase · after Fabric'),
           ),
         ),
       can('employees') &&
-        h(
-          'details',
-          { open: true, 'data-nav-section': 'hr' },
-          h('summary', null, 'Employee / HR'),
-          h(
-            'nav',
-            { 'aria-label': 'Employee / HR pages' },
-            Object.entries(hrPages).map(([key, entry]) =>
-              h('a', { key, href: '/fabric.html?live=1#' + key }, entry.title),
-            ),
-          ),
+        section(
+          'hr',
+          'Employee / HR',
+          'Employee / HR pages',
+          Object.entries(hrPages).map(([key, entry]) => button(key, entry.title)),
+          'hr-nav',
         ),
-      access.administrator &&
-        h(
-          'details',
-          { open: true, 'data-nav-section': 'administration' },
-          h('summary', null, 'Administration'),
-          h(
-            'nav',
-            { 'aria-label': 'Administration pages' },
-            [
-              ['roles', 'Roles & permissions'],
-              ['accounts', 'Account access'],
-              ['audit', 'Activity log'],
-            ].map(([key, title]) =>
-              h(
-                'button',
-                {
-                  key,
-                  'aria-current': tab === key ? 'page' : undefined,
-                  onClick: () => onTab(key),
-                },
-                title,
-              ),
-            ),
-            h('a', { href: '/files-admin.html' }, 'Bucket groups'),
-          ),
+      isAdministrator(access, actor) &&
+        section(
+          'administration',
+          'Administration',
+          'Administration pages',
+          [...adminLinks, link('files-admin', 'Bucket groups', '/files-admin.html')],
+          'admin-nav',
         ),
-      access.enabled &&
-        h(
-          'details',
-          { open: true, 'data-nav-section': 'files' },
-          h('summary', null, 'File Uploads'),
-          h(
-            'nav',
-            { 'aria-label': 'File Uploads pages' },
-            h('a', { href: '/files.html' }, 'Saved-record files'),
-          ),
-        ),
+      section('files', 'File Uploads', 'File Uploads pages', [
+        link('files', 'Saved-record files', '/files.html'),
+      ]),
     ),
     notice && h('p', { role: 'status' }, notice),
     h(AccountFooter, {
-      name: accountName || 'My account',
-      role: access.administrator ? 'Administrator' : 'Signed-in employee',
+      name: access.users.find((user) => user.id === actor)?.name || 'My account',
+      role: live ? (live.administrator ? 'Administrator' : 'Signed-in employee') : 'Local preview',
+      live: !!live,
       onCollapse: onClose,
       onSignOut,
     }),

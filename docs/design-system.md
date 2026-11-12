@@ -30,7 +30,7 @@ The workspace shell has a 235px sidebar and 34px × 38px main padding. Page head
 
 | Pattern | Use and exact source |
 | --- | --- |
-| Navigation | Use the workspace sidebar, grouped disclosures, current-page state, and menu toggle. The [Fabric workspace shell](../fabric-poc/src/fabric/app.js) provides navigation for both live and preview workspaces. Administration uses [AccessNavigation](../fabric-poc/src/access/navigation.js). The icon is an inline 20px SVG with currentColor and 1.7px stroke, hidden from assistive technology beside its text label. |
+| Navigation | Use the [shared workspace sidebar and menu toolbar](../fabric-poc/src/access/navigation.js) on every ERP workspace screen. Keep the same branding, account footer, ordered sections, and destinations for the same signed-in account. Provide the current destination and existing route handlers to the shared component. The icon is an inline 20px SVG with currentColor and 1.7px stroke, hidden from assistive technology beside its text label. |
 | Buttons and tabs | Shared buttons have 8px radii and 10px × 14px padding. Disabled controls use 0.45 opacity. Use `.primary` for the main action and [WorkspaceViewToggle](../fabric-poc/src/fabric/view-toggle.js) for Overview and Sheet. `.fabric-view-toggle` uses 9px radius, 4px inset and white selected buttons with `0 1px 5px #25445b10` shadow. [Controls CSS](../fabric-poc/src/fabric/styles.css) |
 | Inputs and dropdowns | Label controls and use `.fabric-fields`. Native fields have 7px radius and 10px × 12px padding. Use the existing [RecordSelect](../fabric-poc/src/fabric/record-select.js) for richer relational options and [LabRecordSelect](../fabric-poc/src/fabric/lab-record-select.js) as the searchable picker example. |
 | Tables and sheets | Use a semantic table in `.lab-record-table-wrap` for compact record lists. Cells use 11px × 12px padding and `#e4edf5` horizontal dividers. Use [FabricSheet](../fabric-poc/src/fabric/sheet.js) for sheet workflows. Its 600px frame has a 1px border and 10px radius. |
@@ -38,7 +38,7 @@ The workspace shell has a 235px sidebar and 34px × 38px main padding. Page head
 | Forms and dialogs | Group document lines with `.fabric-line` (22px padding, 10px radius) and align actions with `.editor-actions`. Native `.fabric-dialog` uses 15px radius, 28px padding, 90vh max height, width `min(1000px, 94vw)` and `#17344966` backdrop. Follow [LabEditor](../fabric-poc/src/colours/editor.js) and [BillEditor](../fabric-poc/src/fabric/editor.js) for heading, fields and actions. |
 | Print | Use the workspace print rules as the starting point. Keep the record and hide navigation and interactive controls. [Print CSS](../fabric-poc/src/fabric/styles.css) |
 
-Navigation disclosures share stable section keys across signed-in workspaces. Persist each explicit expand or collapse through the shared account preference store. Keep the current-page indicator and responsive sidebar visibility independent of disclosure state.
+Navigation disclosures share stable section keys across signed-in workspaces. Persist each explicit expand or collapse through the shared account preference store. Keep the current-page indicator and responsive sidebar visibility independent of disclosure state. Verify the sidebar across workspace routes using the same account, including an account with restricted permissions. [Navigation regression checks](../fabric-poc/e2e/navigation-preferences.spec.js)
 
 ## Record grids
 

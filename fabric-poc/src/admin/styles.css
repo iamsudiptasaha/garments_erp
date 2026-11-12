@@ -169,10 +169,6 @@
   font-size: 13px;
   color: #7c92a5;
 }
-.fabric-sidebar .admin-nav {
-  border-top: 1px solid #d7e4ef;
-  padding-top: 10px;
-}
 .fabric-page-readonly {
   font-size: 11px;
   color: #7e94a8;
@@ -184,9 +180,6 @@
   }
   .access-metrics {
     grid-template-columns: repeat(2, 1fr);
-  }
-  .fabric-sidebar > details.admin-nav {
-    display: block !important;
   }
   .audit-list article {
     gap: 15px;
@@ -201,11 +194,6 @@
   background: #eaf3fb;
 }
 
-@media (max-width: 700px) {
-  .fabric-sidebar > details.hr-nav {
-    display: block !important;
-  }
-}
 .role-members {
   width: min(850px, 96vw);
 }

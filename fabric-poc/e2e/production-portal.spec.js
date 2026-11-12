@@ -81,11 +81,15 @@ test('portal handover persists actual linked job quantities and retains challan/
   await expect(page.locator('.stage-cell').first()).toHaveText('Stitching');
 });
 
-test('standalone portal floor route has only the shared form with actual item dimensions', async ({
+test('portal floor route shares navigation and keeps the focused form with actual item dimensions', async ({
   page,
 }) => {
   await page.goto('/fabric.html?floor=1&task=production-prod-ip-1#productionUpdateTaskStatus');
-  await expect(page.getByRole('navigation', { name: 'Production pages' })).toHaveCount(0);
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Production pages' })
+      .getByRole('button', { name: 'Update Tasks' }),
+  ).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('combobox', { name: 'Design / task', exact: true })).toHaveCount(0);
   await expect(page.locator('.operator-context')).toContainText('SC-101');
   await expect(page.locator('.size-entry-grid input')).toHaveCount(3);

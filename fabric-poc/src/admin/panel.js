@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   actions,
+  adminPages,
   resources,
   allowed,
   isAdministrator,
@@ -11,7 +12,6 @@ import {
 import './styles.css';
 import { RoleMembers } from './members.js';
 const h = React.createElement;
-export const adminPages = { adminRoles: 'Roles & permissions', adminAudit: 'Activity log' };
 function Editor({ access, actor, type, record, onSave, onClose }) {
   const dialog = useRef(null),
     expectedRevision = useRef(access.revision),

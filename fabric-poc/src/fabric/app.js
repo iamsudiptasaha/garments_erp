@@ -1,5 +1,5 @@
 import { GridSearch, useGridSearch } from './grid-toolbar.js';
-import { useNavigationPreferences } from '../access/navigation-preferences.js';
+import { WorkspaceMenuToolbar, WorkspaceSidebar, useWorkspaceMenu } from '../access/navigation.js';
 import { inventoryCommands, liveInventoryPage } from './inventory-live.js';
 import { ProductionItemEditor } from '../production-task-board/item-editor.js';
 import {
@@ -10,7 +10,6 @@ import {
 import { liveProductionPage } from '../production-task-board/live-contract.js';
 import { PortalTaskBoard } from '../production-task-board/portal';
 import { JobHistory } from '../production-task-board/job-history';
-import { AccountFooter } from '../access/account-footer.js';
 import { OverviewPanel } from '../overview/panel.js';
 import { getAccessClient, createVerificationClient } from '../access/client.js';
 import {
@@ -27,10 +26,11 @@ import { ItemEditor } from '../production/item-editor.js';
 import { JobEditor } from '../production/editor.js';
 import { ProductionOverview } from '../production/cards.js';
 import { InventoryCard } from '../inventory/cards.js';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { FinishedGoods, finishedGoodsPages } from '../finished-goods/workspace.js';
-import { pages, otherModules } from './catalog.js';
+import { finishedGoodsPages } from '../finished-goods/pages.js';
+import { FinishedGoods } from '../finished-goods/workspace.js';
+import { pages } from './catalog.js';
 import {
   initialFabric,
   validateFabric,
@@ -43,8 +43,8 @@ import { FabricSheet } from './sheet.js';
 import { WorkspaceViewToggle } from './view-toggle.js';
 import { BillEditor } from './editor.js';
 import './styles.css';
-import { initialAccess, allowed, isAdministrator, upgradeAccess } from '../admin/model.js';
-import { AdminPanel, adminPages } from '../admin/panel.js';
+import { adminPages, initialAccess, allowed, upgradeAccess } from '../admin/model.js';
+import { AdminPanel } from '../admin/panel.js';
 import { HRPanel } from '../hr/panel.js';
 import { ContactEditor } from '../miscellaneous/contact-editor.js';
 import { hrPages } from '../hr/model.js';
@@ -52,25 +52,6 @@ const h = React.createElement,
   STORE = 'garments-fabric-workspace-v1';
 const fmt = (n) =>
   typeof n === 'number' ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : n;
-const sidebarIcon = (expanded) =>
-  h(
-    'svg',
-    {
-      width: 20,
-      height: 20,
-      viewBox: '0 0 24 24',
-      fill: 'none',
-      stroke: 'currentColor',
-      strokeWidth: 1.7,
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
-      'aria-hidden': true,
-      focusable: 'false',
-    },
-    h('rect', { x: 3, y: 4, width: 18, height: 16, rx: 2 }),
-    h('path', { d: 'M8 4v16' }),
-    h('path', { d: expanded ? 'm16 9-3 3 3 3' : 'm13 9 3 3-3 3' }),
-  );
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE) || 'null');
@@ -106,16 +87,6 @@ function loadAccess() {
   }
   return initialAccess();
 }
-function loadSidebar() {
-  try {
-    const saved = localStorage.getItem('garments-sidebar-open');
-    if (saved !== null) return saved === 'true';
-  } catch {
-    /* Navigation works without storage. */
-  }
-  return !window.matchMedia('(max-width:700px)').matches;
-}
-
 const finishedGoodsPreviewPages = {
   sizes: 'stock',
   variations: 'sellable-summary',
@@ -128,34 +99,12 @@ const finishedGoodsPreviewPages = {
 };
 
 function App({ live }) {
-  const [finishedGoodsPage, setFinishedGoodsPage] = useState(() =>
-    new URLSearchParams(location.search).get('finishedGoods') === 'costing' ? 'costing' : 'sizes',
-  );
-  const [sidebarOpen, setSidebarOpen] = useState(loadSidebar);
-  const sidebar = useRef(null);
-  const navigationNotice = useNavigationPreferences(live ? getAccessClient() : null, sidebar);
-  useEffect(() => {
-    try {
-      localStorage.setItem('garments-sidebar-open', String(sidebarOpen));
-    } catch {
-      /* Personal menu preference is optional. */
-    }
-  }, [sidebarOpen]);
-  useEffect(() => {
-    const closeOnEscape = (event) => {
-      if (
-        event.key === 'Escape' &&
-        sidebarOpen &&
-        window.matchMedia('(max-width:700px)').matches &&
-        !document.querySelector('dialog[open]')
-      ) {
-        setSidebarOpen(false);
-        requestAnimationFrame(() => document.getElementById('navigation-toggle')?.focus());
-      }
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [sidebarOpen]);
+  const [finishedGoodsPage, setFinishedGoodsPage] = useState(() => {
+    const key = new URLSearchParams(location.search).get('finishedGoods');
+    return Object.hasOwn(finishedGoodsPages, key) ? key : 'sizes';
+  });
+  const [sidebarOpen, setSidebarOpen] = useWorkspaceMenu();
+  const floor = new URLSearchParams(location.search).get('floor') === '1';
   const [access, setAccess] = useState(() => (live ? sessionAccessModel(live) : loadAccess())),
     [actor, setActor] = useState(live?.actor || 'owner');
   useEffect(() => {
@@ -370,12 +319,21 @@ function App({ live }) {
       return false;
     }
   }
-  function navigate(key) {
+  function navigate(key, finishedGoods) {
     if (live && Object.hasOwn(adminPages, key)) {
       location.href = '/access.html#' + key;
       return;
     }
     if (window.matchMedia('(max-width:700px)').matches) setSidebarOpen(false);
+    if (floor) {
+      const url = new URL(location.href);
+      url.searchParams.delete('floor');
+      url.searchParams.delete('task');
+      if (finishedGoods) url.searchParams.set('finishedGoods', finishedGoods);
+      url.hash = key === 'home' ? '' : key;
+      location.assign(url);
+      return;
+    }
     setPage(key);
     location.hash = key === 'home' ? '' : key;
     setQuery('');
@@ -798,7 +756,7 @@ function App({ live }) {
     : liveProductionPage(page)
       ? productionError
       : liveError;
-  if (new URLSearchParams(location.search).get('floor') === '1') {
+  function renderFloor() {
     if (live && (!liveReady || productionError))
       return h(
         'section',
@@ -827,317 +785,38 @@ function App({ live }) {
         })
       : h('section', { className: 'access-denied' }, h('h1', null, 'Access restricted'));
   }
+  const shell = { className: `fabric-shell${sidebarOpen ? '' : ' sidebar-collapsed'}` };
+  const main = { className: 'fabric-main' };
+  const sidebar = h(WorkspaceSidebar, {
+    live,
+    access,
+    actor,
+    page: floor ? 'productionUpdateTaskStatus' : page,
+    finishedGoodsPage,
+    open: sidebarOpen,
+    onClose: () => setSidebarOpen(false),
+    onPage: navigate,
+    onFinishedGoods: (key) => {
+      setFinishedGoodsPage(key);
+      navigate('finishedProducts', key);
+    },
+  });
+  const toolbar = h(WorkspaceMenuToolbar, {
+    open: sidebarOpen,
+    onToggle: () => setSidebarOpen((open) => !open),
+  });
+  if (floor) return h('div', shell, sidebar, h('main', main, toolbar, renderFloor()));
   return h(
     React.Fragment,
     null,
     h(
       'div',
-      { className: `fabric-shell${sidebarOpen ? '' : ' sidebar-collapsed'}` },
-      h(
-        'aside',
-        {
-          id: 'workspace-sidebar',
-          className: 'fabric-sidebar',
-          ref: sidebar,
-          hidden: !sidebarOpen,
-          'aria-label': 'Workspace navigation',
-        },
-        h(
-          'div',
-          { className: 'sidebar-top' },
-          h(
-            'button',
-            { className: 'fabric-brand', onClick: () => navigate('home') },
-            h('span', null, 'G'),
-            h('div', null, 'Garment workspace', h('small', null, 'Fabric pilot')),
-          ),
-        ),
-        h(
-          'div',
-          { className: 'sidebar-navigation-scroll' },
-          h(
-            'nav',
-            { className: 'overview-navigation', 'aria-label': 'Workspace overview' },
-            h(
-              'button',
-              {
-                'aria-current': page === 'home' ? 'page' : undefined,
-                onClick: () => navigate('home'),
-              },
-              'Overview',
-            ),
-          ),
-          h(
-            'details',
-            { open: true, 'data-nav-section': 'fabric' },
-            h('summary', null, 'Fabric'),
-            h(
-              'nav',
-              { 'aria-label': 'Fabric sections' },
-              h(
-                'button',
-                {
-                  'aria-current': page === 'fabricOverview' ? 'page' : undefined,
-                  onClick: () => navigate('fabricOverview'),
-                },
-                'Fabric overview',
-              ),
-              Object.entries(pages)
-                .filter(([key, p]) => !p.section && can('view', key))
-                .map(([key, p]) =>
-                  h(
-                    'button',
-                    {
-                      key,
-                      'aria-current': page === key ? 'page' : undefined,
-                      onClick: () => navigate(key),
-                    },
-                    p.title,
-                  ),
-                ),
-            ),
-          ),
-          Object.entries(pages).some(([key, p]) => p.section === 'colours' && can('view', key)) &&
-            h(
-              'details',
-              { open: true, className: 'colour-nav', 'data-nav-section': 'colours' },
-              h('summary', null, 'Colours'),
-              h(
-                'nav',
-                { 'aria-label': 'Colour sections' },
-                Object.entries(pages)
-                  .filter(([key, p]) => p.section === 'colours' && can('view', key))
-                  .map(([key, p]) =>
-                    h(
-                      'button',
-                      {
-                        key,
-                        'aria-current': page === key ? 'page' : undefined,
-                        onClick: () => navigate(key),
-                      },
-                      p.title,
-                    ),
-                  ),
-              ),
-            ),
-          (Object.entries(pages).some(
-            ([key, p]) => p.section === 'production' && can('view', key),
-          ) ||
-            (live && (can('view', 'productionChallans') || can('view', 'jobWorkerBills')))) &&
-            h(
-              'details',
-              { open: true, className: 'production-nav', 'data-nav-section': 'production' },
-              h('summary', null, 'Production'),
-              h(
-                'nav',
-                { 'aria-label': 'Production pages' },
-                Object.entries(pages)
-                  .filter(
-                    ([key, p]) =>
-                      p.section === 'production' && !p.hiddenNavigation && can('view', key),
-                  )
-                  .sort(([a], [b]) => {
-                    const rank = (key) =>
-                      ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(key)
-                        ? ['productionTaskBoard', 'productionUpdateTaskStatus'].indexOf(key)
-                        : 2;
-                    return rank(a) - rank(b);
-                  })
-                  .map(([key, p]) =>
-                    h(
-                      'button',
-                      {
-                        key,
-                        'aria-current': page === key ? 'page' : undefined,
-                        onClick: () => navigate(key),
-                      },
-                      p.title,
-                    ),
-                  ),
-                live &&
-                  can('view', 'productionChallans') &&
-                  h('a', { href: '/production-challan.html#challans' }, 'Challans'),
-                live &&
-                  can('view', 'jobWorkerBills') &&
-                  h('a', { href: '/production-challan.html#worker-bills' }, 'Worker bills'),
-              ),
-            ),
-          Object.entries(pages).some(([key, p]) => p.section === 'inventory' && can('view', key)) &&
-            h(
-              'details',
-              { open: true, className: 'inventory-nav', 'data-nav-section': 'inventory' },
-              h('summary', null, 'Raw Material Inventory'),
-              h(
-                'nav',
-                { 'aria-label': 'Raw Material Inventory pages' },
-                Object.entries(pages)
-                  .filter(([key, p]) => p.section === 'inventory' && can('view', key))
-                  .map(([key, p]) =>
-                    h(
-                      'button',
-                      {
-                        key,
-                        'aria-current': page === key ? 'page' : undefined,
-                        onClick: () => navigate(key),
-                      },
-                      p.title,
-                    ),
-                  ),
-              ),
-            ),
-          Object.entries(pages).some(
-            ([key, p]) => p.section === 'miscellaneous' && can('view', key),
-          ) &&
-            h(
-              'details',
-              { open: true, className: 'miscellaneous-nav', 'data-nav-section': 'miscellaneous' },
-              h('summary', null, 'Miscellaneous'),
-              h(
-                'nav',
-                { 'aria-label': 'Miscellaneous pages' },
-                Object.entries(pages)
-                  .filter(([key, p]) => p.section === 'miscellaneous' && can('view', key))
-                  .map(([key, p]) =>
-                    h(
-                      'button',
-                      {
-                        key,
-                        'aria-current': page === key ? 'page' : undefined,
-                        onClick: () => navigate(key),
-                      },
-                      p.title,
-                    ),
-                  ),
-              ),
-            ),
-          can('view', 'finishedProducts') &&
-            h(
-              'details',
-              { open: true, 'data-nav-section': 'finished-goods' },
-              h('summary', null, 'Finished Goods'),
-              h(
-                'nav',
-                { 'aria-label': 'Finished Goods pages' },
-                Object.entries(finishedGoodsPages).map(([key, title]) =>
-                  h(
-                    'button',
-                    {
-                      key,
-                      'aria-current':
-                        page === 'finishedProducts' && finishedGoodsPage === key
-                          ? 'page'
-                          : undefined,
-                      onClick: () => {
-                        setFinishedGoodsPage(key);
-                        navigate('finishedProducts');
-                      },
-                    },
-                    title,
-                  ),
-                ),
-              ),
-            ),
-          otherModules.map((name) =>
-            h(
-              'details',
-              { key: name, 'data-nav-section': 'preview-' + name },
-              h('summary', null, name),
-              h('p', { className: 'phase-note' }, 'Next phase · after Fabric'),
-            ),
-          ),
-          can('view', 'employees') &&
-            h(
-              'details',
-              { open: true, className: 'hr-nav', 'data-nav-section': 'hr' },
-              h('summary', null, 'Employee / HR'),
-              h(
-                'nav',
-                { 'aria-label': 'Employee / HR pages' },
-                Object.entries(hrPages).map(([key, entry]) =>
-                  h(
-                    'button',
-                    {
-                      key,
-                      'aria-current': page === key ? 'page' : undefined,
-                      onClick: () => navigate(key),
-                    },
-                    entry.title,
-                  ),
-                ),
-              ),
-            ),
-          isAdministrator(access, actor) &&
-            h(
-              'details',
-              { open: true, className: 'admin-nav', 'data-nav-section': 'administration' },
-              h('summary', null, 'Administration'),
-              h(
-                'nav',
-                { 'aria-label': 'Administration pages' },
-                Object.entries(adminPages)
-                  .filter(([key]) => can('view', key))
-                  .map(([key, label]) =>
-                    h(
-                      'button',
-                      {
-                        key,
-                        'aria-current': page === key ? 'page' : undefined,
-                        onClick: () => navigate(key),
-                      },
-                      label,
-                    ),
-                  ),
-                h('a', { href: '/files-admin.html' }, 'Bucket groups'),
-              ),
-            ),
-          h(
-            'details',
-            { open: true, 'data-nav-section': 'files' },
-            h('summary', null, 'File Uploads'),
-            h(
-              'nav',
-              { 'aria-label': 'File Uploads pages' },
-              h('a', { href: '/files.html' }, 'Saved-record files'),
-            ),
-          ),
-        ),
-        navigationNotice && h('p', { role: 'status' }, navigationNotice),
-        h(AccountFooter, {
-          name: access.users.find((user) => user.id === actor)?.name || 'My account',
-          role: live
-            ? live.administrator
-              ? 'Administrator'
-              : 'Signed-in employee'
-            : 'Local preview',
-          live: !!live,
-          onCollapse: () => setSidebarOpen(false),
-        }),
-      ),
+      shell,
+      sidebar,
       h(
         'main',
-        { className: 'fabric-main' },
-        h(
-          'div',
-          { className: 'workspace-toolbar' },
-          h(
-            'button',
-            {
-              id: 'navigation-toggle',
-              className: 'navigation-toggle',
-              'aria-controls': 'workspace-sidebar',
-              'aria-expanded': sidebarOpen,
-              onClick: () => setSidebarOpen((open) => !open),
-            },
-            sidebarIcon(sidebarOpen),
-            sidebarOpen ? 'Hide menu' : 'Show menu',
-          ),
-          h(
-            'div',
-            { className: 'workspace-toolbar-context' },
-            h('span', null, 'Garment workspace'),
-            h('small', null, 'Fabric pilot'),
-          ),
-        ),
+        main,
+        toolbar,
         live
           ? h(
               'div',

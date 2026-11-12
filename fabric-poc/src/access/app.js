@@ -3,7 +3,7 @@ import { RecordGrid } from '../fabric/record-grid.js';
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { getAccessClient, getLoginMethods } from './client.js';
-import { AccessNavigation } from './navigation.js';
+import { WorkspaceMenuToolbar, WorkspaceSidebar, useWorkspaceMenu } from './navigation.js';
 import { Authenticator, RecoveryForm, PasswordSettings } from './security.js';
 import { AccountLifecycle } from '../admin/account-lifecycle.js';
 import {
@@ -47,8 +47,8 @@ function AccessApp() {
         ({ adminRoles: 'roles', adminAccess: 'accounts', adminAudit: 'audit' })[
           location.hash.slice(1)
         ] || 'roles',
-    ),
-    [menuOpen, setMenuOpen] = useState(true);
+    );
+  const [menuOpen, setMenuOpen] = useWorkspaceMenu();
   useEffect(() => {
     if (!client) {
       setReady(true);
@@ -134,18 +134,20 @@ function AccessApp() {
       h('p', { role: 'alert' }, configurationError),
     );
   const signedIn = !!user && access?.enabled;
+  const adminTabs = { adminRoles: 'roles', adminAccess: 'accounts', adminAudit: 'audit' };
   return h(
     'div',
     {
-      className: signedIn ? `access-workspace${menuOpen ? '' : ' access-menu-closed'}` : undefined,
+      className: signedIn
+        ? `fabric-shell access-workspace${menuOpen ? '' : ' sidebar-collapsed'}`
+        : undefined,
     },
     signedIn &&
-      h(AccessNavigation, {
-        accountName: user?.email,
+      h(WorkspaceSidebar, {
+        live: access,
         onSignOut: signOut,
-        access,
-        tab,
-        onTab: setTab,
+        page: Object.keys(adminTabs).find((key) => adminTabs[key] === tab),
+        onAdmin: (key) => setTab(adminTabs[key]),
         open: menuOpen,
         onClose: () => setMenuOpen(false),
       }),
@@ -153,19 +155,10 @@ function AccessApp() {
       'main',
       { className: 'access-live-shell' },
       signedIn &&
-        h(
-          'div',
-          { className: 'workspace-toolbar' },
-          h(
-            'button',
-            {
-              'aria-controls': 'live-workspace-sidebar',
-              'aria-expanded': menuOpen,
-              onClick: () => setMenuOpen((v) => !v),
-            },
-            menuOpen ? '‹ Hide menu' : '› Show menu',
-          ),
-        ),
+        h(WorkspaceMenuToolbar, {
+          open: menuOpen,
+          onToggle: () => setMenuOpen((value) => !value),
+        }),
       h(
         'header',
         { className: 'access-live-header' },
