@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -32,6 +32,24 @@ test('bundle guard blocks service-role JWTs and data dumps', () => {
   ].join('.');
   assert.notEqual(bundle(jwt).status, 0);
   assert.notEqual(bundle('no business data', 'fixture.sql').status, 0);
+});
+test('disposable Supabase project has local copies of the canonical Auth templates', () => {
+  const project = resolve('database/ci/project');
+  const result = spawnSync('bash', [resolve('scripts/ci/prepare-database-project.sh')], {
+    cwd: tmpdir(),
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const config = readFileSync(join(project, 'supabase/config.toml'), 'utf8');
+  const paths = Array.from(config.matchAll(/^content_path = "([^"]+)"$/gm), ([, path]) => path);
+  assert.deepEqual(paths, [
+    './supabase/templates/employee-invite.html',
+    './supabase/templates/employee-recovery.html',
+    './supabase/templates/employee-email-change.html',
+  ]);
+  for (const path of paths) {
+    assert.deepEqual(readFileSync(join(project, path)), readFileSync(resolve(path)));
+  }
 });
 test('database guard refuses all remote targets', () => {
   const result = spawnSync(process.execPath, ['scripts/ci/assert-test-db.mjs'], {
