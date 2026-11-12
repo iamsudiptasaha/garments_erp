@@ -42,13 +42,26 @@ begin
 
  snapshot := public.erp_save_contact_workspace(jsonb_build_object(
    'header',contact||'{"search_term":"Updated contact"}',
-   'sections',jsonb_build_object('contact_items',jsonb_build_array(
-     item||'{"primary_phone":false,"primary_email":false}',
+   'sections',jsonb_build_object(
+     'contact_bank_account',jsonb_build_array(bank||'{"branch":"Updated branch","primary_bank_account":true}'),
+     'contact_items',jsonb_build_array(
+     item||'{"primary_phone":false,"email":"dispatch-updated@example.test","primary_email":false}',
      '{"name":"Orders","phone":"0034","primary_phone":true,"email":"orders@example.test","primary_email":true}'::jsonb))));
  if not exists(select 1 from jsonb_array_elements(snapshot->'contact_items') where value->>'phone'='0034'
    and (value->>'primary_phone')::boolean and (value->>'primary_email')::boolean
    and value->>'email'='orders@example.test' and value->>'contact_id'=contact->>'id') then
    raise exception 'Nested primary change did not persist';
+ end if;
+ if not exists(select 1 from jsonb_array_elements(snapshot->'contact_items')
+   where value->>'id'=item->>'id' and value->>'email'='dispatch-updated@example.test') then
+   raise exception 'Existing contact item email change did not persist';
+ end if;
+ select value into strict bank from jsonb_array_elements(public.erp_contacts_workspace()->'contact_bank_account')
+   where value->>'id'=bank->>'id' and value->>'contact_id'=contact->>'id';
+ if bank->>'branch' is distinct from 'Updated branch'
+    or bank->>'account_number' is distinct from '000012'
+    or (bank->>'primary_bank_account')::boolean is distinct from true then
+   raise exception 'Existing bank account changes did not persist';
  end if;
  begin
    perform public.erp_save_contact_workspace(jsonb_build_object('header',contact||'{"search_term":"Stale"}'));
