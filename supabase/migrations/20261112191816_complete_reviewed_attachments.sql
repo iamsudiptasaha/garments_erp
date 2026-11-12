@@ -176,12 +176,28 @@ end $$;
 
 create or replace function garments_erp.file_read(p_id bigint)
 returns jsonb language plpgsql stable security definer set search_path='' as $$
-declare upload garments_erp.app_file_upload; result jsonb;
+declare upload garments_erp.app_file_upload; target jsonb; result jsonb;
 begin
   select * into upload from garments_erp.app_file_upload where attachment_id=p_id and status='ready';
-  if not found then raise exception 'Attachment is not registered to a record';end if;
+  if not found then
+    -- Historical profile photos can predate the upload ledger.
+    select e.id into upload.record_id from garments_erp.employee e
+    where e.employee_photo=p_id
+      and (e.id=garments_access.profile_employee_id()
+        or garments_access.has_screen_permission('employees','view'))
+    order by e.id limit 1;
+    if not found then raise exception 'Attachment is not registered to a record';end if;
+    upload.target_key:='employeePhoto';
+  end if;
   if upload.detached_at is not null then raise exception 'File was removed' using errcode='42501';end if;
-  perform garments_erp.file_record(upload.target_key,upload.record_id,'view');
+  target:=garments_erp.file_record(upload.target_key,upload.record_id,'view');
+  if upload.target_key='workerBill' and target->>'current' is distinct from p_id::text then
+    raise exception 'Attachment is no longer linked to the worker bill' using errcode='42501';
+  end if;
+  if upload.target_key='employeePhoto' and target->>'current' is distinct from p_id::text
+    and not garments_access.has_screen_permission('employees','view') then
+    raise exception 'Photo is no longer linked to the employee' using errcode='42501';
+  end if;
   select jsonb_build_object('bucket_id',g.bucket_id,'storage_path',a.storage_path)
     into strict result
     from garments_erp.attachments a
