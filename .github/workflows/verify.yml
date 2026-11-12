@@ -124,6 +124,8 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm --prefix fabric-poc ci --ignore-scripts
+      - name: Copy Auth templates into the disposable project
+        run: bash scripts/ci/prepare-database-project.sh
       - name: Start disposable local database
         run: npx --yes supabase@2.122.0 start --workdir database/ci/project -x realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor > /tmp/erp-ci-db-start.log 2>&1
       - name: Schema replay, permissions, constraints, atomicity, concurrency and restore

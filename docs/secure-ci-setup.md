@@ -25,7 +25,7 @@ After merging a reviewed commit to `main`, manually run **Approved Pages release
 
 Use the pinned Node version in `.nvmrc` and `npm --prefix fabric-poc ci`. Run `npm --prefix fabric-poc run quality`, `node --test scripts/ci/security.test.mjs`, and browser tests against a build made with the synthetic public settings used in CI. The mocked sign-in test must never target a real backend. The normal local build can then restore your local public configuration.
 
-Database checks require Docker and Supabase CLI 2.122.0. Start only the dedicated project with `npx supabase@2.122.0 db start --workdir database/ci/project`, then run `bash scripts/ci/test-database.sh` against its fresh database. The script refuses remote databases and production credential variables. It is destructive to this dedicated test database only; use a fresh instance for reruns. CI stops it after testing.
+Database checks require Docker and Supabase CLI 2.122.0. Run `bash scripts/ci/prepare-database-project.sh` to copy the canonical Auth templates into the disposable project. Start only the dedicated project with `npx supabase@2.122.0 db start --workdir database/ci/project`, then run `bash scripts/ci/test-database.sh` against its fresh database. The script refuses remote databases and production credential variables. It is destructive to this dedicated test database only; use a fresh instance for reruns. CI stops it after testing.
 
 ## Recovery and operations
 
