@@ -19,11 +19,15 @@ export function liveFileCommands(client) {
     if (data?.error) throw Error(data.error);
     return data;
   }
-  async function upload(targetKey, recordId, file) {
+  async function upload(targetKey, recordId, file, requestId, previousAttachmentId) {
     const body = new FormData();
     body.append('targetKey', targetKey);
     body.append('recordId', recordId);
     body.append('file', file);
+    if (requestId) {
+      body.append('requestId', requestId);
+      body.append('previousAttachmentId', previousAttachmentId ?? '');
+    }
     return invoke(body);
   }
   return {
@@ -53,7 +57,7 @@ export function liveFileCommands(client) {
     store: (registry, routes = FILE_TARGETS) => ({
       mode: 'supabase',
       list: (key, id) => rpc('file_list', { p_key: key, p_record_id: validateRecordId(id, true) }),
-      async attach({ targetKey, recordId, file }) {
+      async attach({ targetKey, recordId, file, requestId, previousAttachmentId }) {
         const target = routes.find((r) => r.key === targetKey);
         if (!target || target.enabled === false)
           throw Error('Uploads are disabled for this field.');
@@ -65,9 +69,22 @@ export function liveFileCommands(client) {
             target.max_bytes || 10485760,
           ),
         });
-        return upload(targetKey, recordId, file);
+        return upload(targetKey, recordId, file, requestId, previousAttachmentId);
       },
-      open: (attachment) => invoke({ action: 'read', attachmentId: String(attachment.id) }),
+      remove: (targetKey, recordId, attachmentId) =>
+        rpc('remove_file_link', {
+          p_key: targetKey,
+          p_record_id: validateRecordId(recordId, true),
+          p_previous: attachmentId,
+        }),
+      open: (attachment, { targetKey, recordId, download } = {}) =>
+        invoke({
+          action: 'read',
+          attachmentId: String(attachment.id),
+          targetKey,
+          recordId,
+          download,
+        }),
     }),
   };
 }

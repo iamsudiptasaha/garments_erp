@@ -24,5 +24,8 @@
     "integration/*.mjs",
     "src/**/*.tsx"
   ],
+  "ignoreIssues": {
+    "src/fabric/save-review.d.ts": ["exports"]
+  },
   "includeEntryExports": true
 }

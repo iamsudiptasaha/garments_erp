@@ -1,3 +1,5 @@
+import { fileRecordPath } from '../access/workspace-routes.js';
+import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import { createElement as h, useMemo, useState } from 'react';
 import { FinishedGoodsEditor as DocumentDialog } from '../finished-goods/sheet-view.js';
 import { useGridSearch } from '../fabric/grid-toolbar.js';
@@ -34,7 +36,8 @@ const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR
 export function ReturnEntry({ client, records, onClose, refresh, invoiceId }) {
   const [invoice, setInvoice] = useState(invoiceId ?? records.invoices[0]?.id ?? '');
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const review = useSaveReview();
+  const { busy } = review;
   const [credit, setCredit] = useState(0);
   const args = useMemo(() => ({ p_invoice_id: invoice || null }), [invoice]);
   const lookup = useBillingQuery(client, 'erp_portal_return_workspace', args);
@@ -74,24 +77,49 @@ export function ReturnEntry({ client, records, onClose, refresh, invoiceId }) {
       line.pieces_by_size.push({ billed_piece_id: row.id, pieces: quantity, price });
       lines.set(row.line_id, line);
     }
-    setBusy(true);
-    setError('');
-    const result = await client.rpc('erp_portal_verify_return', {
-      p_request_id: crypto.randomUUID(),
+
+    const payload = {
       p_billing_id: invoice,
       p_lines: [...lines.values()],
-    });
-    setBusy(false);
-    if (result.error) setError(result.error.message);
-    else {
-      onClose();
-      refresh();
-    }
+    };
+    setError('');
+    review.prepare(
+      payload,
+      [
+        ['Invoice', records.invoices.find(({ id }) => id === invoice)?.label ?? invoice],
+        [
+          'Reason',
+          Array.from(event.currentTarget.elements.reason.options).find(({ selected }) => selected)
+            ?.text,
+        ],
+        ...pieces.map(({ row, quantity, price }) => [
+          row.item + ' · ' + row.size,
+          quantity + ' pieces × ' + money.format(Number(price)),
+        ]),
+        [
+          'Estimated credit',
+          money.format(
+            pieces.reduce((sum, { quantity, price }) => sum + quantity * Number(price), 0),
+          ),
+        ],
+      ],
+      async (reviewed, requestId) => {
+        const result = await client.rpc('erp_portal_verify_return', {
+          ...reviewed,
+          p_request_id: requestId,
+        });
+        if (result.error) throw result.error;
+        onClose();
+        refresh();
+      },
+      'Review return',
+    );
   }
 
   return h(
-    'form',
+    ReviewForm,
     {
+      review,
       onSubmit: verify,
       onInput: (event) =>
         setCredit(
@@ -190,7 +218,7 @@ export function ReturnEntry({ client, records, onClose, refresh, invoiceId }) {
     h(
       'button',
       { type: 'submit', className: 'primary', disabled: busy || !rows.length },
-      'Verify return',
+      'Review return',
     ),
   );
 }
@@ -207,7 +235,12 @@ export function BillingReturns({ client, capabilities, canCreate, openInvoice })
       data?.returns
         .slice(0, 50)
         .flatMap((row) => {
-          const header = { ...row, number: 'RET-' + row.id.padStart(4, '0'), status: 'Verified' };
+          const header = {
+            ...row,
+            return_id: row.id,
+            number: 'RET-' + row.id.padStart(4, '0'),
+            status: 'Verified',
+          };
           return row.parts.length
             ? row.parts.map((part) => ({ ...header, ...part, id: row.id + ':' + part.id }))
             : [header];
@@ -242,14 +275,27 @@ export function BillingReturns({ client, capabilities, canCreate, openInvoice })
           { defer: true, title: 'Record return', label: 'Record return' },
           (onClose) => h(ReturnEntry, { client, records: data, onClose, refresh }),
         ),
-      selectedActions:
-        openInvoice &&
-        ((row) =>
-          h(
-            'button',
-            { type: 'button', disabled: !row, onClick: () => openInvoice(row.billing_id) },
-            'Open selected invoice',
-          )),
+      selectedActions: (row) =>
+        h(
+          'div',
+          { className: 'fabric-actions' },
+          openInvoice &&
+            h(
+              'button',
+              {
+                type: 'button',
+                disabled: !row,
+                onClick: () => openInvoice(row.billing_id),
+              },
+              'Open selected invoice',
+            ),
+          row &&
+            h(
+              'a',
+              { href: fileRecordPath('returnBill', { record: row.return_id }) },
+              'Return attachments',
+            ),
+        ),
       footer: h(BillingPagination, {
         offset,
         onChange: setOffset,

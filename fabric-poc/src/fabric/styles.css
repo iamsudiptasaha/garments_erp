@@ -1398,12 +1398,30 @@ select {
   font-size: 22px;
 }
 
-.fabric-fields .contact-primary-toggle {
+.contact-section-nav {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.contact-section-nav button[aria-pressed='true'] {
+  background: #dcedfc;
+  color: #226b9b;
+}
+.contact-editor .contact-primary-flags {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: 8px 24px;
+}
+.contact-editor .fabric-fields .contact-primary-toggle {
   flex-direction: row-reverse;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
+}
+.contact-editor .contact-primary-toggle input[type='checkbox'] {
+  flex: 0 0 auto;
+  margin: 0;
 }
 
 .fabric-record-picker {
@@ -1680,4 +1698,14 @@ select {
 
 .erp-record-grid .access-table :is(th, td) {
   overflow-wrap: anywhere;
+}
+
+.contact-editor .contact-bank-file {
+  display: grid;
+  gap: 6px;
+  max-width: 100%;
+  margin: 10px 0;
+}
+.contact-editor .contact-bank-file input {
+  min-width: 0;
 }

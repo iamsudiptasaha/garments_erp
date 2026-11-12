@@ -42,6 +42,16 @@ Navigation disclosures share stable section keys across signed-in workspaces. Pe
 
 Use the existing workspace route handler for internal navigation so the application shell stays mounted. Challans, Worker Bills, Administration tabs, Files, and Bucket Groups retain their bookmarkable URLs and open in the authenticated workspace. Sign-in, recovery, and security setup use the account entry document. Update Tasks and direct floor QR links use the same handover form. ERP Update Tasks offers manual task selection, and QR links supply the task through the existing URL parameter. Keep real links for deep links and standard browser link actions. Verify browser Back and Forward, direct entry, permissions, and document and shell identity when adding a workspace route.
 
+## Mandatory review before saving
+
+Every ERP create or edit form, including full-page editors, dialogs and attachment mutations, follows **Enter Data → Review → Confirm Save**. Enter and the primary form action validate and open the review. They must never write a record, reserve an upload, or change a relationship. Back to edit restores the same inputs, selections and staged files. Closing review before confirming leaves server data untouched.
+
+Build review from the normalized payload that will be submitted. Use readable names for related records. Show all entered values, line items, size quantities, previous and proposed values, additions and removals, and calculated totals. Label estimates when the authoritative calculation runs on the server. Show each attachment action and its filename, size and destination field. Keep passwords, recovery codes and authenticator secrets out of summaries.
+
+Only Confirm save may send the reviewed payload. Disable repeated confirmation during the write and reuse the request ID on retries where the RPC supports idempotency. Keep review and its inputs available after failure. The server still checks current authorization, revisions, ownership and business rules. Where a file requires an existing record ID, review and confirm the record and attachment as separate operations. Never present a later upload as part of the record transaction. For a saved attachment slot, review the current link and the proposed action. Start staging only on confirmation, reuse the staged request on retry, and check the reviewed link on the server before replacing or removing it.
+
+Verify create and edit, back and cancel, validation failure, repeated confirmation, retry, attachment access and upload failure, and review layout at desktop and phone widths.
+
 ## Record grids
 
 Use FabricSheet for configurable record grids. Use GridSearch for labelled, debounced search with no separate submit button. Keep existing server search semantics and label exact matches explicitly. If a grid sorts or filters a server page locally, disclose that scope next to the controls.

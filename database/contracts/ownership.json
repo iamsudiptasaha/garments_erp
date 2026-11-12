@@ -228,7 +228,8 @@
   "aggregates": {
     "materialContacts": {
       "root": "contacts",
-      "mode": "local-preview",
+      "mode": "live-command",
+      "saveFunction": "garments_erp.save_contact_workspace",
       "children": [
         {
           "table": "contact_items",

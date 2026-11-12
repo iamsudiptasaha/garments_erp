@@ -1,3 +1,4 @@
+import { fileRecordPath } from '../access/workspace-routes.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { labLabels, versionsFor, statusFor, labClosed } from './domain.js';
 import './styles.css';
@@ -176,6 +177,16 @@ function Edition({ data, lab, onEdit, editable, creatable, index }) {
                       ?.filename || 'Attached'
                   : 'Not attached',
               ),
+              data._live &&
+                h(
+                  'a',
+                  {
+                    href: fileRecordPath('labDipShade', { record: detail.id }),
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                  },
+                  'Open shade-card attachment',
+                ),
               h(
                 'small',
                 null,

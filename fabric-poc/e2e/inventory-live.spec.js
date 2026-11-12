@@ -82,6 +82,9 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
 
   await page.goto('/fabric.html?live=1#materialReceipts');
   await page.getByRole('button', { name: '+ Receive stock' }).click();
+  await expect(
+    page.getByText('Save the receipt, then reopen it to attach its bill.'),
+  ).toBeVisible();
   await page.getByLabel('Purchase order', { exact: true }).selectOption('4');
   await page.getByLabel('Purchase order line', { exact: true }).selectOption('12');
   await page.getByLabel('Billed quantity').fill('10');
@@ -93,6 +96,11 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
     raw_material_purchase_order_item_id: '12',
     material_category_id: '15',
   });
+  await page.getByRole('button', { name: 'Edit →', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Manage bill attachments' })).toHaveAttribute(
+    'href',
+    '/files.html?target=rawMaterialBill&record=21',
+  );
 
   await page.goto('/fabric.html?live=1#materialIssues');
   await page.getByRole('button', { name: '+ Record outward' }).click();

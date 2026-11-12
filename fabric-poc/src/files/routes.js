@@ -1,3 +1,4 @@
+import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import { AdminDialog } from '../admin/dialog.js';
 import { GridSearch, GridSort, useGridSearch } from '../fabric/grid-toolbar.js';
 import { RecordGrid } from '../fabric/record-grid.js';
@@ -20,8 +21,6 @@ const fields = [
 
 export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
   const [edit, setEdit] = useState(null),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false),
     [search, setSearch] = useState(''),
     [sort, setSort] = useState({ key: 'source', direction: 'asc' });
   const query = useGridSearch(search).trim().toLowerCase();
@@ -43,18 +42,40 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
         (sort.direction === 'asc' ? 1 : -1) *
         String(a[sort.key]).localeCompare(String(b[sort.key]), undefined, { numeric: true }),
     );
-  async function submit(e) {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      await onSave(edit);
-      setEdit(null);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
+  const review = useSaveReview();
+  function submit() {
+    const prior = routes.find((route) => route.key === edit.key);
+    const groupLabel = (id) => registry.find((group) => group.id === id)?.group;
+    const changed = (before, after) =>
+      before != null && before !== after ? before + ' → ' + after : after;
+    review.prepare(
+      edit,
+      [
+        ['Attachment field', edit.label],
+        ['Source', edit.table + '.' + edit.slot],
+        [
+          'Bucket group',
+          changed(groupLabel(prior?.bucket_group_id), groupLabel(edit.bucket_group_id)),
+        ],
+        ['File types', changed(prior?.mime?.join(', '), edit.mime.join(', '))],
+        [
+          'Maximum file size',
+          changed(prior && prettyBytes(prior.max_bytes), prettyBytes(edit.max_bytes)),
+        ],
+        [
+          'Uploads',
+          changed(
+            prior && (prior.enabled ? 'Enabled' : 'Paused'),
+            edit.enabled ? 'Enabled' : 'Paused',
+          ),
+        ],
+      ],
+      async (payload) => {
+        await onSave(payload);
+        setEdit(null);
+      },
+      'Review upload route',
+    );
   }
   return h(
     'section',
@@ -79,11 +100,10 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
     edit &&
       h(
         AdminDialog,
-        { title: edit.label, onClose: () => !busy && setEdit(null) },
+        { title: edit.label, onClose: () => !review.busy && setEdit(null) },
         h(
-          'form',
-          { onSubmit: submit },
-          error && h('p', { role: 'alert', className: 'form-error' }, error),
+          ReviewForm,
+          { review, onSubmit: submit },
           h(
             'div',
             { className: 'fabric-fields' },
@@ -166,18 +186,17 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
               'button',
               {
                 type: 'button',
-                disabled: busy,
+                disabled: review.busy,
                 onClick: () => {
                   setEdit(null);
-                  setError('');
                 },
               },
               'Cancel',
             ),
             h(
               'button',
-              { type: 'submit', className: 'primary', disabled: busy || !edit.mime.length },
-              busy ? 'Saving…' : 'Save upload route',
+              { type: 'submit', className: 'primary', disabled: review.busy || !edit.mime.length },
+              'Review upload route',
             ),
           ),
         ),
@@ -211,7 +230,6 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
                   'button',
                   {
                     onClick: () => {
-                      setError('');
                       setEdit({ ...r, mime: [...r.mime] });
                     },
                   },

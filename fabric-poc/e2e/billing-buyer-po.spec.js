@@ -96,7 +96,10 @@ test('Buyer PO entry saves mixed modes with a protected recipe and opens the sav
   await second.getByLabel('Ordered pieces').fill('1');
   await second.getByLabel('PO unit price').fill('40');
   await page.screenshot({ path: testInfo.outputPath('buyer-po-entry.png') });
-  await dialog.getByRole('button', { name: 'Save buyer PO' }).click();
+  await dialog.getByRole('button', { name: 'Review buyer PO' }).click();
+  await expect(dialog.getByRole('region', { name: 'Review buyer PO' })).toContainText('PO-MIXED');
+  expect(saved).toBeUndefined();
+  await dialog.getByRole('button', { name: 'Confirm save' }).click();
   await expect(page.getByRole('heading', { name: 'PO-MIXED' })).toBeVisible();
   await expect(page.getByRole('cell', { name: '06204' })).toBeVisible();
   expect(saved.lines).toMatchObject([

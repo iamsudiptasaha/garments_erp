@@ -92,6 +92,18 @@ export function inspectBoundaries({schema,catalogue,policy,functions,links=emplo
  for(const [table,owner]of Object.entries(policy.ownership))if(!catalogue.mappings.some(m=>m.resource_key===owner&&m.table_name===table&&m.relation_type==='primary'))errors.push(`${table}: declared owner ${owner} has no primary mapping`);
  for(const [screen,contract]of Object.entries(policy.aggregates||{})){
   if(contract.mode==='local-preview'&&Object.hasOwn(fabricContract,screen))errors.push(`${screen}: live saving requires a reviewed database command, not a preview adapter`);
+  if(contract.mode==='live-command'){
+   const body=functions.get(contract.saveFunction);
+   if(!body)errors.push(`${screen}: missing save function ${contract.saveFunction}`);
+   else{
+    const writable=[contract.root,...contract.children.map(child=>child.table)];
+    if(/\bexecute\b/i.test(body))errors.push(`${screen}: aggregate writes must name their tables explicitly`);
+    for(const match of body.matchAll(/\b(?:insert\s+into|update|delete\s+from)\s+garments_erp\.(\w+)/gi))
+     if(!writable.includes(match[1]))errors.push(`${screen}: aggregate writes outside its ownership to ${match[1]}`);
+    if(/\bsupporting_documents\s*=|insert\s+into\s+garments_erp\.contact_bank_account\s*\([^)]*\bsupporting_documents\b/i.test(body))
+     errors.push(`${screen}: supporting documents must be written through Files`);
+   }
+  }
   for(const section of sections){
    const expected=contract.children.find(c=>c.table===section.table);
    if(!expected||expected.resource!==section.resource||expected.foreign!==section.foreign||expected.optional!==section.optional)errors.push(`${screen}: unreviewed child ownership for ${section.table}`);

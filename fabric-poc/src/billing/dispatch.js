@@ -1,3 +1,5 @@
+import { fileRecordPath } from '../access/workspace-routes.js';
+import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import { createElement as h, useEffect, useMemo, useState } from 'react';
 import { FinishedGoodsEditor as DocumentDialog } from '../finished-goods/sheet-view.js';
 import { CartonContents } from './cartons.js';
@@ -24,31 +26,46 @@ const cartonColumns = [
 ];
 
 function TransportEntry({ client, data, onClose, onSaved }) {
-  const [busy, setBusy] = useState(false);
+  const review = useSaveReview();
+  const { busy } = review;
   const [error, setError] = useState('');
   async function save(event) {
     event.preventDefault();
     if (busy) return;
     const fields = new FormData(event.currentTarget);
-    setBusy(true);
-    setError('');
-    const result = await client.rpc('erp_portal_create_transport', {
-      p_request_id: crypto.randomUUID(),
+
+    const payload = {
       p_transporter_id: fields.get('carrier'),
       p_docket: fields.get('docket').trim(),
       p_date: fields.get('date'),
       p_cartons: fields.getAll('carton'),
-    });
-    setBusy(false);
-    if (result.error) setError(result.error.message);
-    else {
-      onClose();
-      onSaved();
-    }
+    };
+    setError('');
+    review.prepare(
+      payload,
+      [
+        ['Carrier', data.carriers.find(({ id }) => id === payload.p_transporter_id)?.name],
+        ['Docket number', payload.p_docket],
+        ['Pickup date', payload.p_date],
+        ...data.available_cartons
+          .filter(({ id }) => payload.p_cartons.includes(id))
+          .map((carton) => ['Carton', carton.number + ' · ' + carton.invoice]),
+      ],
+      async (reviewed, requestId) => {
+        const result = await client.rpc('erp_portal_create_transport', {
+          ...reviewed,
+          p_request_id: requestId,
+        });
+        if (result.error) throw result.error;
+        onClose();
+        onSaved();
+      },
+      'Review transport',
+    );
   }
   return h(
-    'form',
-    { onSubmit: save },
+    ReviewForm,
+    { review, onSubmit: save },
     h(
       'section',
       { className: 'fabric-line' },
@@ -95,7 +112,7 @@ function TransportEntry({ client, data, onClose, onSaved }) {
       h(
         'button',
         { type: 'submit', className: 'primary', disabled: busy || !data.available_cartons.length },
-        'Save transport',
+        'Review transport',
       ),
     ),
   );
@@ -233,6 +250,15 @@ export function BillingDispatch({
             'Open selected transport',
           ),
           pickup(row),
+          row?.docket_number &&
+            h(
+              'a',
+              {
+                href: fileRecordPath('transportDocket', { query: row.docket_number }),
+              },
+              'Docket attachments',
+            ),
+          h('a', { href: fileRecordPath('transportBill') }, 'Transport bill attachments'),
         ),
       footer: h(
         'div',

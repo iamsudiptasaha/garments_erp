@@ -1,3 +1,5 @@
+import { fileRecordPath } from '../access/workspace-routes.js';
+import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import { createElement as h, useEffect, useMemo, useState } from 'react';
 import { FabricSheet } from '../fabric/sheet.js';
 import { WorksheetToolbar, useGridSearch } from '../fabric/grid-toolbar.js';
@@ -71,7 +73,8 @@ function POEntry({ client, onSaved, onClose }) {
   const [choices, setChoices] = useState(null);
   const [lines, setLines] = useState([{ id: 0, mode: 'standard', item: '' }]);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const review = useSaveReview();
+  const { busy } = review;
   useEffect(() => {
     let current = true;
     client.rpc('erp_portal_buyer_po_choices').then(({ data, error }) => {
@@ -125,24 +128,59 @@ function POEntry({ client, onSaved, onClose }) {
         ]),
       ),
     }));
-    setBusy(true);
-    setError('');
-    const { data, error } = await client.rpc('erp_portal_create_buyer_po', {
-      p_request_id: crypto.randomUUID(),
+
+    const payload = {
       p_order: order,
-    });
-    setBusy(false);
-    if (error) setError(error.message);
-    else {
-      onClose();
-      onSaved(data);
-    }
+    };
+    setError('');
+    review.prepare(
+      payload,
+      [
+        ['PO number', order.number],
+        ['Buyer', event.currentTarget.elements.buyer_id.selectedOptions[0]?.text],
+        ['Issue date', order.issue_date],
+        ['Expiry date', order.expiry_date],
+        ['Season', order.season],
+        ['Billing address', order.billing_address],
+        ['Delivery address', order.delivery_address],
+        ...order.lines.flatMap((entry, index) => {
+          const line = lines[index];
+          const label = event.currentTarget.elements.namedItem('item-' + line.id)
+            ?.selectedOptions?.[0]?.text;
+          return [
+            ['Line ' + (index + 1), [line.mode, label || line.item].join(' · ')],
+            [line.mode === 'standard' ? 'Ordered sets' : 'Ordered pieces', entry.quantity],
+            ['Unit price', entry.price],
+            ['Style code', entry.style_code],
+            ['Colour', entry.color],
+            ...components(line).flatMap((piece) => [
+              [
+                [piece.style, piece.size, 'Ordered pieces'].filter(Boolean).join(' · '),
+                entry.quantity * Number(piece.weight ?? 1),
+              ],
+              [(piece.label ?? piece.size ?? piece.id) + ' · FCID', entry.codes[piece.id].fcid],
+              [(piece.label ?? piece.size ?? piece.id) + ' · HSN', entry.codes[piece.id].hsn_code],
+            ]),
+          ];
+        }),
+      ],
+      async (reviewed, requestId) => {
+        const response = await client.rpc('erp_portal_create_buyer_po', {
+          ...reviewed,
+          p_request_id: requestId,
+        });
+        if (response.error) throw response.error;
+        onClose();
+        onSaved(response.data);
+      },
+      'Review buyer PO',
+    );
   }
   if (!choices)
     return h('p', { role: error ? 'alert' : 'status' }, error || 'Loading eligible items…');
   return h(
-    'form',
-    { onSubmit: save },
+    ReviewForm,
+    { review, onSubmit: save },
     h(
       'section',
       { className: 'fabric-line' },
@@ -257,7 +295,7 @@ function POEntry({ client, onSaved, onClose }) {
         },
         'Add PO item',
       ),
-      h('button', { type: 'submit', className: 'primary', disabled: busy }, 'Save buyer PO'),
+      h('button', { type: 'submit', className: 'primary', disabled: busy }, 'Review buyer PO'),
     ),
   );
 }
@@ -292,6 +330,8 @@ function PODetail({ client, id, onBack, createInvoice }) {
         'div',
         { className: 'fabric-actions' },
         h('button', { type: 'button', onClick: onBack }, 'Back to Buyer PO'),
+        order &&
+          h('a', { href: fileRecordPath('buyerPO', { record: order.id }) }, 'PO attachments'),
         order &&
           createInvoice &&
           h(

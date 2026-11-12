@@ -47,3 +47,10 @@ export function followWorkspaceLink(event, navigate) {
   event.preventDefault();
   navigate();
 }
+
+export function fileRecordPath(target, { record, query } = {}) {
+  const params = new URLSearchParams({ target });
+  if (record) params.set('record', record);
+  if (query) params.set('query', query);
+  return workspacePath('files') + '?' + params.toString();
+}

@@ -1,3 +1,5 @@
+import { fileRecordPath } from '../access/workspace-routes.js';
+import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { pages } from '../fabric/catalog.js';
 import { documentFor, saveDocument, optionsFor } from '../fabric/domain.js';
@@ -27,7 +29,8 @@ export function ProductionItemEditor({ data, id, onSave, onClose }) {
     () => data.production_checklist.find((c) => c.item_id === id) || {},
   );
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const review = useSaveReview();
+  const { busy } = review;
   useEffect(() => {
     dialog.current.showModal();
   }, []);
@@ -48,10 +51,9 @@ export function ProductionItemEditor({ data, id, onSave, onClose }) {
         rows.map(([key, name]) => h('option', { key, value: key }, name)),
       ),
     );
-  async function submit(e) {
+  function submit(e) {
     e.preventDefault();
     try {
-      setBusy(true);
       setError('');
       if (!sizes.length || !links.length) throw Error('Add sizes and at least one variant / part.');
       if (new Set(sizes.map((s) => s.size_list_id)).size !== sizes.length)
@@ -123,12 +125,64 @@ export function ProductionItemEditor({ data, id, onSave, onClose }) {
           ),
         },
       ];
-      await onSave(next);
-      onClose();
+      const prior = data.item.find((item) => item.id === id);
+      const item = next.item.find((item) => item.id === itemId);
+      const change = (before, after) =>
+        prior && String(before ?? '') !== String(after ?? '')
+          ? (before ?? '—') + ' → ' + (after ?? '—')
+          : after;
+      const reviewRows = [
+        ...pages.productionItems.header
+          .filter(({ key }) => key !== 'image_attachment')
+          .map((field) => {
+            const describe = (value) =>
+              field.type === 'select' && value
+                ? (optionsFor(data, field.source).find(([key]) => key === value)?.[1] ?? value)
+                : value;
+            return [field.label, change(describe(prior?.[field.key]), describe(item[field.key]))];
+          }),
+        ...allocations.map((size) => [
+          data.size_list.find(({ id }) => id === size.size_list_id)?.size ?? size.size_list_id,
+          change(
+            data.item_cut_ratio.find((row) => row.item_size_list_id === size.id)?.pieces,
+            size.pieces,
+          ),
+        ]),
+        ...oldSizes
+          .filter((size) => !allocations.some(({ id }) => id === size.id))
+          .map((size) => [
+            'Remove size',
+            data.size_list.find(({ id }) => id === size.size_list_id)?.size,
+          ]),
+        ...links.map((link) => [
+          'Variant / part',
+          [
+            data.variant.find(({ id }) => id === link.variant_id)?.variant_name ?? link.variant_id,
+            data.part_list.find(({ id }) => id === link.part_list_id)?.part,
+            link.lab_dip_id && 'Lab dip ' + link.lab_dip_id,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        ]),
+        ...Object.entries(checklistColumns).map(([label, key]) => [
+          label,
+          change(
+            data.production_checklist.find((row) => row.item_id === id)?.[key],
+            checklist[key],
+          ),
+        ]),
+      ];
+      review.prepare(
+        next,
+        reviewRows,
+        async (payload) => {
+          await onSave(payload);
+          onClose();
+        },
+        'Review production item',
+      );
     } catch (cause) {
       setError(cause.message);
-    } finally {
-      setBusy(false);
     }
   }
   return h(
@@ -141,8 +195,8 @@ export function ProductionItemEditor({ data, id, onSave, onClose }) {
       h('button', { onClick: onClose }, 'Close'),
     ),
     h(
-      'form',
-      { onSubmit: submit },
+      ReviewForm,
+      { review, onSubmit: submit },
       h(
         'section',
         null,
@@ -181,7 +235,21 @@ export function ProductionItemEditor({ data, id, onSave, onClose }) {
                   ),
             ),
         ),
-        h('p', null, 'Item images are managed through Files. Existing attachments are preserved.'),
+        h(
+          'p',
+          { className: 'editor-note' },
+          id
+            ? h(
+                'a',
+                {
+                  href: fileRecordPath('itemImage', { record: id }),
+                  target: '_blank',
+                  rel: 'noopener noreferrer',
+                },
+                'Manage item image',
+              )
+            : 'Save the item, then reopen it to add its image.',
+        ),
       ),
       h(
         'section',
@@ -309,7 +377,7 @@ export function ProductionItemEditor({ data, id, onSave, onClose }) {
         'footer',
         null,
         h('button', { type: 'button', onClick: onClose }, 'Cancel'),
-        h('button', { type: 'submit', disabled: busy }, busy ? 'Saving\u2026' : 'Save item'),
+        h('button', { type: 'submit', disabled: busy }, 'Review item'),
       ),
     ),
   );

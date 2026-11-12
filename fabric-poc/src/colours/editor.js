@@ -1,3 +1,4 @@
+import { fileRecordPath } from '../access/workspace-routes.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { labLabels, versionsFor, saveLabDip, labClosed, latestStatusItem } from './domain.js';
 const h = React.createElement;
@@ -260,6 +261,22 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
                   }),
                 ),
               ),
+              data._live &&
+                h(
+                  'p',
+                  { className: 'editor-note' },
+                  mode === 'update' && latest?.id
+                    ? h(
+                        'a',
+                        {
+                          href: fileRecordPath('labDipShade', { record: latest.id }),
+                          target: '_blank',
+                          rel: 'noopener noreferrer',
+                        },
+                        'Manage shade-card image',
+                      )
+                    : 'Save the Lab Dip version before attaching its shade-card image.',
+                ),
               !data._live &&
                 select(
                   'shade_card_image_attachment',

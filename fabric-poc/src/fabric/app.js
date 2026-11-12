@@ -1,3 +1,4 @@
+import { contactsCommands } from '../miscellaneous/live.js';
 import { AccessApp } from '../access/app.js';
 import { FilesWorkspace } from '../files/app.js';
 import { adminTabs, workspacePath, workspacePathPage } from '../access/workspace-routes.js';
@@ -235,7 +236,8 @@ function App({ live, refreshWorkspaceAccess }) {
   const [liveReady, setLiveReady] = useState(!live),
     [liveError, setLiveError] = useState(''),
     [productionError, setProductionError] = useState(''),
-    [inventoryError, setInventoryError] = useState('');
+    [inventoryError, setInventoryError] = useState(''),
+    [contactsError, setContactsError] = useState('');
   const commands = useMemo(
     () => (live ? liveFabricCommands(getAccessClient(), createVerificationClient) : null),
     [Boolean(live)],
@@ -248,19 +250,30 @@ function App({ live, refreshWorkspaceAccess }) {
     () => (live ? inventoryCommands(getAccessClient()) : null),
     [Boolean(live)],
   );
+  const contacts = useMemo(
+    () => (live ? contactsCommands(getAccessClient()) : null),
+    [Boolean(live)],
+  );
   const connectedPage = (key) =>
-    liveFabricPage(key) || liveProductionPage(key) || liveInventoryPage(key);
+    key === 'materialContacts' ||
+    liveFabricPage(key) ||
+    liveProductionPage(key) ||
+    liveInventoryPage(key);
   const allowedModule = (check) =>
     live &&
     (live.administrator ||
       Object.entries(live.permissions || {}).some(([key, p]) => check(key) && p.view));
   async function loadLive() {
-    const [fabricResult, productionResult, inventoryResult] = await Promise.allSettled([
-      allowedModule(liveFabricPage) ? commands.load() : {},
-      allowedModule(liveProductionPage) || can('view', 'productionJobs') ? production.load() : {},
-      allowedModule(liveInventoryPage) ? inventory.load() : {},
-    ]);
+    const [fabricResult, productionResult, inventoryResult, contactsResult] =
+      await Promise.allSettled([
+        allowedModule(liveFabricPage) ? commands.load() : {},
+        allowedModule(liveProductionPage) || can('view', 'productionJobs') ? production.load() : {},
+        allowedModule(liveInventoryPage) ? inventory.load() : {},
+        can('view', 'materialContacts') ? contacts.load() : {},
+      ]);
     setLiveError(fabricResult.status === 'rejected' ? fabricResult.reason.message : '');
+    setContactsError(contactsResult.status === 'rejected' ? contactsResult.reason.message : '');
+    const contactData = contactsResult.status === 'fulfilled' ? contactsResult.value : {};
     setProductionError(
       productionResult.status === 'rejected' ? productionResult.reason.message : '',
     );
@@ -272,7 +285,10 @@ function App({ live, refreshWorkspaceAccess }) {
     const employees = new Map((base.employee || []).map((row) => [row.id, row]));
     for (const row of stock.employee || [])
       employees.set(row.id, { ...employees.get(row.id), ...row });
-    return mergeProductionSnapshot(base, { ...stock, employee: [...employees.values()] });
+    return {
+      ...mergeProductionSnapshot(base, { ...stock, employee: [...employees.values()] }),
+      ...contactData,
+    };
   }
   async function applyProduction(
     snapshot,
@@ -424,11 +440,22 @@ function App({ live, refreshWorkspaceAccess }) {
   }
   function edit(id) {
     if (live && (!liveReady || !connectedPage(page))) return;
-    if (!can(id ? 'edit' : 'create')) {
+    if (!can(id && page === 'materialContacts' ? 'view' : id ? 'edit' : 'create')) {
       setNotice('Your role does not allow this action.');
       return;
     }
     setEditor({ page, id });
+  }
+  async function reloadContacts() {
+    const snapshot = await contacts.load();
+    setState((previous) => ({ ...previous, data: { ...previous.data, ...snapshot } }));
+  }
+  async function saveLiveContact(document) {
+    const { savedBankIds, ...snapshot } = await contacts.save(document);
+    setState((previous) => ({ ...previous, data: { ...previous.data, ...snapshot } }));
+    setSelected(null);
+    setNotice('Saved to Supabase · Contacts records refreshed');
+    return savedBankIds;
   }
   async function saveData(next, verification) {
     if (!can(editor?.id ? 'edit' : 'create', editor?.page))
@@ -618,6 +645,32 @@ function App({ live, refreshWorkspaceAccess }) {
         editable: can('edit'),
         stageDefinitions: data.stage,
       });
+    if (page === 'materialContacts')
+      return h(
+        'section',
+        { className: 'overview-grid' },
+        groups.map((group, index) =>
+          h(
+            'article',
+            { key: group.id, className: `overview-card tone-${index % 4}` },
+            h('h2', null, group.title),
+            h(
+              'dl',
+              { className: 'inventory-details' },
+              spec.columns
+                .slice(1)
+                .map(({ key, label }) =>
+                  h('div', { key }, h('dt', null, label), h('dd', null, group.rows[0][key] ?? '—')),
+                ),
+            ),
+            h(
+              'button',
+              { className: 'open-document', onClick: () => edit(group.id) },
+              can('edit') ? 'View/Edit →' : 'View →',
+            ),
+          ),
+        ),
+      );
     if (spec.inventory || spec.miscellaneous)
       return h(
         'section',
@@ -828,11 +881,14 @@ function App({ live, refreshWorkspaceAccess }) {
       ),
     );
   }
-  const activeLiveError = liveInventoryPage(page)
-    ? inventoryError
-    : liveProductionPage(page)
-      ? productionError
-      : liveError;
+  const activeLiveError =
+    page === 'materialContacts'
+      ? contactsError
+      : liveInventoryPage(page)
+        ? inventoryError
+        : liveProductionPage(page)
+          ? productionError
+          : liveError;
   function renderFloor() {
     if (live && (!liveReady || productionError))
       return h(
@@ -1139,7 +1195,7 @@ function App({ live, refreshWorkspaceAccess }) {
                                           : '+ New document'),
                                     ),
                                   !spec.readonly &&
-                                    can('edit') &&
+                                    can(page === 'materialContacts' ? 'view' : 'edit') &&
                                     view === 'sheet' &&
                                     h(
                                       'button',
@@ -1150,9 +1206,13 @@ function App({ live, refreshWorkspaceAccess }) {
                                           !records.includes(selected),
                                         onClick: () => edit(selected.documentId),
                                       },
-                                      spec.master
-                                        ? 'Edit selected record'
-                                        : 'Edit selected document',
+                                      page === 'materialContacts'
+                                        ? can('edit')
+                                          ? 'View/Edit'
+                                          : 'View'
+                                        : spec.master
+                                          ? 'Edit selected record'
+                                          : 'Edit selected document',
                                     ),
                                 ),
                                 page === 'materialStock' &&
@@ -1274,7 +1334,8 @@ function App({ live, refreshWorkspaceAccess }) {
           data: data,
           receiptId: editor.receiptId,
           reconciliation: editor.reconciliation,
-          onSave: saveData,
+          onSave: live && editor.page === 'materialContacts' ? saveLiveContact : saveData,
+          onReload: live && editor.page === 'materialContacts' ? reloadContacts : undefined,
           verifiers: live
             ? (data.dyed_bill_verifiers || []).filter((v) => v[editor.id ? 'edit' : 'create'])
             : access.users
