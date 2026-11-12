@@ -82,7 +82,9 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
 
   await page.goto('/fabric.html?live=1#materialReceipts');
   await page.getByRole('button', { name: '+ Receive stock' }).click();
-  await expect(page.getByText('Save the receipt, then reopen it to attach its bill.')).toBeVisible();
+  await expect(
+    page.getByText('Save the receipt, then reopen it to attach its bill.'),
+  ).toBeVisible();
   await page.getByLabel('Purchase order', { exact: true }).selectOption('4');
   await page.getByLabel('Purchase order line', { exact: true }).selectOption('12');
   await page.getByLabel('Billed quantity').fill('10');

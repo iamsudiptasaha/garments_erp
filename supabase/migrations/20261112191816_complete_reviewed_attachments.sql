@@ -38,7 +38,14 @@ returns jsonb language plpgsql security definer set search_path='' as $$
 declare t jsonb; row_data jsonb;
 begin
   t:=garments_erp.file_target(p_key);
-  if not garments_access.has_screen_permission(t->>'resource',p_action) then
+  if not garments_access.has_screen_permission(t->>'resource',p_action)
+    and not coalesce(p_key='employeePhoto' and p_action in ('view','edit')
+      and p_id=garments_access.profile_employee_id(),false)
+    and not (p_key='itemImage' and p_action='view'
+      and garments_access.has_screen_permission('productionJobs','view')
+      and exists(select 1 from garments_erp.production p
+        join garments_erp.item_part ip on ip.id=p.item_part_id where ip.item_id=p_id))
+  then
     raise exception 'No permission for this attachment' using errcode='42501';
   end if;
   if t->>'resource' in ('billingBuyerPO','billingReturns','billingDispatch') then

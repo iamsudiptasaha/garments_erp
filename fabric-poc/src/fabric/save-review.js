@@ -75,7 +75,7 @@ export function ReviewForm({ review, children, ...formProps }) {
   );
 }
 
-export function ReviewDetails({ review }) {
+function ReviewDetails({ review }) {
   const heading = useRef(null);
   useEffect(() => {
     heading.current?.focus();

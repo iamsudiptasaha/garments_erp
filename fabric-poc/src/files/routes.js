@@ -189,7 +189,7 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
                 disabled: review.busy,
                 onClick: () => {
                   setEdit(null);
-                  },
+                },
               },
               'Cancel',
             ),
@@ -230,7 +230,7 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
                   'button',
                   {
                     onClick: () => {
-                        setEdit({ ...r, mime: [...r.mime] });
+                      setEdit({ ...r, mime: [...r.mime] });
                     },
                   },
                   'Edit route',

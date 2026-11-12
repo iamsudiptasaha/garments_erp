@@ -16,5 +16,3 @@ export function useSaveReview(): Review;
 export function ReviewForm(
   props: ComponentPropsWithoutRef<'form'> & { review: Review },
 ): ReactElement;
-
-export function ReviewDetails(props: { review: Review }): ReactElement | null;

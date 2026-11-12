@@ -142,7 +142,12 @@ export function BucketSettings({
       h('button', { type: 'button', disabled: busy || review.busy, onClick: cancel }, 'Cancel'),
       h(
         'button',
-        { type: 'submit', className: 'primary', disabled: busy || review.busy || disabled, onClick: submit },
+        {
+          type: 'submit',
+          className: 'primary',
+          disabled: busy || review.busy || disabled,
+          onClick: submit,
+        },
         busy ? 'Saving…' : label,
       ),
     );
