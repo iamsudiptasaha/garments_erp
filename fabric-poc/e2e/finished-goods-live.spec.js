@@ -87,7 +87,21 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
         };
         break;
       case 'erp_finished_goods_summary':
-        body = { sizes: [], variations: [] };
+        body = {
+          sizes: [
+            { size_id: '23', item_id: '8', style_code: 'OTHER', size: 'L', total_produced: 1 },
+            {
+              size_id: '13',
+              item_id: item.id,
+              style_code: 'TEST-SHIRT',
+              size: 'M',
+              total_produced: 10,
+            },
+          ],
+          variations: [
+            { id: '9', style_code: 'SHIRT-SET', size: 'M', components: [{ item_id: item.id }] },
+          ],
+        };
         break;
       case 'erp_finished_goods_movements':
         body = movements.filter(({ adjustment }) => adjustment === args.p_adjustment);
@@ -293,6 +307,94 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   ).toBeVisible();
   expect(entries.at(-1).p_entry.components).toEqual([{ size_id: '13', pieces: 3 }]);
 
+  for (const [title, action, dialogName, identity, create] of [
+    ['Item stock summary', 'View selected costing history', 'Item costing history', item.label],
+    ['Sellable summary', 'View selected costing history', 'Item costing history', item.label],
+    ['Stock valuation', 'View selected costing history', 'Item costing history', item.label],
+    ['Items produced', 'Open selected stock-in', 'Stock-in receipts', '31', '+ Record stock-in'],
+    [
+      'Stock adjustments',
+      'Open selected adjustment',
+      'Verified adjustments',
+      'Recount',
+      '+ Add adjustment',
+    ],
+    [
+      'Sellable products',
+      'View selected contents',
+      'Sellable product contents',
+      'SHIRT-TRIO · Shirt trio',
+      '+ Add sellable product',
+    ],
+    [
+      'Item prices',
+      'View selected contents',
+      'Sellable product contents',
+      'SHIRT-SET · Shirt set',
+      '+ Add price version',
+    ],
+    ['Price types', 'Open selected price type', 'Price type', 'Wholesale', '+ Add price type'],
+  ]) {
+    await test.step(title + ' worksheet contract', async () => {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await nav.getByRole('button', { name: title, exact: true }).click();
+      const views = page.getByRole('group', { name: title + ' view' });
+      await views.getByRole('button', { name: 'Overview' }).click();
+      const cards = page.locator('.overview-grid');
+      await expect(cards).toBeVisible();
+      const screenshot = { animations: 'disabled', caret: 'hide' };
+      await page.mouse.move(0, 0);
+      const overview = await cards.screenshot(screenshot);
+      await views.getByRole('button', { name: 'Sheet' }).click();
+      const selected = page.getByRole('button', { name: action, exact: true });
+      await expect(selected).toBeDisabled();
+      await expect(page.getByRole('button', { name: /Edit selected/ })).toHaveCount(0);
+      const zoom = page.getByLabel('Sheet zoom');
+      await expect(zoom).toBeVisible();
+      await zoom.selectOption('1');
+      await expect(page.getByText('Columns', { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
+      if (create) {
+        await page.getByRole('button', { name: create }).click();
+        const createForm = page.getByRole('dialog');
+        await expect(createForm.locator('form')).toBeVisible();
+        await createForm.getByRole('button', { name: 'Close', exact: true }).click();
+      }
+      await page.getByLabel('Sort direction').selectOption('desc');
+      const overlay = page.locator('.fortune-sheet-overlay');
+      await overlay.click({ position: { x: 85, y: 82 } });
+      if (title === 'Item stock summary') {
+        await page.keyboard.press('Delete');
+        await page.getByRole('button', { name: 'Print / PDF' }).click();
+        await expect(page.getByRole('dialog').locator('tbody tr').first()).toContainText(
+          'TEST-SHIRT',
+        );
+        await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+        await overlay.click({ position: { x: 85, y: 82 } });
+      }
+      await selected.click();
+      const dialog = page.getByRole('dialog', { name: dialogName });
+      await expect(dialog).toContainText(identity);
+      await page.keyboard.press('Escape');
+      await expect(dialog).toHaveCount(0);
+      await zoom.selectOption('1.5');
+      const toolbar = page.locator('.worksheet-actions');
+      for (const width of [1024, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(toolbar).toHaveCSS('flex-wrap', 'wrap');
+        const bounds = await toolbar.boundingBox();
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+      }
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await views.getByRole('button', { name: 'Overview' }).click();
+      await page.mouse.move(0, 0);
+      expect(await cards.screenshot(screenshot)).toEqual(overview);
+      await views.getByRole('button', { name: 'Sheet' }).click();
+      await expect(zoom).toHaveValue('1.5');
+      await expect(selected).toBeDisabled();
+    });
+  }
+
   permission = { view: true };
   await page.reload();
   await expect(nav.getByRole('button')).toHaveCount(9);
@@ -306,6 +408,13 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
       page.locator('.overview-grid').getByText(readValue, { exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: writeAction })).toHaveCount(0);
+    await page
+      .getByRole('group', { name: title + ' view' })
+      .getByRole('button', { name: 'Sheet' })
+      .click();
+    await expect(page.getByText('Read-only access', { exact: false })).toBeVisible();
+    await expect(page.getByRole('button', { name: writeAction })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Export CSV' })).toHaveCount(0);
   }
   await nav.getByRole('button', { name: 'Stock valuation', exact: true }).click();
   const valuation = page.getByRole('group', { name: 'Stock valuation view' });

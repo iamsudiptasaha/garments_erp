@@ -10,6 +10,7 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
   const saved = new Map();
   const reads = [];
   const contexts = [];
+  let documentsAdministrator = false;
 
   async function open(viewport) {
     const context = await browser.newContext({ viewport });
@@ -48,11 +49,23 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
           json = {
             actor,
             enabled: true,
-            permissions: { colours: { view: true }, productionJobs: { view: true } },
+            administrator: documentsAdministrator && actor === first,
+            permissions: {
+              colours: { view: true },
+              productionJobs: { view: true },
+              productionChallans: { view: true },
+              ...(actor === first && {
+                jobWorkerBills: { view: true },
+                employees: { view: true },
+                materialContacts: { view: true },
+                finishedProducts: { view: true },
+              }),
+            },
           };
           break;
         case 'erp_fabric_snapshot':
         case 'erp_production_workspace':
+        case 'erp_raw_material_transaction_snapshot':
           json = {};
           break;
         case 'erp_dyed_bill_verifiers':
@@ -120,6 +133,15 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
     await expect(disclosure(desktop, 'colours')).toHaveJSProperty('open', true);
     await expect(disclosure(desktop, 'production')).toHaveJSProperty('open', true);
     await expect(disclosure(desktop, 'account')).toHaveJSProperty('open', false);
+    await desktop.getByRole('link', { name: 'Challans', exact: true }).click();
+    await expect(desktop.getByRole('heading', { name: 'Challans', exact: true })).toBeVisible();
+    await expect(desktop.getByRole('link', { name: 'Challans', exact: true })).toBeVisible();
+    for (const key of ['administration', 'miscellaneous', 'hr']) {
+      await expect(disclosure(desktop, key)).toHaveCount(0);
+    }
+    await expect(
+      disclosure(desktop, 'production').getByText('Worker bills', { exact: true }),
+    ).toHaveCount(0);
     await disclosure(desktop, 'account').locator('summary').click();
     await desktop.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(desktop.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
@@ -138,6 +160,21 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
       'aria-current',
       'page',
     );
+    documentsAdministrator = true;
+    await desktop.goto('/fabric.html?live=1');
+    await desktop.getByRole('link', { name: 'Challans', exact: true }).click();
+    await expect(desktop).toHaveURL(/production-challan[.]html#challans$/);
+    for (const page of ['Challans', 'Worker bills']) {
+      await expect(desktop.getByRole('link', { name: page, exact: true })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+      for (const key of ['fabric', 'administration', 'miscellaneous', 'hr']) {
+        await expect(disclosure(desktop, key).locator('summary')).toBeVisible();
+      }
+      if (page === 'Challans')
+        await desktop.getByRole('link', { name: 'Worker bills', exact: true }).click();
+    }
     await phone.reload();
     await expect(disclosure(phone, 'production')).toHaveJSProperty('open', true);
     await expect(disclosure(phone, 'colours')).toHaveJSProperty('open', false);

@@ -1,11 +1,11 @@
-import { useNavigationPreferences } from '../access/navigation-preferences.js';
+import { AccessNavigation } from '../access/navigation.js';
 import { getAccessClient } from '../access/client.js';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { FabricSheet } from '../fabric/sheet.js';
+import { worksheetSearchDelay } from '../fabric/grid-toolbar.js';
 import '../colours/styles.css';
 import { challanDocuments } from './live.js';
-import { pages } from '../fabric/catalog.js';
 (() => {
   const root = document.getElementById('challan-review');
   const api = challanDocuments();
@@ -24,28 +24,18 @@ import { pages } from '../fabric/catalog.js';
     const ticket = ++revision;
     const data = await api.read(billing);
     if (ticket !== revision) return false;
-    document.getElementById('challans-nav').hidden = !data.pages.challans;
-    document.getElementById('worker-bills-nav').hidden = !data.pages.billing;
     ({ jobs, workers, employees, records, stockIn, bills, permissions } = data);
     return true;
   }
   let view = 'list',
     presentation = 'overview',
     search = '',
+    sheetSearchTimer,
     selected,
     draft,
     origin,
     sheetRoot,
     sheetSelection;
-  const productionNav = document.getElementById('production-pages');
-  for (const [key, page] of Object.entries(pages).filter(
-    ([, page]) => page.section === 'production' && !page.hiddenNavigation,
-  )) {
-    const link = document.createElement('a');
-    link.href = '/fabric.html?live=1#' + key;
-    link.textContent = page.title;
-    productionNav.before(link);
-  }
   const e = (s = '') =>
     String(s ?? '').replace(
       /[&<>"']/g,
@@ -150,7 +140,7 @@ import { pages } from '../fabric/catalog.js';
     const billing = view === 'billing';
     const matches = billing ? billRecords() : matchingRecords();
     const sheetColumns = billing ? billColumns : columns;
-    if (!matches.length) {
+    if (presentation === 'overview' && !matches.length) {
       results.innerHTML = `<p class="fabric-status">No matching ${billing ? 'worker bills' : 'challans'}</p>`;
       return;
     }
@@ -178,13 +168,11 @@ import { pages } from '../fabric/catalog.js';
         .join('')}</div>`;
       return;
     }
-    results.innerHTML = `<div class="fabric-actions" data-sheet-actions>
-      <button type="button" data-action="edit-selected" disabled>${billing ? 'Edit selected bill' : 'Edit selected document'}</button>
-      <button type="button" data-action="open-selected" disabled>${billing ? 'Open selected bill' : 'Open selected challan'}</button>
-    </div>
-    <p class="fabric-status" data-sheet-notice role="status"></p><div data-sheet></div>`;
-    const actions = results.querySelector('[data-sheet-actions]');
+    results.innerHTML =
+      '<p class="fabric-status" data-sheet-notice role="status"></p><div data-sheet></div>';
+    const actions = root.querySelector('[data-sheet-actions]');
     sheetSelection = null;
+    for (const control of actions.querySelectorAll('button')) control.disabled = true;
     const host = results.querySelector('[data-sheet]');
     const sheetRows = billing
       ? matches
@@ -202,6 +190,7 @@ import { pages } from '../fabric/catalog.js';
         spec: { title: billing ? 'Worker bills' : 'Challans', columns: sheetColumns },
         records: sheetRows,
         onSelect: (record) => {
+          if (sheetSearchTimer) return;
           sheetSelection = record?.key;
           for (const control of actions.querySelectorAll('button'))
             control.disabled =
@@ -258,6 +247,8 @@ import { pages } from '../fabric/catalog.js';
     return `<header class="fabric-page-header"><div><p class="eyebrow">PRODUCTION / ${view === 'billing' ? 'WORKER BILLS' : 'CHALLANS'}</p><h1>${e(title)}</h1></div>${actions}</header>`;
   }
   function render() {
+    clearTimeout(sheetSearchTimer);
+    sheetSearchTimer = null;
     sheetRoot?.unmount();
     sheetRoot = null;
     const billing = view === 'billing';
@@ -265,7 +256,15 @@ import { pages } from '../fabric/catalog.js';
     root.innerHTML =
       view === 'list' || billing
         ? `${heading(title, `<div class="fabric-view-toggle" aria-label="${title} view">${['overview', 'sheet'].map((mode) => `<button type="button" aria-pressed="${presentation === mode}" data-action="view:${mode}">${mode === 'overview' ? 'Overview' : 'Sheet'}</button>`).join('')}</div>`)}
-      <div class="fabric-actions"><input type="search" aria-label="Search ${title.toLowerCase()}" data-search placeholder="Search ${title.toLowerCase()}…" value="${e(search)}">${permissions.create ? (billing ? button('new-bill', '+ New worker bill', true) : button('new', '+ New challan', true)) : ''}</div>
+      <div class="fabric-actions${presentation === 'sheet' ? ' worksheet-actions' : ''}"><input type="search" aria-label="Search ${title.toLowerCase()}" data-search placeholder="Search ${title.toLowerCase()}…" value="${e(search)}">${permissions.create ? (billing ? button('new-bill', '+ New worker bill', true) : button('new', '+ New challan', true)) : ''}
+      ${
+        presentation === 'sheet'
+          ? `<div data-sheet-actions>
+        <button type="button" data-action="open-selected" disabled>${billing ? 'Open selected bill' : 'Open selected challan'}</button>
+        ${permissions.edit ? `<button type="button" data-action="edit-selected" disabled>${billing ? 'Edit selected bill' : 'Edit selected document'}</button>` : ''}
+      </div>`
+          : ''
+      }</div>
       <p class="form-error" role="alert"></p><div data-results></div>`
         : view === 'form'
           ? `${heading(draft.id ? 'Edit challan' : 'New challan')}
@@ -288,7 +287,16 @@ import { pages } from '../fabric/catalog.js';
   root.addEventListener('input', ({ target: t }) => {
     if (t.hasAttribute('data-search')) {
       search = t.value;
-      renderResults();
+      if (presentation === 'sheet') {
+        sheetSelection = null;
+        for (const control of root.querySelectorAll('[data-sheet-actions] button'))
+          control.disabled = true;
+        clearTimeout(sheetSearchTimer);
+        sheetSearchTimer = setTimeout(() => {
+          sheetSearchTimer = null;
+          renderResults();
+        }, worksheetSearchDelay);
+      } else renderResults();
       return;
     }
     if (view !== 'form') return;
@@ -598,6 +606,8 @@ import { pages } from '../fabric/catalog.js';
     if (!action) return;
     let [cmd, arg] = action.split(':');
     if (busy) return;
+    if (cmd === 'edit-selected' && (!permissions.edit || !sheetSelection)) return;
+    if (cmd === 'open-selected' && !sheetSelection) return;
     if (cmd === 'delete' || cmd === 'delete-bill') {
       const billing = cmd === 'delete-bill';
       const record = billing ? bills.find((b) => b.key === arg) : selected;
@@ -624,7 +634,8 @@ import { pages } from '../fabric/catalog.js';
       view === 'billing' &&
       (cmd === 'new-bill' || cmd === 'edit-bill' || cmd === 'edit-selected')
     ) {
-      editBill(cmd === 'new-bill' ? null : bills.find((b) => b.key === (arg || sheetSelection)));
+      const bill = cmd === 'new-bill' ? null : bills.find((b) => b.key === (arg || sheetSelection));
+      if (cmd === 'new-bill' || bill) editBill(bill);
       return;
     }
     if (view === 'billing' && cmd === 'open-selected') {
@@ -632,7 +643,8 @@ import { pages } from '../fabric/catalog.js';
       arg = sheetSelection;
     }
     if (cmd === 'bill') {
-      viewBill(bills.find((b) => b.key === arg));
+      const bill = bills.find((b) => b.key === arg);
+      if (bill) viewBill(bill);
       return;
     }
     if (cmd === 'job') {
@@ -743,15 +755,12 @@ import { pages } from '../fabric/catalog.js';
     }
   });
   async function navigate() {
+    clearTimeout(sheetSearchTimer);
+    sheetSearchTimer = null;
     const billing = location.hash === '#worker-bills';
     view = billing ? 'billing' : 'list';
     search = '';
     presentation = 'overview';
-    document.getElementById('challans-nav').removeAttribute('aria-current');
-    document.getElementById('worker-bills-nav').removeAttribute('aria-current');
-    document
-      .getElementById(billing ? 'worker-bills-nav' : 'challans-nav')
-      .setAttribute('aria-current', 'page');
     document.title = billing ? 'Worker bills' : 'Production Challans';
     sheetRoot?.unmount();
     sheetRoot = null;
@@ -761,6 +770,7 @@ import { pages } from '../fabric/catalog.js';
         location.replace('/access.html');
         return;
       }
+      refreshNavigation();
       if (await load(billing)) render();
     } catch (error) {
       root.innerHTML = '<p class="form-error" role="alert"></p>';
@@ -769,22 +779,49 @@ import { pages } from '../fabric/catalog.js';
   }
   window.addEventListener('hashchange', navigate);
   const menu = document.querySelector('.navigation-toggle');
-  const sidebar = document.getElementById('challan-sidebar');
-  function NavigationPreferences() {
-    const notice = useNavigationPreferences(getAccessClient(), { current: sidebar });
-    return notice ? React.createElement('p', { role: 'status' }, notice) : null;
+  const navigation = createRoot(document.getElementById('challan-navigation'));
+  let menuOpen = true;
+  let access;
+  let accessRequest;
+  function renderNavigation() {
+    if (!access?.enabled) return;
+    navigation.render(
+      React.createElement(AccessNavigation, {
+        access,
+        productionPage: location.hash === '#worker-bills' ? 'worker-bills' : 'challans',
+        open: menuOpen,
+        onClose: () => setMenu(false),
+        onTab: (key) => {
+          location.href =
+            '/access.html#' +
+            { roles: 'adminRoles', accounts: 'adminAccess', audit: 'adminAudit' }[key];
+        },
+      }),
+    );
   }
-  const navigationStatus = document.createElement('div');
-  sidebar.append(navigationStatus);
-  createRoot(navigationStatus).render(React.createElement(NavigationPreferences));
-  menu.addEventListener('click', () => {
-    sidebar.hidden = !sidebar.hidden;
-    document.querySelector('.fabric-shell').classList.toggle('sidebar-collapsed', sidebar.hidden);
-    menu.setAttribute('aria-expanded', String(!sidebar.hidden));
-    menu.querySelector('span').textContent = sidebar.hidden ? 'Show menu' : 'Hide menu';
+  async function refreshNavigation() {
+    accessRequest ??= getAccessClient().rpc('erp_access_snapshot');
+    const { data, error } = await accessRequest;
+    if (error) {
+      accessRequest = null;
+      navigation.render(
+        React.createElement('p', { role: 'status' }, 'Unable to load workspace navigation.'),
+      );
+      return;
+    }
+    access = data;
+    renderNavigation();
+  }
+  function setMenu(open) {
+    menuOpen = open;
+    document.getElementById('challan-shell').classList.toggle('sidebar-collapsed', !open);
+    menu.setAttribute('aria-expanded', String(open));
+    menu.querySelector('span').textContent = open ? 'Hide menu' : 'Show menu';
     document
       .getElementById('menu-direction')
-      .setAttribute('d', sidebar.hidden ? 'm13 9 3 3-3 3' : 'm16 9-3 3 3 3');
-  });
+      .setAttribute('d', open ? 'm16 9-3 3 3 3' : 'm13 9 3 3-3 3');
+    renderNavigation();
+  }
+  menu.addEventListener('click', () => setMenu(!menuOpen));
   navigate();
 })();

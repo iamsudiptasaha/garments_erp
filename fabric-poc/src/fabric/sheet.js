@@ -137,7 +137,6 @@ function GridWorkbook({
     };
   }, []);
   function change(sheets) {
-    if (!capabilities.format) return;
     const sheet = sheets[0];
     if (!sheet?.data || sheet === lastSheet.current) return;
     const firstChange = lastSheet.current === null;
@@ -150,6 +149,7 @@ function GridWorkbook({
       setRevision((x) => x + 1);
       return;
     }
+    if (!capabilities.format) return;
     const previous = state.current;
     state.current = capturePresentation(sheet, previous, { sparse: true });
     const { widths: captured, borders, ...layout } = state.current.layout;
@@ -267,6 +267,8 @@ function GridWorkbook({
       capabilities.export && h('button', { onClick: download }, 'Export CSV'),
       capabilities.print && h('button', { onClick: preview }, 'Print / PDF'),
     ),
+    records.length === 0 &&
+      h('p', { className: 'fabric-status', role: 'status' }, 'No matching records.'),
     h(
       'div',
       { className: 'fabric-grid', ref: host },
@@ -275,7 +277,9 @@ function GridWorkbook({
         ref: book,
         data: initial.data,
         lang: 'en',
-        allowEdit: capabilities.format,
+        // FortuneSheet's read-only mode can loop after selection. Keep value changes
+        // blocked by the input guards and hooks for both presentation roles.
+        allowEdit: true,
         showToolbar: capabilities.format,
         showFormulaBar: false,
         showSheetTabs: false,
@@ -297,8 +301,12 @@ function GridWorkbook({
           '|',
           'freeze',
         ],
-        cellContextMenu: ['copy', '|', 'set-row-height', 'set-column-width'],
-        headerContextMenu: ['copy', '|', 'set-row-height', 'set-column-width'],
+        cellContextMenu: capabilities.format
+          ? ['copy', '|', 'set-row-height', 'set-column-width']
+          : ['copy'],
+        headerContextMenu: capabilities.format
+          ? ['copy', '|', 'set-row-height', 'set-column-width']
+          : ['copy'],
         hooks: {
           beforeUpdateCell: () => false,
           beforePaste: () => false,

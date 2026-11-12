@@ -12,10 +12,25 @@ const groups = [
   ['inventory', 'Raw Material Inventory'],
   ['miscellaneous', 'Miscellaneous'],
 ];
-export function AccessNavigation({ access, tab, onTab, open, onClose, accountName, onSignOut }) {
+export function AccessNavigation({
+  access,
+  tab,
+  onTab,
+  open,
+  onClose,
+  accountName,
+  onSignOut,
+  productionPage,
+}) {
   const sidebar = useRef(null);
   const notice = useNavigationPreferences(getAccessClient(), sidebar);
   const can = (key) => access.permissions?.[key]?.view === true;
+  const documentLinks = productionPage
+    ? [
+        ['productionChallans', 'challans', 'Challans'],
+        ['jobWorkerBills', 'worker-bills', 'Worker bills'],
+      ].filter(([key]) => can(key))
+    : [];
   return h(
     'aside',
     {
@@ -45,10 +60,15 @@ export function AccessNavigation({ access, tab, onTab, open, onClose, accountNam
       ),
       groups.map(([group, title]) => {
         const entries = Object.entries(pages).filter(
-          ([key, p]) => (p.section || 'fabric') === group && can(key),
+          ([key, p]) =>
+            (p.section || 'fabric') === group &&
+            can(key) &&
+            (!productionPage || !p.hiddenNavigation),
         );
         return (
-          entries.length > 0 &&
+          (entries.length > 0 ||
+            (productionPage && group === 'fabric') ||
+            (group === 'production' && documentLinks.length > 0)) &&
           h(
             'details',
             { open: true, key: group, 'data-nav-section': group },
@@ -56,13 +76,40 @@ export function AccessNavigation({ access, tab, onTab, open, onClose, accountNam
             h(
               'nav',
               { 'aria-label': title + ' pages' },
+              productionPage &&
+                group === 'fabric' &&
+                h('a', { href: '/fabric.html?live=1#fabricOverview' }, 'Fabric overview'),
               entries.map(([key, p]) =>
                 h('a', { key, href: '/fabric.html?live=1#' + key }, p.title),
               ),
+              group === 'production' &&
+                documentLinks.map(([key, hash, label]) =>
+                  h(
+                    'a',
+                    {
+                      key,
+                      href: '#' + hash,
+                      'aria-current': productionPage === hash ? 'page' : undefined,
+                    },
+                    label,
+                  ),
+                ),
             ),
           )
         );
       }),
+      productionPage &&
+        can('finishedProducts') &&
+        h(
+          'details',
+          { open: true, 'data-nav-section': 'finished-goods' },
+          h('summary', null, 'Finished Goods'),
+          h(
+            'nav',
+            { 'aria-label': 'Finished Goods pages' },
+            h('a', { href: '/fabric.html?live=1#finishedProducts' }, 'Item stock summary'),
+          ),
+        ),
       can('employees') &&
         h(
           'details',
