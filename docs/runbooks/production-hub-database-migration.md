@@ -31,7 +31,7 @@ Existing jobs are grouped by item part, assignees are deduplicated into producti
 
 The receipt field names, batch FK meaning and new Production/Employee workflow are changes the subsequent UI work must adopt. Passing the static coherence checker against its older schema baseline does not mean that the old UI already implements this new contract. Do not describe the whole ERP as UI-aligned after a database-only release.
 
-The migration is transactional and is listed in `scripts/ci/database-release.mjs`; post-release checks verify the new schema/security invariants before commit. Deployment remains a reviewed `dev` → `main` release through `.github/workflows/database-release.yml`, with its existing checks and environment protections. Preparing this migration has not dispatched that workflow.
+The [production workflow](../secure-ci-setup.md) applies pending migrations in timestamp order after the reviewed PR reaches `main`. The release stops on SQL errors.
 
 ## Validation
 

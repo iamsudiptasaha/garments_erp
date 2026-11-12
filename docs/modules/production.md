@@ -26,4 +26,4 @@ Reviewed setup fields are mirrored in the SQL and frontend contracts and checked
 
 SQL tests cover temporary-ID mapping, checklist persistence, stale saves, permission denial, rollback and restricted image access. Unit/browser checks cover projection, exact quantity IDs, stage skipping, duplicate employee names, reload persistence, all three views, and server-error handling. Browser transport fixtures never use a real account or production writes; isolated SQL/security/concurrency tests validate the actual functions.
 
-Release the reviewed migration using `.github/workflows/database-release.yml` and the portal through the existing main-branch Actions release. Verify both actual runs and the hosted workflow after release. Preparing a commit does not apply SQL or deploy the portal.
+Merging a reviewed PR into `main` runs the [production workflow](../secure-ci-setup.md), which applies pending migrations before deploying and verifying the portal.

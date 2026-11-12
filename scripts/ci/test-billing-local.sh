@@ -33,7 +33,7 @@ query < database/ci/baseline.sql
 billing_migrations=()
 for migration in supabase/migrations/*.sql; do
   version=$(basename "$migration" | cut -d_ -f1)
-  [[ "$version" > 20261029201439 ]] || continue
+  [[ "$version" > 20261029201541 ]] || continue
   echo "$migration" >&3
   if [[ "$version" > 20261112044629 ]]; then
     billing_migrations+=("$migration")
@@ -60,7 +60,11 @@ values (983001,983001,'LEGACY-A',983001,45),(983002,983002,'LEGACY-B',983001,70)
 insert into garments_erp.transport_bill_item(transport_bill_id,transport_docket_id,billed_amount)
 values (983001,983001,55);
 SQL
-node scripts/ci/test-billing-release.mjs "$database" "${billing_migrations[@]}"
+# Apply the billing cutover through the same CLI used by production releases.
+mkdir -p "$work/supabase/migrations"
+cp "${billing_migrations[@]}" "$work/supabase/migrations/"
+npx --yes supabase@2.122.0 db push --yes --workdir "$work" \
+  --db-url "postgresql://postgres:postgres@127.0.0.1:55422/$database?sslmode=disable" >&3 2>&3
 query <<'SQL'
 do $$
 begin

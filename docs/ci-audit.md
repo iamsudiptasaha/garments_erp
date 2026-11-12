@@ -1,4 +1,6 @@
-# CI implementation and verification report
+# Historical CI implementation and verification report
+
+For the active release process, see [CI and production release](secure-ci-setup.md).
 
 ## Repository audit
 

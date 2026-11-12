@@ -25,9 +25,9 @@ Prepared on 31 October 2026 on `dev`. Production changes require approval. This 
 
 Apply these pending migrations in order, after backup and compatibility review:
 
-1. `supabase/migrations/20261029205748_harden_portal_database_boundary.sql`: close direct table/view/function access outside guarded portal commands. This changes access for other applications editing the same tables; it does not remove business records.
-2. `supabase/migrations/20261031155332_account_lifecycle_mfa.sql`: password-setup flag, private recovery ledger and service-only commands, current-session/MFA permission enforcement, and safe login bootstrap.
-3. `supabase/migrations/20261031180430_require_active_authenticator_factor.sql`: deny stale MFA access when no verified authenticator remains.
+1. `supabase/migrations/20261031182923_harden_portal_database_boundary.sql`: close direct table/view/function access outside guarded portal commands. This changes access for other applications editing the same tables; it does not remove business records.
+2. `supabase/migrations/20261031182944_account_lifecycle_mfa.sql`: password-setup flag, private recovery ledger and service-only commands, current-session/MFA permission enforcement, and safe login bootstrap.
+3. `supabase/migrations/20261031182953_require_active_authenticator_factor.sql`: deny stale MFA access when no verified authenticator remains.
 
 Deploy the backward-compatible mailer protocol update first (it accepts numeric OTPs as well as legacy credentials). Replace the seven retired legacy endpoints described below. Configure server-only `MAILER_URL`, `MAILER_SHARED_SECRET` and `RECOVERY_PEPPER`, then deploy the reviewed `erp-accounts` function. The mailer key must match the existing Worker; never place these values in Vite settings or Git. Keep the Gmail app password only in the mailer Worker. Disabling gateway JWT verification is required only for this function's logged-out recovery operation: its authenticated operations independently validate the Auth user and administrator/MFA permissions.
 

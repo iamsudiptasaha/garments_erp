@@ -12,6 +12,6 @@ Lab Dip reads date, comments and status from the latest `lab_dip_version_item`. 
 
 `garments_access` contains the role/resource/user tables, including `app_role_resource_permission` for role permissions and `app_resource_table` for table mappings. These are distinct structures; no access-schema changes are part of this release. Stock-view naming is deferred to Billing as requested.
 
-Release through the existing reviewed dev → main path and `.github/workflows/database-release.yml`. Do not apply SQL locally against production. The new photo route requires the database migration before it is usable by the hosted UI. This work does not dispatch a deployment or migration workflow.
+The [production workflow](../secure-ci-setup.md) applies pending migrations after the reviewed PR reaches `main`. The photo route requires the migration before the hosted UI can use it.
 
 Validation: frontend quality/coherence, browser tests with the CI fixture Supabase endpoint, isolated SQL/security/concurrency checks, populated production/photo migration replay, and synthetic backup restore. Review the current execution results before claiming a production release.
