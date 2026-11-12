@@ -1,24 +1,269 @@
 import { getAccessClient } from '../access/client.js';
-import React, { useEffect, useRef } from 'react';
-import { createRoot } from 'react-dom/client';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FabricSheet } from '../fabric/sheet.js';
 import { worksheetSearchDelay } from '../fabric/grid-toolbar.js';
 import '../colours/styles.css';
 import './styles.css';
 import { challanDocuments } from './live.js';
-export function ProductionDocuments({ billing, listState }) {
-  const host = useRef(null);
-  useEffect(() => mountDocuments(host.current, billing, listState), [billing, listState]);
-  return React.createElement('section', {
-    ref: host,
-    className: 'production-documents',
-    'aria-label': 'Production documents',
-  });
+const h = React.createElement;
+const documentMaxAge = 60_000;
+const documentActions = ['view', 'create', 'edit', 'delete', 'format', 'print', 'export'];
+
+export function ProductionDocumentWorkspace({ page, can, changes }) {
+  const [visited, setVisited] = useState({});
+  useEffect(() => {
+    if (!page || visited[page] || !can('view', page)) return;
+    setVisited((previous) => ({ ...previous, [page]: true }));
+  }, [page, visited, can]);
+  return ['productionChallans', 'jobWorkerBills'].map((key) =>
+    (visited[key] || page === key) && can('view', key)
+      ? h(ProductionDocuments, {
+          key: key + documentActions.map((action) => Number(can(action, key))).join(''),
+          billing: key === 'jobWorkerBills',
+          visible: page === key,
+          changes,
+        })
+      : null,
+  );
 }
 
-function mountDocuments(root, billing, listState) {
+function ProductionDocuments({ billing, visible, changes }) {
+  const host = useRef(null);
+  const editor = useRef(null);
+  const controller = useRef(null);
+  const [screen, setScreen] = useState({});
+  const [notice, setNotice] = useState('');
+  const [selection, setSelection] = useState(null);
+  const title = billing ? 'Worker bills' : 'Challans';
+  const presentation = screen.presentation || 'overview';
+  const sheet = presentation === 'sheet';
+  const spec = useMemo(
+    () => ({ title, columns: billing ? billColumns : columns }),
+    [billing, title],
+  );
+  const sheetRows = useMemo(() => {
+    if (billing) return screen.matches;
+    const data = screen.snapshot;
+    return screen.matches?.map((record) => ({
+      ...record,
+      worker: data.workers.find(([id]) => id === record.worker)?.[1] || '',
+      employee: record.employeeName,
+      lineCount: record.lines.length,
+    }));
+  }, [billing, screen.matches, screen.snapshot]);
+  useLayoutEffect(() => {
+    const instance = mountDocuments(
+      host.current,
+      editor.current,
+      billing,
+      changes,
+      setScreen,
+      setSelection,
+    );
+    controller.current = instance;
+    return instance.dispose;
+  }, [billing, changes]);
+  useLayoutEffect(() => {
+    controller.current.setVisible(visible);
+  }, [visible, billing, changes]);
+  const permissions = screen.snapshot?.permissions || {};
+  return h(
+    'section',
+    {
+      ref: host,
+      hidden: !visible,
+      className: 'production-documents',
+      'aria-label': 'Production documents',
+    },
+    h(
+      'div',
+      { hidden: screen.view === 'form' || screen.view === 'detail' },
+      h(
+        'header',
+        { className: 'fabric-page-header' },
+        h(
+          'div',
+          null,
+          h('p', { className: 'eyebrow' }, 'PRODUCTION / ' + title.toUpperCase()),
+          h('h1', null, title),
+        ),
+        h(
+          'div',
+          { className: 'fabric-view-toggle', 'aria-label': title + ' view' },
+          ['overview', 'sheet'].map((mode) =>
+            h(
+              'button',
+              {
+                key: mode,
+                type: 'button',
+                'aria-pressed': presentation === mode,
+                'data-action': 'view:' + mode,
+              },
+              mode === 'overview' ? 'Overview' : 'Sheet',
+            ),
+          ),
+        ),
+      ),
+      h(
+        'div',
+        { className: 'fabric-actions' + (sheet ? ' worksheet-actions' : '') },
+        h('input', {
+          type: 'search',
+          'aria-label': 'Search ' + title.toLowerCase(),
+          'data-search': '',
+          placeholder: 'Search ' + title.toLowerCase() + '…',
+        }),
+        permissions.create &&
+          h(
+            'button',
+            { type: 'button', className: 'primary', 'data-action': billing ? 'new-bill' : 'new' },
+            billing ? '+ New worker bill' : '+ New challan',
+          ),
+        sheet &&
+          h(
+            'div',
+            { 'data-sheet-actions': '' },
+            h(
+              'button',
+              { type: 'button', 'data-action': 'open-selected', disabled: !selection },
+              billing ? 'Open selected bill' : 'Open selected challan',
+            ),
+            permissions.edit &&
+              h(
+                'button',
+                { type: 'button', 'data-action': 'edit-selected', disabled: !selection },
+                billing ? 'Edit selected bill' : 'Edit selected document',
+              ),
+          ),
+      ),
+      screen.error &&
+        h(
+          'div',
+          null,
+          h('p', { className: 'form-error', role: 'alert' }, screen.error),
+          h('button', { type: 'button', 'data-action': 'retry' }, 'Retry'),
+        ),
+      !screen.snapshot &&
+        !screen.error &&
+        h('p', { role: 'status' }, 'Loading production documents…'),
+      screen.snapshot &&
+        h(
+          'div',
+          { hidden: sheet },
+          h(DocumentCards, { billing, matches: screen.matches, workers: screen.snapshot.workers }),
+        ),
+      screen.snapshot &&
+        screen.sheetVisited &&
+        h(
+          'div',
+          { hidden: !sheet },
+          h('p', { className: 'fabric-status', role: 'status' }, notice),
+          h(FabricSheet, {
+            page: billing ? 'workerBills' : 'productionChallans',
+            client: getAccessClient(),
+            spec,
+            records: sheetRows,
+            onSelect: (record) => controller.current.select(record),
+            onNotice: setNotice,
+            capabilities: {
+              format: permissions.format,
+              export: permissions.export,
+              print: permissions.print,
+            },
+          }),
+        ),
+    ),
+    h('div', { ref: editor }),
+  );
+}
+
+function DocumentCards({ billing, matches, workers }) {
+  if (!matches.length)
+    return h(
+      'p',
+      { className: 'fabric-status' },
+      'No matching ' + (billing ? 'worker bills' : 'challans'),
+    );
+  const subtitle = (text) => h('p', { className: 'card-subtitle' }, text);
+  return h(
+    'div',
+    { className: 'overview-grid lab-cards' },
+    matches.map((record, index) =>
+      h(
+        'article',
+        { key: record.key, className: 'overview-card lab-card tone-' + (index % 4) },
+        h(
+          'button',
+          {
+            className: 'lab-card-open',
+            type: 'button',
+            'aria-haspopup': 'dialog',
+            'data-action': (billing ? 'bill:' : 'open:') + record.key,
+          },
+          h('span', { className: 'card-kicker' }, billing ? 'Worker bill' : 'Challan'),
+          h('h2', null, record.id),
+          billing
+            ? subtitle(record.worker + ' · ' + record.challan)
+            : subtitle(
+                [
+                  record.date || 'Date unavailable',
+                  record.employeeName || 'Issuer unavailable',
+                  workers.find(([id]) => id === record.worker)?.[1] || '',
+                ].join(' · '),
+              ),
+          billing &&
+            subtitle(
+              (record.invoiceNumber || 'No invoice number') +
+                ' · ' +
+                (record.date || 'No bill date'),
+            ),
+          h(
+            'span',
+            { className: 'lab-status' },
+            billing ? '₹' + record.rate : record.lines.length + ' job lines',
+          ),
+          h(
+            'p',
+            { className: 'lab-card-hint' },
+            billing
+              ? record.assignment + ' · View bill →'
+              : record.lines.filter((line) => line.billed).length +
+                  ' billed lines · View challan →',
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+const columns = [
+  { key: 'id', label: 'Challan' },
+  { key: 'date', label: 'Issue date' },
+  { key: 'employee', label: 'Issued by' },
+  { key: 'worker', label: 'Job worker' },
+  { key: 'lineCount', label: 'Job lines' },
+];
+const billColumns = [
+  { key: 'id', label: 'Worker bill' },
+  { key: 'invoiceNumber', label: 'Invoice number' },
+  { key: 'date', label: 'Bill date' },
+  { key: 'attachmentName', label: 'Bill attachment' },
+  { key: 'worker', label: 'Job worker' },
+  { key: 'challan', label: 'Challan' },
+  { key: 'assignment', label: 'Job variant' },
+  { key: 'rate', label: 'Billed rate' },
+];
+function mountDocuments(root, editor, billing, changes, update, updateSelection) {
   const api = challanDocuments();
-  let active = true;
+  const listeners = new AbortController();
+  const optionsForEvents = { signal: listeners.signal };
+  let visible = false,
+    freshUntil = 0,
+    pending,
+    version = 0,
+    snapshot,
+    matches,
+    error;
   let jobs = {},
     workers = [],
     employees = [],
@@ -26,26 +271,77 @@ function mountDocuments(root, billing, listState) {
     stockIn = {},
     bills = [],
     permissions = {},
-    busy = false,
-    revision = 0;
+    busy = false;
   const line = () => ({ job: '', part: '', variant: '', cells: {}, description: '', rate: '' });
   const workerName = (id) => workers.find((worker) => worker[0] === id)?.[1] || '';
-  async function load(billing) {
-    const ticket = ++revision;
-    const data = await api.read(billing);
-    if (!active || ticket !== revision) return false;
-    ({ jobs, workers, employees, records, stockIn, bills, permissions } = data);
-    return true;
+  function load() {
+    if (pending) return pending;
+    const ticket = version;
+    pending = api
+      .read(billing)
+      .then((data) => {
+        if (listeners.signal.aborted || ticket !== version) return false;
+        snapshot = data;
+        ({ jobs, workers, employees, records, stockIn, bills, permissions } = data);
+        freshUntil = Date.now() + documentMaxAge;
+        error = '';
+        renderResults();
+        return true;
+      })
+      .catch((problem) => {
+        if (listeners.signal.aborted || ticket !== version) return false;
+        if (problem.code === '42501') {
+          snapshot = null;
+          permissions = {};
+          editor.replaceChildren();
+          for (const dialog of root.querySelectorAll('dialog')) dialog.close();
+          view = billing ? 'billing' : 'list';
+          select(null);
+        }
+        error = problem.message;
+        publish();
+        return false;
+      })
+      .finally(() => {
+        if (ticket === version) pending = null;
+      });
+    return pending;
   }
+  function invalidate() {
+    freshUntil = 0;
+    version++;
+    pending = null;
+  }
+  function invalidateDocuments() {
+    if (listeners.signal.aborted) return;
+    invalidate();
+    changes.dispatchEvent(new CustomEvent('changed', { detail: billing }));
+  }
+  changes.addEventListener(
+    'changed',
+    (event) => {
+      if (event.detail === billing) return;
+      invalidate();
+      if (visible) void load();
+    },
+    optionsForEvents,
+  );
   let view = billing ? 'billing' : 'list',
-    presentation = listState.presentation || 'overview',
-    search = listState.search || '',
+    presentation = 'overview',
+    search = '',
+    sheetVisited = false,
     sheetSearchTimer,
     selected,
     draft,
     origin,
-    sheetRoot,
     sheetSelection;
+  function select(record) {
+    sheetSelection = sheetSearchTimer ? null : record?.key;
+    updateSelection(sheetSelection);
+  }
+  function publish() {
+    update({ view, presentation, sheetVisited, snapshot, matches, error });
+  }
   const e = (s = '') =>
     String(s ?? '').replace(
       /[&<>"']/g,
@@ -76,23 +372,6 @@ function mountDocuments(root, billing, listState) {
         .includes(search.toLowerCase()),
     );
   }
-  const columns = [
-    { key: 'id', label: 'Challan' },
-    { key: 'date', label: 'Issue date' },
-    { key: 'employee', label: 'Issued by' },
-    { key: 'worker', label: 'Job worker' },
-    { key: 'lineCount', label: 'Job lines' },
-  ];
-  const billColumns = [
-    { key: 'id', label: 'Worker bill' },
-    { key: 'invoiceNumber', label: 'Invoice number' },
-    { key: 'date', label: 'Bill date' },
-    { key: 'attachmentName', label: 'Bill attachment' },
-    { key: 'worker', label: 'Job worker' },
-    { key: 'challan', label: 'Challan' },
-    { key: 'assignment', label: 'Job variant' },
-    { key: 'rate', label: 'Billed rate' },
-  ];
   function billItem(item) {
     const challan = records.find((record) => record.key === item.challan);
     const line = challan.lines.find((line) => line.id === item.line);
@@ -144,78 +423,9 @@ function mountDocuments(root, billing, listState) {
       );
   }
   function renderResults() {
-    sheetRoot?.unmount();
-    sheetRoot = null;
-    const results = root.querySelector('[data-results]');
-    const billing = view === 'billing';
-    const matches = billing ? billRecords() : matchingRecords();
-    const sheetColumns = billing ? billColumns : columns;
-    if (presentation === 'overview' && !matches.length) {
-      results.innerHTML = `<p class="fabric-status">No matching ${billing ? 'worker bills' : 'challans'}</p>`;
-      return;
-    }
-    if (presentation === 'overview') {
-      results.innerHTML = `<div class="overview-grid lab-cards">${matches
-        .map(
-          (record, index) => `
-        <article class="overview-card lab-card tone-${index % 4}">
-          <button class="lab-card-open" type="button" aria-haspopup="dialog" data-action="${billing ? 'bill' : 'open'}:${e(record.key)}">
-            ${
-              billing
-                ? `<span class="card-kicker">Worker bill</span><h2>${e(record.id)}</h2>
-            <p class="card-subtitle">${e(record.worker)} · ${e(record.challan)}</p>
-            <p class="card-subtitle">${e(record.invoiceNumber || 'No invoice number')} · ${e(record.date || 'No bill date')}</p>
-            <span class="lab-status">₹${e(record.rate)}</span>
-            <p class="lab-card-hint">${e(record.assignment)} · View bill →</p>`
-                : `            <span class="card-kicker">Challan</span><h2>${e(record.id)}</h2>
-            <p class="card-subtitle">${e(record.date || 'Date unavailable')} · ${e(record.employeeName || 'Issuer unavailable')} · ${e(workerName(record.worker))}</p>
-            <span class="lab-status">${record.lines.length} job lines</span>
-            <p class="lab-card-hint">${record.lines.filter((line) => line.billed).length} billed lines · View challan →</p>`
-            }
-          </button>
-        </article>`,
-        )
-        .join('')}</div>`;
-      return;
-    }
-    results.innerHTML =
-      '<p class="fabric-status" data-sheet-notice role="status"></p><div data-sheet></div>';
-    const actions = root.querySelector('[data-sheet-actions]');
-    sheetSelection = null;
-    for (const control of actions.querySelectorAll('button')) control.disabled = true;
-    const host = results.querySelector('[data-sheet]');
-    const sheetRows = billing
-      ? matches
-      : matches.map((r) => ({
-          ...r,
-          worker: workerName(r.worker),
-          employee: r.employeeName,
-          lineCount: r.lines.length,
-        }));
-    sheetRoot = createRoot(host);
-    sheetRoot.render(
-      React.createElement(FabricSheet, {
-        page: billing ? 'workerBills' : 'productionChallans',
-        client: getAccessClient(),
-        spec: { title: billing ? 'Worker bills' : 'Challans', columns: sheetColumns },
-        records: sheetRows,
-        onSelect: (record) => {
-          if (sheetSearchTimer) return;
-          sheetSelection = record?.key;
-          for (const control of actions.querySelectorAll('button'))
-            control.disabled =
-              !record || (control.dataset.action === 'edit-selected' && !permissions.edit);
-        },
-        onNotice: (message) => {
-          results.querySelector('[data-sheet-notice]').textContent = message;
-        },
-        capabilities: {
-          format: permissions.format,
-          export: permissions.export,
-          print: permissions.print,
-        },
-      }),
-    );
+    if (snapshot) matches = billing ? billRecords() : matchingRecords();
+    select(null);
+    publish();
   }
   function formLine(l, i) {
     const job = jobs[l.job];
@@ -257,26 +467,10 @@ function mountDocuments(root, billing, listState) {
     return `<header class="fabric-page-header"><div><p class="eyebrow">PRODUCTION / ${view === 'billing' ? 'WORKER BILLS' : 'CHALLANS'}</p><h1>${e(title)}</h1></div>${actions}</header>`;
   }
   function render() {
-    if (!active) return;
-    clearTimeout(sheetSearchTimer);
-    sheetSearchTimer = null;
-    sheetRoot?.unmount();
-    sheetRoot = null;
-    const billing = view === 'billing';
-    const title = billing ? 'Worker bills' : 'Challans';
-    root.innerHTML =
-      view === 'list' || billing
-        ? `${heading(title, `<div class="fabric-view-toggle" aria-label="${title} view">${['overview', 'sheet'].map((mode) => `<button type="button" aria-pressed="${presentation === mode}" data-action="view:${mode}">${mode === 'overview' ? 'Overview' : 'Sheet'}</button>`).join('')}</div>`)}
-      <div class="fabric-actions${presentation === 'sheet' ? ' worksheet-actions' : ''}"><input type="search" aria-label="Search ${title.toLowerCase()}" data-search placeholder="Search ${title.toLowerCase()}…" value="${e(search)}">${permissions.create ? (billing ? button('new-bill', '+ New worker bill', true) : button('new', '+ New challan', true)) : ''}
-      ${
-        presentation === 'sheet'
-          ? `<div data-sheet-actions>
-        <button type="button" data-action="open-selected" disabled>${billing ? 'Open selected bill' : 'Open selected challan'}</button>
-        ${permissions.edit ? `<button type="button" data-action="edit-selected" disabled>${billing ? 'Edit selected bill' : 'Edit selected document'}</button>` : ''}
-      </div>`
-          : ''
-      }</div>
-      <p class="form-error" role="alert"></p><div data-results></div>`
+    if (listeners.signal.aborted) return;
+    editor.innerHTML =
+      view === 'list' || view === 'billing'
+        ? ''
         : view === 'form'
           ? `${heading(draft.id ? 'Edit challan' : 'New challan')}
         <form><div class="fabric-fields"><label><span>Job worker</span><select aria-label="Job worker" data-field="worker" required>${options([['', 'Select a job worker'], ...workers], draft.worker)}</select></label>${input('Issue date', 'date', draft.date, 'date')}<label><span>Issuing employee</span><select data-field="employee">${options([['', 'Select employee'], ...employees], draft.employee)}</select></label></div>
@@ -284,7 +478,7 @@ function mountDocuments(root, billing, listState) {
         ${button('add', 'Add job line')}<p role="alert" class="form-error"></p>
         <div class="editor-actions">${button('cancel', 'Cancel')}<button class="primary" type="submit">Save challan</button></div></form>`
           : detail();
-    if (view === 'list' || billing) renderResults();
+    publish();
     if (view === 'detail') {
       const dialog = root.querySelector('[data-challan-detail]');
       dialog.addEventListener('cancel', (event) => {
@@ -292,43 +486,49 @@ function mountDocuments(root, billing, listState) {
         view = 'list';
         render();
       });
-      dialog.showModal();
+      if (visible) dialog.showModal();
     }
   }
-  root.addEventListener('input', ({ target: t }) => {
-    if (t.hasAttribute('data-search')) {
-      search = t.value;
-      if (presentation === 'sheet') {
-        sheetSelection = null;
-        for (const control of root.querySelectorAll('[data-sheet-actions] button'))
-          control.disabled = true;
-        clearTimeout(sheetSearchTimer);
-        sheetSearchTimer = setTimeout(() => {
-          sheetSearchTimer = null;
-          renderResults();
-        }, worksheetSearchDelay);
-      } else renderResults();
-      return;
-    }
-    if (view !== 'form') return;
-    const row = t.closest('[data-line]');
-    const model = row ? draft.lines[Number(row.dataset.line)] : draft;
-    if (t.dataset.field && !['worker', 'assignment'].includes(t.dataset.field))
-      model[t.dataset.field] = t.value;
-  });
-  root.addEventListener('change', ({ target: t }) => {
-    if (t.dataset.field === 'worker') {
-      if (draft.lines.some((line) => line.job && jobs[line.job][2] !== t.value)) {
-        t.value = draft.worker;
-        root.querySelector('[role="alert"]').textContent =
-          'Remove the selected job lines before changing the job worker.';
+  root.addEventListener(
+    'input',
+    ({ target: t }) => {
+      if (t.hasAttribute('data-search')) {
+        search = t.value;
+        if (presentation === 'sheet') {
+          select(null);
+          clearTimeout(sheetSearchTimer);
+          sheetSearchTimer = setTimeout(() => {
+            sheetSearchTimer = null;
+            renderResults();
+          }, worksheetSearchDelay);
+        } else renderResults();
         return;
       }
-      draft.worker = t.value;
-      render();
-      root.querySelector('[data-action^="pick-variant:"]')?.focus();
-    }
-  });
+      if (view !== 'form') return;
+      const row = t.closest('[data-line]');
+      const model = row ? draft.lines[Number(row.dataset.line)] : draft;
+      if (t.dataset.field && !['worker', 'assignment'].includes(t.dataset.field))
+        model[t.dataset.field] = t.value;
+    },
+    optionsForEvents,
+  );
+  root.addEventListener(
+    'change',
+    ({ target: t }) => {
+      if (t.dataset.field === 'worker') {
+        if (draft.lines.some((line) => line.job && jobs[line.job][2] !== t.value)) {
+          t.value = draft.worker;
+          editor.querySelector('[role="alert"]').textContent =
+            'Remove the selected job lines before changing the job worker.';
+          return;
+        }
+        draft.worker = t.value;
+        render();
+        root.querySelector('[data-action^="pick-variant:"]')?.focus();
+      }
+    },
+    optionsForEvents,
+  );
   function showDialog(
     markup,
     className = 'fabric-dialog',
@@ -500,18 +700,19 @@ function mountDocuments(root, billing, listState) {
           date: data.get('date') || null,
           removeAttachment: !file.name && data.has('removeAttachment'),
         });
-        await load(true);
-        bill = bills.find((row) => row.key === key);
+        if (listeners.signal.aborted) return;
+        invalidateDocuments();
         if (file.name) {
           try {
             await api.attach(key, file);
           } catch (error) {
+            await load();
+            bill = bills.find((row) => row.key === key) || bill;
             throw Error('Bill saved. Attachment upload failed: ' + error.message, { cause: error });
           }
-          await load(true);
         }
+        await load();
         dialog.close();
-        render();
       } catch (error) {
         showError(error.message);
       } finally {
@@ -612,177 +813,206 @@ function mountDocuments(root, billing, listState) {
       .querySelector('[data-action^="edit-bill"]')
       ?.addEventListener('click', () => dialog.close());
   }
-  root.addEventListener('click', async (event) => {
-    const action = event.target.closest('[data-action]')?.dataset.action;
-    if (!action) return;
-    let [cmd, arg] = action.split(':');
-    if (busy) return;
-    if (cmd === 'edit-selected' && (!permissions.edit || !sheetSelection)) return;
-    if (cmd === 'open-selected' && !sheetSelection) return;
-    if (cmd === 'delete' || cmd === 'delete-bill') {
-      const billing = cmd === 'delete-bill';
-      const record = billing ? bills.find((b) => b.key === arg) : selected;
-      if (!record || !window.confirm('Delete this ' + (billing ? 'worker bill' : 'challan') + '?'))
+  root.addEventListener(
+    'click',
+    async (event) => {
+      const action = event.target.closest('[data-action]')?.dataset.action;
+      if (!action) return;
+      let [cmd, arg] = action.split(':');
+      if (busy) return;
+      if (cmd === 'edit-selected' && (!permissions.edit || !sheetSelection)) return;
+      if (cmd === 'open-selected' && !sheetSelection) return;
+      if (cmd === 'delete' || cmd === 'delete-bill') {
+        const billing = cmd === 'delete-bill';
+        const record = billing ? bills.find((b) => b.key === arg) : selected;
+        if (
+          !record ||
+          !window.confirm('Delete this ' + (billing ? 'worker bill' : 'challan') + '?')
+        )
+          return;
+        busy = true;
+        try {
+          await api.save(billing, 'delete', { key: record.key, revision: record.revision });
+          invalidateDocuments();
+          await load();
+          if (billing) event.target.closest('dialog')?.close();
+          view = billing ? 'billing' : 'list';
+          render();
+        } catch (error) {
+          window.alert(error.message);
+        } finally {
+          busy = false;
+        }
         return;
+      }
+      if (cmd === 'pick-variant') {
+        pickVariant(Number(arg));
+        return;
+      }
+      if (
+        view === 'billing' &&
+        (cmd === 'new-bill' || cmd === 'edit-bill' || cmd === 'edit-selected')
+      ) {
+        const bill =
+          cmd === 'new-bill' ? null : bills.find((b) => b.key === (arg || sheetSelection));
+        if (cmd === 'new-bill' || bill) editBill(bill);
+        return;
+      }
+      if (view === 'billing' && cmd === 'open-selected') {
+        cmd = 'bill';
+        arg = sheetSelection;
+      }
+      if (cmd === 'bill') {
+        const bill = bills.find((b) => b.key === arg);
+        if (bill) viewBill(bill);
+        return;
+      }
+      if (cmd === 'job') {
+        showDialog(
+          `${dialogHeader(jobs[arg][5])}<p>${[jobs[arg][0], jobs[arg][1], workerName(jobs[arg][2])].map(e).join(' · ')}</p>`,
+        );
+        return;
+      }
+      if (cmd === 'print') {
+        window.print();
+        return;
+      }
+      if (cmd === 'list') view = 'list';
+      if (cmd === 'view') {
+        presentation = arg;
+        sheetVisited ||= arg === 'sheet';
+        if (sheetSearchTimer) {
+          clearTimeout(sheetSearchTimer);
+          sheetSearchTimer = null;
+          renderResults();
+        } else publish();
+        return;
+      }
+      if (cmd === 'retry') {
+        void load();
+        return;
+      }
+      if (cmd === 'open' || cmd === 'open-selected' || cmd === 'edit-selected') {
+        selected = records.find((r) => r.key === (arg || sheetSelection));
+        if (!selected) return;
+        view = 'detail';
+      }
+      if (cmd === 'new') {
+        origin = 'list';
+        draft = {
+          date: new Date().toLocaleDateString('sv-SE'),
+          employee: '',
+          worker: '',
+          lines: [line()],
+        };
+        view = 'form';
+      }
+      if (cmd === 'edit' || cmd === 'edit-selected') {
+        origin = 'detail';
+        draft = structuredClone(selected);
+        view = 'form';
+      }
+      if (cmd === 'cancel') view = origin;
+      if (cmd === 'add') draft.lines.push(line());
+      if (cmd === 'remove') {
+        if (draft.lines[Number(arg)].billed) {
+          editor.querySelector('[role="alert"]').textContent =
+            'Keep lines referenced by worker bills.';
+          return;
+        }
+        draft.lines.splice(Number(arg), 1);
+      }
+      render();
+      if (cmd === 'add')
+        root.querySelector('[data-line]:last-of-type [data-action^="pick-variant:"]')?.focus();
+    },
+    optionsForEvents,
+  );
+  root.addEventListener(
+    'submit',
+    async (event) => {
+      if (view !== 'form' || event.target.method === 'dialog') return;
+      event.preventDefault();
+      if (busy) return;
+      const error = editor.querySelector('[role="alert"]');
+      const problem = !draft.lines.length
+        ? 'Add at least one job line.'
+        : draft.lines
+            .map((l, i) => {
+              if (
+                !draft.worker ||
+                jobs[l.job]?.[2] !== draft.worker ||
+                l.part !== jobs[l.job][0] ||
+                !jobs[l.job][3].includes(l.variant)
+              )
+                return `Select a valid job, part and variant on line ${i + 1}.`;
+              const original = records
+                .find((record) => record.key === draft.key)
+                ?.lines.find((line) => line.id === l.id && line.job === l.job);
+              const expected = original?.cells[l.variant] || stockIn[l.job][l.variant];
+              const issued = l.cells[l.variant] || {};
+              if (
+                Object.keys(issued).length !== Object.keys(expected).length ||
+                Object.entries(expected).some(([size, quantity]) => issued[size] !== quantity)
+              ) {
+                return `Line ${i + 1} must match the full stock-in by size.`;
+              }
+              return '';
+            })
+            .find(Boolean);
+      if (problem) {
+        error.textContent = problem;
+        return;
+      }
+      const submit = event.submitter;
       busy = true;
+      if (submit) submit.disabled = true;
       try {
-        await api.save(billing, 'delete', { key: record.key, revision: record.revision });
-        await load(billing);
-        view = billing ? 'billing' : 'list';
+        const key = await api.save(false, draft.key ? 'edit' : 'create', {
+          key: draft.key,
+          revision: draft.revision,
+          date: draft.date || null,
+          employee: draft.employee || null,
+          lines: draft.lines.map((l) => ({
+            id: l.id,
+            assignment: l.job,
+            rate: l.rate || null,
+            description: l.description,
+            quantities: l.cells[l.variant],
+          })),
+        });
+        invalidateDocuments();
+        const loaded = await load();
+        if (listeners.signal.aborted) return;
+        selected = loaded && records.find((record) => record.key === key);
+        view = selected && visible ? 'detail' : 'list';
         render();
-      } catch (error) {
-        window.alert(error.message);
+      } catch (problem) {
+        error.textContent = problem.message;
       } finally {
         busy = false;
+        if (submit) submit.disabled = false;
       }
-      return;
-    }
-    if (cmd === 'pick-variant') {
-      pickVariant(Number(arg));
-      return;
-    }
-    if (
-      view === 'billing' &&
-      (cmd === 'new-bill' || cmd === 'edit-bill' || cmd === 'edit-selected')
-    ) {
-      const bill = cmd === 'new-bill' ? null : bills.find((b) => b.key === (arg || sheetSelection));
-      if (cmd === 'new-bill' || bill) editBill(bill);
-      return;
-    }
-    if (view === 'billing' && cmd === 'open-selected') {
-      cmd = 'bill';
-      arg = sheetSelection;
-    }
-    if (cmd === 'bill') {
-      const bill = bills.find((b) => b.key === arg);
-      if (bill) viewBill(bill);
-      return;
-    }
-    if (cmd === 'job') {
-      showDialog(
-        `${dialogHeader(jobs[arg][5])}<p>${[jobs[arg][0], jobs[arg][1], workerName(jobs[arg][2])].map(e).join(' · ')}</p>`,
-      );
-      return;
-    }
-    if (cmd === 'print') {
-      window.print();
-      return;
-    }
-    if (cmd === 'list') view = 'list';
-    if (cmd === 'view') presentation = arg;
-    if (cmd === 'open' || cmd === 'open-selected' || cmd === 'edit-selected') {
-      selected = records.find((r) => r.key === (arg || sheetSelection));
-      if (!selected) return;
-      view = 'detail';
-    }
-    if (cmd === 'new') {
-      origin = 'list';
-      draft = {
-        date: new Date().toLocaleDateString('sv-SE'),
-        employee: '',
-        worker: '',
-        lines: [line()],
-      };
-      view = 'form';
-    }
-    if (cmd === 'edit' || cmd === 'edit-selected') {
-      origin = 'detail';
-      draft = structuredClone(selected);
-      view = 'form';
-    }
-    if (cmd === 'cancel') view = origin;
-    if (cmd === 'add') draft.lines.push(line());
-    if (cmd === 'remove') {
-      if (draft.lines[Number(arg)].billed) {
-        root.querySelector('[role="alert"]').textContent = 'Keep lines referenced by worker bills.';
+    },
+    optionsForEvents,
+  );
+  return {
+    select,
+    setVisible(next) {
+      visible = next;
+      if (next) {
+        if (Date.now() >= freshUntil) void load();
         return;
       }
-      draft.lines.splice(Number(arg), 1);
-    }
-    render();
-    if (cmd === 'add')
-      root.querySelector('[data-line]:last-of-type [data-action^="pick-variant:"]')?.focus();
-  });
-  root.addEventListener('submit', async (event) => {
-    if (view !== 'form' || event.target.method === 'dialog') return;
-    event.preventDefault();
-    if (busy) return;
-    const error = root.querySelector('[role="alert"]');
-    const problem = !draft.lines.length
-      ? 'Add at least one job line.'
-      : draft.lines
-          .map((l, i) => {
-            if (
-              !draft.worker ||
-              jobs[l.job]?.[2] !== draft.worker ||
-              l.part !== jobs[l.job][0] ||
-              !jobs[l.job][3].includes(l.variant)
-            )
-              return `Select a valid job, part and variant on line ${i + 1}.`;
-            const original = records
-              .find((record) => record.key === draft.key)
-              ?.lines.find((line) => line.id === l.id && line.job === l.job);
-            const expected = original?.cells[l.variant] || stockIn[l.job][l.variant];
-            const issued = l.cells[l.variant] || {};
-            if (
-              Object.keys(issued).length !== Object.keys(expected).length ||
-              Object.entries(expected).some(([size, quantity]) => issued[size] !== quantity)
-            ) {
-              return `Line ${i + 1} must match the full stock-in by size.`;
-            }
-            return '';
-          })
-          .find(Boolean);
-    if (problem) {
-      error.textContent = problem;
-      return;
-    }
-    const submit = event.submitter;
-    busy = true;
-    if (submit) submit.disabled = true;
-    try {
-      const key = await api.save(false, draft.key ? 'edit' : 'create', {
-        key: draft.key,
-        revision: draft.revision,
-        date: draft.date || null,
-        employee: draft.employee || null,
-        lines: draft.lines.map((l) => ({
-          id: l.id,
-          assignment: l.job,
-          rate: l.rate || null,
-          description: l.description,
-          quantities: l.cells[l.variant],
-        })),
-      });
-      await load(false);
-      selected = records.find((record) => record.key === key);
-      view = 'detail';
-      render();
-    } catch (problem) {
-      error.textContent = problem.message;
-    } finally {
-      busy = false;
-      if (submit) submit.disabled = false;
-    }
-  });
-  async function start() {
-    root.innerHTML = '<p role="status">Loading production documents…</p>';
-    try {
-      if (await load(billing)) render();
-    } catch (error) {
-      if (!active) return;
-      root.innerHTML = '<p class="form-error" role="alert"></p>';
-      root.querySelector('[role="alert"]').textContent = error.message;
-    }
-  }
-  void start();
-  return () => {
-    active = false;
-    listState.presentation = presentation;
-    listState.search = search;
-    clearTimeout(sheetSearchTimer);
-    const mountedSheet = sheetRoot;
-    // React is still committing the enclosing route's unmount.
-    if (mountedSheet) queueMicrotask(() => mountedSheet.unmount());
+      for (const dialog of root.querySelectorAll('dialog[open]')) dialog.close();
+      if (view === 'detail') {
+        view = 'list';
+        render();
+      }
+    },
+    dispose() {
+      listeners.abort();
+      clearTimeout(sheetSearchTimer);
+    },
   };
 }
