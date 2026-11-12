@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Select from 'react-select';
+import { AdminDialog } from '../admin/dialog.js';
+import { RecordPageHeading } from '../fabric/record-page.js';
 import { getAccessClient } from '../access/client.js';
 import { UploadRoutes } from './routes.js';
 import { liveFileCommands } from './live.js';
@@ -19,7 +21,9 @@ export function FilesWorkspace({ access, admin, navigate }) {
     [records, setRecords] = useState([]),
     [selected, setSelected] = useState(null),
     [loading, setLoading] = useState(false),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [confirmCleanup, setConfirmCleanup] = useState(false),
+    [loadingConfiguration, setLoadingConfiguration] = useState(true);
   const targets = routes.filter((t) => access.permissions?.[t.resource]?.view),
     target = targets.find((t) => t.key === key) || targets[0],
     store = useMemo(() => commands.store(registry, routes), [commands, registry, routes]);
@@ -31,6 +35,8 @@ export function FilesWorkspace({ access, admin, navigate }) {
       setRoutes(configured);
     } catch (e) {
       setError(e.message);
+    } finally {
+      setLoadingConfiguration(false);
     }
   }
   useEffect(() => {
@@ -103,6 +109,7 @@ export function FilesWorkspace({ access, admin, navigate }) {
   }
   async function cleanup() {
     setBusy(true);
+    setConfirmCleanup(false);
     setError('');
     try {
       const result = await commands.cleanup();
@@ -120,59 +127,77 @@ export function FilesWorkspace({ access, admin, navigate }) {
   return h(
     React.Fragment,
     null,
-    h(
-      'header',
-      null,
-      h('p', { className: 'eyebrow' }, admin ? 'ADMINISTRATION' : 'SAVED RECORD ATTACHMENTS'),
-      h('h1', null, admin ? 'Bucket groups' : 'Files'),
-    ),
+    admin
+      ? h(RecordPageHeading, { eyebrow: 'Administration', title: 'Bucket groups' })
+      : h(
+          'header',
+          null,
+          h('p', { className: 'eyebrow' }, 'SAVED RECORD ATTACHMENTS'),
+          h('h1', null, 'Files'),
+        ),
     error && h('p', { role: 'alert', className: 'form-error' }, error),
     notice && h('p', { role: 'status', className: 'file-notice' }, notice),
     admin
       ? !access.administrator
         ? h('p', null, 'Administrator access required.')
-        : h(
-            React.Fragment,
-            null,
-            h(
-              'p',
-              { className: 'files-boundary' },
-              'Live Supabase configuration · private buckets · group keys and bucket addresses stay fixed to preserve file links.',
-            ),
-            h(BucketSettings, {
-              preferenceClient: getAccessClient(),
-              registry,
-              buckets: registry.map((g) => ({ id: g.bucket_id, private: g.private })),
-              isAdministrator: true,
-              onSave: save,
-              onCreate: createGroup,
-              onRemove: removeGroup,
-              lockBucket: true,
-            }),
-            h(UploadRoutes, {
-              routes,
-              registry,
-              onSave: saveRoute,
-              preferenceClient: getAccessClient(),
-            }),
-            h(
-              'div',
-              { className: 'file-admin-actions' },
+        : loadingConfiguration
+          ? h('p', { role: 'status' }, 'Loading storage configuration…')
+          : h(
+              React.Fragment,
+              null,
+              h(BucketSettings, {
+                preferenceClient: getAccessClient(),
+                registry,
+                buckets: registry.map((g) => ({ id: g.bucket_id, private: g.private })),
+                isAdministrator: true,
+                onSave: save,
+                onCreate: createGroup,
+                onRemove: removeGroup,
+                lockBucket: true,
+              }),
+              h(UploadRoutes, {
+                routes,
+                registry,
+                onSave: saveRoute,
+                preferenceClient: getAccessClient(),
+              }),
               h(
-                'a',
-                {
-                  href: workspacePath('files'),
-                  onClick: (event) => followWorkspaceLink(event, () => navigate('files')),
-                },
-                'Open files',
+                'div',
+                { className: 'file-admin-actions' },
+                h(
+                  'a',
+                  {
+                    href: workspacePath('files'),
+                    onClick: (event) => followWorkspaceLink(event, () => navigate('files')),
+                  },
+                  'Open files',
+                ),
+                h(
+                  'button',
+                  { disabled: busy, onClick: () => setConfirmCleanup(true) },
+                  busy ? 'Cleaning…' : 'Clean up interrupted uploads',
+                ),
               ),
-              h(
-                'button',
-                { disabled: busy, onClick: cleanup },
-                busy ? 'Cleaning…' : 'Clean up interrupted uploads',
-              ),
-            ),
-          )
+              confirmCleanup &&
+                h(
+                  AdminDialog,
+                  {
+                    title: 'Clean up interrupted uploads',
+                    onClose: () => setConfirmCleanup(false),
+                  },
+                  h(
+                    'p',
+                    null,
+                    'Remove expired upload attempts that never completed. Saved attachments are kept.',
+                  ),
+                  h(
+                    'div',
+                    { className: 'editor-actions' },
+                    h('button', { onClick: () => setConfirmCleanup(false) }, 'Cancel'),
+                    h('button', { className: 'primary', onClick: cleanup }, 'Run cleanup'),
+                  ),
+                ),
+            )
       : h(
           React.Fragment,
           null,

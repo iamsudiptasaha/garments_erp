@@ -1,3 +1,4 @@
+import { EmployeeAvatar } from './avatar.js';
 import { getAccessClient } from '../access/client.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { allowed } from '../admin/model.js';
@@ -385,15 +386,11 @@ export function HRPanel({
                         key: r.id,
                         className: 'hr-person-card',
                       },
-                      h(
-                        'span',
-                        { className: 'hr-initials' },
-                        r.name
-                          .split(/\s+/)
-                          .slice(0, 2)
-                          .map((s) => s[0])
-                          .join(''),
-                      ),
+                      h(EmployeeAvatar, {
+                        className: 'hr-initials',
+                        photoId: live ? r.record.employee.employee_photo : null,
+                        name: r.name,
+                      }),
                       h('strong', null, r.name),
                       h('span', null, r.code),
                       h('span', null, r.phone || 'Phone not set'),

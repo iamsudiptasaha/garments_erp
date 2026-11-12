@@ -1,3 +1,5 @@
+import { AdminDialog } from '../admin/dialog.js';
+import { GridSearch, GridSort, useGridSearch } from '../fabric/grid-toolbar.js';
 import { RecordGrid } from '../fabric/record-grid.js';
 import React, { useState } from 'react';
 import { prettyBytes } from './model.js';
@@ -8,10 +10,39 @@ const types = [
   ['image/png', 'PNG'],
   ['image/webp', 'WebP'],
 ];
+const fields = [
+  ['source', 'Attachment source'],
+  ['bucket', 'Bucket group'],
+  ['types', 'Allowed files'],
+  ['limit', 'Per file'],
+  ['status', 'Status'],
+];
+
 export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
   const [edit, setEdit] = useState(null),
     [error, setError] = useState(''),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [search, setSearch] = useState(''),
+    [sort, setSort] = useState({ key: 'source', direction: 'asc' });
+  const query = useGridSearch(search).trim().toLowerCase();
+  const shown = routes
+    .map((record) => {
+      const group = registry.find((g) => g.id === record.bucket_group_id);
+      return {
+        source: record.label,
+        bucket: group?.group || 'Missing group',
+        types: record.mime.map((m) => types.find((t) => t[0] === m)?.[1] || m).join(', '),
+        limit: Math.min(record.max_bytes, group?.max_bytes || record.max_bytes),
+        status: record.enabled ? 'Enabled' : 'Paused',
+        record,
+      };
+    })
+    .filter((r) => [r.source, r.bucket].some((value) => value?.toLowerCase().includes(query)))
+    .sort(
+      (a, b) =>
+        (sort.direction === 'asc' ? 1 : -1) *
+        String(a[sort.key]).localeCompare(String(b[sort.key]), undefined, { numeric: true }),
+    );
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
@@ -28,24 +59,31 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
   return h(
     'section',
     { className: 'bucket-settings upload-routes' },
-    h(
-      'div',
-      { className: 'fabric-actions' },
-      h('h2', null, 'Upload routes'),
-      h('span', null, `${routes.length} attachment fields`),
-    ),
+    h('h2', null, 'Upload routes'),
     h(
       'p',
       { className: 'file-help' },
-      'Choose where each attachment field uploads. These rules apply to new uploads; existing files keep their original locations. Source fields and access rules are registered integrations.',
+      'Changes apply to new uploads. Existing files stay in their original locations.',
     ),
-    error && h('p', { role: 'alert', className: 'form-error' }, error),
-    edit
-      ? h(
+    h(
+      'div',
+      { className: 'fabric-actions worksheet-actions admin-toolbar' },
+      h(GridSearch, { label: 'Search upload routes', value: search, onChange: setSearch }),
+    ),
+    h(GridSort, {
+      columns: fields.map(([key, label]) => ({ key, label })),
+      sort,
+      onSort: setSort,
+      rowCount: shown.length,
+    }),
+    edit &&
+      h(
+        AdminDialog,
+        { title: edit.label, onClose: () => !busy && setEdit(null) },
+        h(
           'form',
           { onSubmit: submit },
-          h('h3', null, edit.label),
-          h('p', { className: 'route-source' }, `garments_erp.${edit.table} → ${edit.slot}`),
+          error && h('p', { role: 'alert', className: 'form-error' }, error),
           h(
             'div',
             { className: 'fabric-fields' },
@@ -59,9 +97,7 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
                   value: edit.bucket_group_id,
                   onChange: (e) => setEdit((v) => ({ ...v, bucket_group_id: e.target.value })),
                 },
-                registry.map((g) =>
-                  h('option', { key: g.id, value: g.id }, `${g.group} · ${g.bucket_id}`),
-                ),
+                registry.map((g) => h('option', { key: g.id, value: g.id }, g.group)),
               ),
             ),
             h(
@@ -144,69 +180,54 @@ export function UploadRoutes({ routes, registry, onSave, preferenceClient }) {
               busy ? 'Saving…' : 'Save upload route',
             ),
           ),
-        )
-      : h(
-          'div',
-          { className: 'permission-scroll' },
-          h(
-            RecordGrid,
-            {
-              client: preferenceClient,
-              grid: 'files-upload-routes',
-              fields: [
-                ['source', 'Attachment source'],
-                ['bucket', 'Bucket group / bucket'],
-                ['types', 'Allowed files'],
-                ['limit', 'Per file'],
-                ['status', 'Status'],
-              ],
-            },
-            h(
-              'tbody',
-              null,
-              routes.map((r) => {
-                const g = registry.find((g) => g.id === r.bucket_group_id);
-                return h(
-                  'tr',
-                  { key: r.key },
-                  h(
-                    'td',
-                    null,
-                    h('strong', null, r.label),
-                    h('small', null, `garments_erp.${r.table}`),
-                    h('small', null, r.slot),
-                  ),
-                  h(
-                    'td',
-                    null,
-                    h('strong', null, g?.group || 'Missing group'),
-                    h('small', null, g?.bucket_id),
-                  ),
-                  h(
-                    'td',
-                    null,
-                    r.mime.map((m) => types.find((t) => t[0] === m)?.[1] || m).join(', '),
-                  ),
-                  h('td', null, prettyBytes(Math.min(r.max_bytes, g?.max_bytes || r.max_bytes))),
-                  h('td', null, r.enabled ? 'Enabled' : 'Paused'),
-                  h(
-                    'td',
-                    null,
-                    h(
-                      'button',
-                      {
-                        onClick: () => {
-                          setError('');
-                          setEdit({ ...r, mime: [...r.mime] });
-                        },
-                      },
-                      'Edit route',
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
         ),
+      ),
+    h(
+      'div',
+      { className: 'admin-records' },
+      h(
+        RecordGrid,
+        {
+          client: preferenceClient,
+          grid: 'files-upload-routes',
+          fields,
+        },
+        h(
+          'tbody',
+          null,
+          shown.map(({ record: r, source, bucket, types, limit, status }) => {
+            return h(
+              'tr',
+              { key: r.key },
+              h('td', null, h('strong', null, source)),
+              h('td', null, bucket),
+              h('td', null, types || '—'),
+              h('td', null, prettyBytes(limit)),
+              h('td', null, status),
+              h(
+                'td',
+                null,
+                h(
+                  'button',
+                  {
+                    onClick: () => {
+                      setError('');
+                      setEdit({ ...r, mime: [...r.mime] });
+                    },
+                  },
+                  'Edit route',
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    ),
+    !shown.length &&
+      h(
+        'div',
+        { className: 'empty-state' },
+        query ? 'No upload routes match your search.' : 'No upload routes configured.',
+      ),
   );
 }

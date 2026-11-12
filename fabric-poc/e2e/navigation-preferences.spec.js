@@ -2,6 +2,30 @@ import { expect, test } from '@playwright/test';
 
 test.use({ actionTimeout: 5000 });
 
+// Route transitions can produce a one-level antialiasing difference at a rounded
+// edge. Compare rendered pixels with a two-level channel tolerance.
+async function sameRendering(page, left, right) {
+  if (left.equals(right)) return true;
+  return page.evaluate(
+    async (urls) => {
+      const read = async (url) => {
+        const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const context = canvas.getContext('2d');
+        context.drawImage(bitmap, 0, 0);
+        return context.getImageData(0, 0, bitmap.width, bitmap.height);
+      };
+      const [a, b] = await Promise.all(urls.map(read));
+      return (
+        a.width === b.width &&
+        a.height === b.height &&
+        a.data.every((value, i) => Math.abs(value - b.data[i]) <= 2)
+      );
+    },
+    [left, right].map((png) => 'data:image/png;base64,' + png.toString('base64')),
+  );
+}
+
 test('navigation disclosures survive refresh, sign-out and separate sessions per account', async ({
   browser,
 }, testInfo) => {
@@ -357,19 +381,19 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
     await disclosure(desktop, 'colours').locator('summary').click();
     await expect.poll(() => saved.get(first)?.colours).toBe(false);
     const admin = desktop.getByRole('navigation', { name: 'Administration pages' });
-    const roles = admin.getByRole('link', { name: 'Roles & permissions' });
+    const roles = admin.getByRole('link', { name: 'Roles & Permissions' });
     await roles.click();
     await expect(desktop).toHaveURL(/access[.]html#adminRoles$/);
     await expect(desktop.getByRole('heading', { name: 'Roles', exact: true })).toBeVisible();
     const main = desktop.getByRole('main');
-    await main.getByRole('button', { name: 'Account access', exact: true }).click();
+    await main.getByRole('button', { name: 'User Access', exact: true }).click();
     await expect(desktop).toHaveURL(/access[.]html#adminAccess$/);
-    await expect(main.getByRole('heading', { name: 'Employee account access' })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'User Access' })).toBeVisible();
     await main.getByRole('button', { name: 'Activity log', exact: true }).click();
     await expect(desktop).toHaveURL(/access[.]html#adminAudit$/);
     await expect(main.getByText('No access changes recorded.')).toBeVisible();
     await desktop.goBack();
-    await expect(main.getByRole('heading', { name: 'Employee account access' })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'User Access' })).toBeVisible();
     await desktop.goForward();
     await expect(main.getByRole('button', { name: 'Activity log' })).toHaveAttribute(
       'aria-pressed',
@@ -420,12 +444,14 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
         }
         await expect
           .poll(async () =>
-            (
+            sameRendering(
+              direct,
+              inWorkspace,
               await directMain.screenshot({
                 ...shotOptions,
                 path: testInfo.outputPath(fileName + '-direct-content.png'),
-              })
-            ).equals(inWorkspace),
+              }),
+            ),
           )
           .toBe(true);
         await direct.screenshot({
@@ -475,7 +501,7 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
         phoneDocuments.push(request.url());
     });
     for (const [linkName, heading, fileName] of [
-      ['Roles & permissions', 'Roles', 'roles-mobile.png'],
+      ['Roles & Permissions', 'Roles', 'roles-mobile.png'],
       ['Bucket groups', 'Bucket groups', 'bucket-groups-mobile.png'],
     ]) {
       await phone.getByRole('button', { name: 'Show menu' }).click();
@@ -499,7 +525,7 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
     await phone.goto('/access.html#adminAccess');
     await expect(phone).toHaveURL(/access[.]html[?]returnTo=/);
     await expect(phone.getByRole('heading', { name: 'Set your password' })).toBeVisible();
-    await expect(phone.getByRole('heading', { name: 'Employee account access' })).toHaveCount(0);
+    await expect(phone.getByRole('heading', { name: 'User Access' })).toHaveCount(0);
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
   }

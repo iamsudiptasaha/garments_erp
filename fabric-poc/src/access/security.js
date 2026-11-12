@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getAccessClient } from './client.js';
+import { createVerificationClient, getAccessClient } from './client.js';
 const h = React.createElement;
 export async function accountCommand(input) {
   const { data, error } = await getAccessClient().functions.invoke('erp-accounts', { body: input });
@@ -8,9 +8,7 @@ export async function accountCommand(input) {
   return data;
 }
 export function RecoveryForm() {
-  const [phone, setPhone] = useState(''),
-    [code, setCode] = useState(''),
-    [password, setPassword] = useState(''),
+  const [email, setEmail] = useState(''),
     [message, setMessage] = useState(''),
     [busy, setBusy] = useState(false);
   return h(
@@ -18,24 +16,17 @@ export function RecoveryForm() {
     null,
     h('summary', null, 'Forgot password?'),
     h(
-      'p',
-      null,
-      'Contact your Administrator for a single-use recovery code sent to their email. Your Google Authenticator remains required.',
-    ),
-    h(
       'form',
       {
         onSubmit: async (e) => {
           e.preventDefault();
           setBusy(true);
           try {
-            const r = await accountCommand({ action: 'recover', phone, code, password });
-            setCode('');
-            setPassword('');
-            setMessage(r.message);
-          } catch (e) {
-            setMessage(e.message);
+            await getAccessClient().auth.resetPasswordForEmail(email.trim());
+          } catch {
+            // Use the same response for every address.
           } finally {
+            setMessage('If this email is registered, you will receive a password reset link.');
             setBusy(false);
           }
         },
@@ -43,47 +34,105 @@ export function RecoveryForm() {
       h(
         'label',
         null,
-        'Employee mobile number',
+        'Registered email',
         h('input', {
-          type: 'tel',
+          type: 'email',
           required: true,
-          maxLength: 10,
-          value: phone,
-          onChange: (e) => setPhone(e.target.value),
+          autoComplete: 'email',
+          value: email,
+          onChange: (e) => setEmail(e.target.value),
         }),
       ),
-      h(
-        'label',
-        null,
-        'Recovery code',
-        h('input', {
-          required: true,
-          autoComplete: 'one-time-code',
-          inputMode: 'numeric',
-          placeholder: '8-digit recovery code',
-          value: code,
-          onChange: (e) => setCode(e.target.value.trim().toUpperCase()),
-        }),
-      ),
-      h(
-        'label',
-        null,
-        'New password',
-        h('input', {
-          type: 'password',
-          autoComplete: 'new-password',
-          required: true,
-          minLength: 12,
-          maxLength: 128,
-          value: password,
-          onChange: (e) => setPassword(e.target.value),
-        }),
-      ),
-      h('button', { disabled: busy, type: 'submit' }, 'Reset password'),
+      h('button', { disabled: busy, type: 'submit' }, 'Send reset link'),
     ),
     message && h('p', { role: 'status' }, message),
   );
 }
+
+export function readPasswordLink(hash) {
+  const params = new URLSearchParams(hash.slice(1));
+  const type = params.get('type');
+  const tokenHash = params.get('token_hash');
+  return (type === 'invite' || type === 'recovery') && tokenHash ? { type, tokenHash } : null;
+}
+
+export function PasswordLink({ link }) {
+  const client = getAccessClient();
+  const [step, setStep] = useState('confirm'),
+    [password, setPassword] = useState(''),
+    [message, setMessage] = useState(''),
+    [busy, setBusy] = useState(false);
+  async function accept() {
+    setBusy(true);
+    setMessage('');
+    try {
+      const verified = await client.auth.verifyOtp({ type: link.type, token_hash: link.tokenHash });
+      if (verified.error || !verified.data.session) throw Error();
+      const security = await client.rpc('erp_account_security');
+      if (security.error || !security.data?.enabled) {
+        await client.auth.signOut({ scope: 'local' });
+        throw Error();
+      }
+      const factors = await client.auth.mfa.listFactors();
+      if (factors.error) throw Error();
+      setStep(factors.data.totp.length ? 'mfa' : 'password');
+    } catch {
+      setMessage(
+        'This link could not be accepted. Request a new password reset link or contact your Administrator.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      const updated = await client.auth.updateUser({ password });
+      if (updated.error) throw updated.error;
+      setPassword('');
+      const signedOut = await client.auth.signOut();
+      if (signedOut.error) throw signedOut.error;
+      location.replace('/access.html');
+    } catch {
+      setMessage('Could not complete the password update. Check your password and retry.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return h(
+    'section',
+    { className: 'access-login' },
+    h('h2', null, link.type === 'invite' ? 'Accept invitation' : 'Reset password'),
+    message && h('p', { className: 'form-error', role: 'alert' }, message),
+    step === 'confirm'
+      ? h('button', { className: 'primary', disabled: busy, onClick: accept }, 'Continue')
+      : step === 'mfa'
+        ? h(Authenticator, { onVerified: () => setStep('password') })
+        : h(
+            'form',
+            { onSubmit: save },
+            h(
+              'label',
+              null,
+              'New password',
+              h('input', {
+                type: 'password',
+                required: true,
+                minLength: 12,
+                maxLength: 128,
+                autoComplete: 'new-password',
+                value: password,
+                onChange: (e) => setPassword(e.target.value),
+              }),
+            ),
+            h('button', { className: 'primary', disabled: busy, type: 'submit' }, 'Save password'),
+          ),
+    h('a', { className: 'password-link-back', href: '/access.html' }, 'Back to sign in'),
+  );
+}
+
 export function Authenticator({ onVerified }) {
   const [factors, setFactors] = useState(null),
     [factor, setFactor] = useState(''),
@@ -213,6 +262,118 @@ export function Authenticator({ onVerified }) {
             ),
             h('button', { type: 'submit', disabled: busy }, 'Verify authenticator'),
           ),
+  );
+}
+export function EmailSettings({ onUpdated } = {}) {
+  const [email, setEmail] = useState(''),
+    [pending, setPending] = useState(''),
+    [code, setCode] = useState(''),
+    [message, setMessage] = useState(''),
+    [busy, setBusy] = useState(false);
+  const client = getAccessClient();
+  async function send(e) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      const approval = await client.rpc('erp_authorize_employee_email_change', { p_email: email });
+      if (approval.error) throw approval.error;
+      const sent = await client.auth.updateUser({ email: approval.data });
+      if (sent.error) {
+        if (sent.error.status === 429) throw Error('Wait before requesting another code.');
+        throw Error('Could not send a code to that address. Check it or use a different email.');
+      }
+      setPending(approval.data);
+      setCode('');
+      setMessage(
+        'Enter the code sent to your new email. Your current login email is still active.',
+      );
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function verify(e) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      // The email verification session must not replace the original password and TOTP session.
+      const verifier = createVerificationClient();
+      const verified = await verifier.auth.verifyOtp({
+        email: pending,
+        token: code,
+        type: 'email_change',
+      });
+      if (verified.data?.session) await verifier.auth.signOut({ scope: 'local' });
+      const user = await client.auth.getUser();
+      if (user.data.user?.email?.toLowerCase() !== pending) {
+        if (verified.error?.status === 429) throw Error('Too many attempts. Wait before retrying.');
+        throw Error('The change could not be verified. Retry the code or request a new one.');
+      }
+      const refreshed = await client.auth.refreshSession();
+      setPending('');
+      setEmail('');
+      setCode('');
+      setMessage(
+        refreshed.error
+          ? 'Email updated. Sign out and sign in with the new address.'
+          : 'Email updated. Use the new address the next time you sign in.',
+      );
+      onUpdated?.(user.data.user.email);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return h(
+    'details',
+    { className: 'account-email-settings' },
+    h('summary', null, 'Update Email'),
+    h(
+      'form',
+      { onSubmit: send },
+      h(
+        'label',
+        null,
+        'New email',
+        h('input', {
+          type: 'email',
+          value: email,
+          required: true,
+          autoComplete: 'email',
+          onChange: (e) => setEmail(e.target.value),
+        }),
+      ),
+      h(
+        'button',
+        { type: 'submit', disabled: busy },
+        pending && pending === email.trim().toLowerCase() ? 'Resend code' : 'Send code',
+      ),
+    ),
+    pending &&
+      h(
+        'form',
+        { onSubmit: verify },
+        h(
+          'label',
+          null,
+          'Email verification code',
+          h('input', {
+            value: code,
+            required: true,
+            inputMode: 'numeric',
+            autoComplete: 'one-time-code',
+            pattern: '[0-9]{6}',
+            maxLength: 6,
+            onChange: (e) => setCode(e.target.value),
+          }),
+        ),
+        h('button', { type: 'submit', disabled: busy }, 'Verify new email'),
+      ),
+    message && h('p', { role: 'status' }, message),
   );
 }
 export function PasswordSettings() {

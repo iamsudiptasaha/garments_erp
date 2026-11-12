@@ -7,7 +7,7 @@ select role.id,resource.id,true from garments_access.app_role role,garments_acce
 where role.key='ci_viewer' and resource.key='productionChallans';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000002',true);
-select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000002"}',true);
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000002"}',true);
 
 do $$
 begin
@@ -27,7 +27,7 @@ begin
 end $$;
 
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
-select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000001"}',true);
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000001"}',true);
 do $$
 declare
   line jsonb := '{"assignment":"974001","rate":"12","quantities":{"Test S":"24","Test M":"8"}}';

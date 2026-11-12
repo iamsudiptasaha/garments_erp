@@ -39,6 +39,14 @@ export function EmployeeEditor({
   const [savedDraft, setSavedDraft] = useState(() => JSON.stringify(draft));
   const dirty = JSON.stringify(draft) !== savedDraft;
   const payload = { id: record?.employee.id || null, expected: revision, draft };
+  const assignedContacts = new Set(
+    snapshot.records
+      .filter((row) => row.employee.id !== record?.employee.id)
+      .map((row) => row.employee.contacts_id),
+  );
+  const employeeContacts = snapshot.contact_choices.filter(
+    (contact) => !assignedContacts.has(contact.id),
+  );
   useEffect(() => {
     dialog.current.showModal();
   }, []);
@@ -248,6 +256,16 @@ export function EmployeeEditor({
                   ' · Updated: ' +
                   (record?.employee.updated_at || 'On save'),
               ),
+              record &&
+                h(
+                  'label',
+                  null,
+                  'Primary contact email',
+                  h('input', {
+                    readOnly: true,
+                    value: record.contacts?.find((contact) => contact.primary_email)?.email || '',
+                  }),
+                ),
               record?.verifier_name &&
                 h('p', null, 'Previously verified by ' + record.verifier_name),
             ),
@@ -260,7 +278,8 @@ export function EmployeeEditor({
                   ? h(ContactSelect, {
                       key: link.key,
                       link,
-                      records: snapshot.contact_choices,
+                      records:
+                        link.key === 'contacts_id' ? employeeContacts : snapshot.contact_choices,
                       value: draft.employee[link.key],
                       disabled: !canEdit || busy,
                       onChange: (value) =>

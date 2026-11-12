@@ -16,7 +16,11 @@ cleanup() {
   exit "$result"
 }
 trap cleanup EXIT
-docker exec "$container" pg_dump -U postgres -d postgres --schema-only -n auth -n storage -n extensions > "$work/auth.sql"
+# ERP Auth triggers depend on application functions installed by the migration replay.
+docker exec "$container" pg_dump -U postgres -d postgres --schema-only -n auth -n storage -n extensions |
+  awk '!(/^CREATE TRIGGER / && / ON auth.users / && /EXECUTE FUNCTION garments_access[.]/)' > "$work/auth.sql"
+docker exec "$container" createdb -U postgres "$database"
+created_database=true
 docker exec "$container" dropdb -U postgres --if-exists "$database" > "$work/replay.log" 2>&1
 docker exec "$container" createdb -U postgres "$database" >> "$work/replay.log" 2>&1
 docker exec -i "$container" psql -U supabase_admin -d "$database" -v ON_ERROR_STOP=1 < "$work/auth.sql" >> "$work/replay.log" 2>&1

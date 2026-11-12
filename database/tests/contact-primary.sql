@@ -16,6 +16,17 @@ begin
   update garments_erp.contact_items set primary_phone=true where id=a;
   raise exception 'Duplicate primary phone accepted';
  exception when unique_violation then null;end;
+ update garments_erp.contact_items set email='first@example.invalid',primary_email=true where id=a;
+ begin
+  update garments_erp.contact_items set email='second@example.invalid',primary_email=true where id=b;
+  raise exception 'Duplicate primary email accepted';
+ exception when unique_violation then null;end;
+ begin
+  update garments_erp.contact_items set email=null where id=a;
+  raise exception 'Primary email accepted without an address';
+ exception when check_violation then null;end;
+ insert into garments_erp.contact_items(contact_id,email,primary_email)
+   values(other_contact,'other@example.invalid',true);
  -- Different contacts can each have a primary; zero is also permitted.
  insert into garments_erp.contact_items(contact_id,primary_address,primary_phone) values(other_contact,true,true);
  update garments_erp.contact_items set primary_address=false where id=a;

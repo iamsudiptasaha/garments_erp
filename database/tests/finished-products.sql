@@ -2,7 +2,7 @@
 \set ON_ERROR_STOP on
 begin;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
-select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000001"}',true);
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000001"}',true);
 
 insert into garments_erp.stage_type(id,name) values (981002,'Finished test in progress');
 insert into garments_erp.stage(id,name,abbr,sort_order,stage_type_id,track_pieces)
@@ -220,7 +220,7 @@ reset role;
 
 -- A signed-in user needs the Finished Goods grant to read either endpoint.
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000002',true);
-select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000002"}',true);
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000002"}',true);
 set local role authenticated;
 do $$
 begin

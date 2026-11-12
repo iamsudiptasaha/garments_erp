@@ -1,21 +1,18 @@
+import { MyProfile } from './profile.js';
 import { flushNavigationPreferences } from './navigation-preferences.js';
-import { RecordGrid } from '../fabric/record-grid.js';
-import React, { useEffect, useState } from 'react';
-import { getAccessClient, getLoginMethods } from './client.js';
+import React, { useEffect, useRef, useState } from 'react';
+import { getAccessClient } from './client.js';
 import { WorkspaceMenuToolbar, WorkspaceSidebar, useWorkspaceMenu } from './navigation.js';
-import { Authenticator, RecoveryForm, PasswordSettings } from './security.js';
+import { Authenticator, RecoveryForm, PasswordLink, readPasswordLink } from './security.js';
 import { AccountLifecycle } from '../admin/account-lifecycle.js';
-import {
-  assertAccountLinkAvailable,
-  accountAccessError,
-  normalisePhone,
-  normaliseEmployeeCode,
-} from './identity.js';
+import { AdminDialog } from '../admin/dialog.js';
+import { GridSearch, useGridSearch } from '../fabric/grid-toolbar.js';
 import '../fabric/styles.css';
 import '../admin/styles.css';
+import '../colours/styles.css';
 import './styles.css';
 import { accountReturnPath, adminTabs, workspacePath } from './workspace-routes.js';
-import { RoleMembers, employeeMatches } from '../admin/members.js';
+import { RoleMembers } from '../admin/members.js';
 const h = React.createElement;
 const flags = ['view', 'create', 'edit', 'format', 'export', 'print'];
 function accessConfiguration() {
@@ -40,13 +37,16 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
     [snapshot, setSnapshot] = useState(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
-    [phone, setPhone] = useState(''),
-    [emailLogin, setEmailLogin] = useState(true),
-    [phoneEnabled, setPhoneEnabled] = useState(false),
+    [email, setEmail] = useState(''),
+    [passwordLink] = useState(() => (embedded ? null : readPasswordLink(location.hash))),
     [password, setPassword] = useState(''),
-    [localPage, setLocalPage] = useState('adminRoles');
+    [localPage, setLocalPage] = useState(() =>
+      location.hash === '#profile' ? 'profile' : 'adminAccess',
+    );
+  const showProfile = !embedded && localPage === 'profile';
+  const currentUserId = useRef(null);
   const signedInUser = embedded || !!user;
-  const tab = adminTabs[embedded ? page : localPage] || 'roles';
+  const tab = adminTabs[embedded ? page : localPage] || 'accounts';
   function selectTab(key) {
     if (embedded) navigate(key);
     else {
@@ -62,7 +62,7 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
   }
   useEffect(() => {
     if (embedded) return;
-    const syncTab = () => setLocalPage(location.hash.slice(1) || 'adminRoles');
+    const syncTab = () => setLocalPage(location.hash.slice(1) || 'adminAccess');
     window.addEventListener('popstate', syncTab);
     window.addEventListener('hashchange', syncTab);
     return () => {
@@ -77,11 +77,6 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
       return;
     }
     let active = true;
-    getLoginMethods()
-      .then((methods) => {
-        if (active) setPhoneEnabled(methods.phone);
-      })
-      .catch(() => {});
     client.auth.getSession().then(({ data, error }) => {
       if (active) {
         setUser(data.session?.user || null);
@@ -90,9 +85,13 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
       }
     });
     const { data } = client.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
-      setAccess(null);
-      setSnapshot(null);
+      const next = session?.user || null;
+      if ((next?.id ?? null) !== currentUserId.current) {
+        currentUserId.current = next?.id ?? null;
+        setAccess(null);
+        setSnapshot(null);
+      }
+      setUser(next);
     });
     return () => {
       active = false;
@@ -126,22 +125,25 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
     }
   }
   useEffect(() => {
-    if (signedInUser) void refresh(false);
-  }, [signedInUser, user, workspaceAccess?.administrator]);
+    if (signedInUser && !passwordLink) void refresh(false);
+  }, [signedInUser, user, passwordLink, workspaceAccess?.administrator]);
+  useEffect(() => {
+    if (passwordLink) history.replaceState(null, '', location.pathname + location.search);
+  }, [passwordLink]);
   async function signIn(e) {
     e.preventDefault();
     setBusy(true);
     setError('');
     try {
       const { error } = await client.auth.signInWithPassword({
-        ...(emailLogin ? { email: phone.trim() } : { phone: normalisePhone(phone) }),
+        email: email.trim(),
         password,
       });
       if (error) throw error;
       setPassword('');
       const checked = await rpc('erp_account_security');
       setSecurity(checked);
-      if (checked?.ready) enterWorkspace();
+      if (checked?.ready && !showProfile) enterWorkspace();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -161,18 +163,30 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
       h('h1', null, 'User management'),
       h('p', { role: 'alert' }, configurationError),
     );
+  if (passwordLink)
+    return h('main', { className: 'access-live-shell' }, h(PasswordLink, { link: passwordLink }));
   const signedIn = signedInUser && access?.enabled;
   const content = h(
     React.Fragment,
     null,
     h(
       'header',
-      { className: 'access-live-header' },
+      { className: signedInUser ? 'fabric-page-header' : 'access-live-header' },
       h(
         'div',
         null,
         h('p', { className: 'eyebrow' }, 'GARMENT WORKSPACE'),
-        h('h1', null, signedInUser ? 'User management' : 'Sign in'),
+        h(
+          'h1',
+          null,
+          signedInUser
+            ? showProfile
+              ? 'My Profile'
+              : access?.administrator
+                ? 'Administration'
+                : 'Account settings'
+            : 'Sign in',
+        ),
       ),
       signedInUser &&
         h(
@@ -183,7 +197,6 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
         ),
     ),
     error && h('p', { className: 'form-error', role: 'alert' }, error),
-    signedIn && h(PasswordSettings),
     !ready
       ? h('p', null, 'Loading session…')
       : !signedInUser
@@ -191,27 +204,18 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
             'section',
             { className: 'access-login' },
             h(
-              'p',
-              null,
-              emailLogin
-                ? 'Use your email and password.'
-                : 'Use your 10-digit mobile number and password.',
-            ),
-            h(
               'form',
               { onSubmit: signIn },
               h(
                 'label',
                 null,
-                emailLogin ? 'Email' : 'Mobile number',
+                'Email',
                 h('input', {
-                  type: emailLogin ? 'email' : 'tel',
-                  autoComplete: emailLogin ? 'username' : 'tel-national',
-                  inputMode: emailLogin ? 'email' : 'numeric',
-                  maxLength: emailLogin ? undefined : 10,
-                  placeholder: emailLogin ? 'you@example.com' : '10-digit mobile number',
-                  value: phone,
-                  onChange: (e) => setPhone(e.target.value),
+                  type: 'email',
+                  autoComplete: 'username',
+                  placeholder: 'you@example.com',
+                  value: email,
+                  onChange: (e) => setEmail(e.target.value),
                   required: true,
                 }),
               ),
@@ -233,20 +237,6 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
                 busy ? 'Signing in…' : 'Sign in',
               ),
             ),
-            phoneEnabled &&
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'login-method-switch',
-                  onClick: () => {
-                    setEmailLogin((v) => !v);
-                    setPhone('');
-                    setError('');
-                  },
-                },
-                emailLogin ? 'Use phone login' : 'Use email login',
-              ),
             h(RecoveryForm),
             h(
               'p',
@@ -255,22 +245,28 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
             ),
           )
         : security?.enabled && !security.ready
-          ? security.mustChangePassword
+          ? security.mustChangePassword || security.requiresPasswordSignIn
             ? h(
                 'section',
                 null,
-                h('h2', null, 'Set your password'),
+                h(
+                  'h2',
+                  null,
+                  security.mustChangePassword ? 'Set your password' : 'Sign in with your password',
+                ),
                 h(
                   'p',
                   null,
-                  'Ask your Administrator to send a setup code, sign out, and use Forgot password.',
+                  security.mustChangePassword
+                    ? 'Open your invitation link to set a password, or sign out and use Forgot password.'
+                    : 'Sign out and use your email and password to access the workspace.',
                 ),
                 h('button', { onClick: signOut }, 'Sign out'),
               )
             : h(Authenticator, {
                 onVerified: async () => {
                   await refresh();
-                  enterWorkspace();
+                  if (!showProfile) enterWorkspace();
                 },
               })
           : !access
@@ -288,85 +284,64 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
                   h('h2', null, 'Account awaiting activation'),
                   h('p', null, access.reason),
                 )
-              : !access.administrator || (embedded && !workspaceAccess.administrator)
-                ? h(
-                    'section',
-                    null,
-                    h('h2', null, 'Signed in'),
-                    h(
-                      'p',
+              : showProfile
+                ? h(MyProfile)
+                : !access.administrator || (embedded && !workspaceAccess.administrator)
+                  ? h(
+                      'section',
                       null,
-                      'Your account is enabled. Administration is restricted to Administrators.',
-                    ),
-                    h(
-                      'p',
-                      { className: 'editor-note' },
-                      'Business-data integration is still separate from this live access panel.',
-                    ),
-                  )
-                : snapshot &&
-                  h(
-                    React.Fragment,
-                    null,
-                    h(
-                      'div',
-                      { className: 'access-info' },
-                      'Live Supabase account management · changes save to the database',
-                    ),
-                    h(
-                      'div',
-                      { className: 'fabric-view-toggle' },
-                      [
-                        ['adminRoles', 'Roles & permissions'],
-                        ['adminAccess', 'Account access'],
-                        ['adminAudit', 'Activity log'],
-                      ].map(([key, label]) =>
-                        h(
-                          'button',
-                          {
-                            key,
-                            'aria-pressed': tab === adminTabs[key],
-                            onClick: () => selectTab(key),
-                          },
-                          label,
-                        ),
+                      h('h2', null, 'Signed in'),
+                      h(
+                        'p',
+                        null,
+                        'Your account is enabled. Administration is restricted to Administrators.',
                       ),
-                    ),
-                    tab === 'roles'
-                      ? h(RoleManager, { snapshot, onSaved: refresh })
-                      : tab === 'accounts'
-                        ? h(
-                            React.Fragment,
-                            null,
-                            h(AccountLifecycle, { snapshot, onSaved: refresh }),
-                            h(AccountManager, { snapshot, onSaved: refresh }),
-                          )
-                        : h(
-                            'section',
-                            { className: 'audit-list' },
-                            snapshot.audit.length
-                              ? snapshot.audit.map((a) =>
-                                  h(
-                                    'article',
-                                    { key: a.id },
-                                    h(
-                                      'div',
-                                      null,
-                                      h('strong', null, a.action),
-                                      h('p', null, `${a.target_type} · ${a.target_id || ''}`),
-                                    ),
-                                    h(
-                                      'time',
-                                      null,
-                                      new Date(a.created_at).toLocaleString('en-IN', {
-                                        timeZone: 'Asia/Kolkata',
-                                      }),
-                                    ),
-                                  ),
-                                )
-                              : h('p', null, 'No access changes recorded.'),
+                      h(
+                        'p',
+                        { className: 'editor-note' },
+                        'Business-data integration is still separate from this live access panel.',
+                      ),
+                    )
+                  : !snapshot
+                    ? h(
+                        'p',
+                        null,
+                        busy ? 'Loading Administration…' : 'Use Refresh access to try again.',
+                      )
+                    : h(
+                        React.Fragment,
+                        null,
+                        h(
+                          'div',
+                          { className: 'fabric-view-toggle' },
+                          [
+                            ['adminAccess', 'User Access'],
+                            ['adminRoles', 'Roles & Permissions'],
+                            ['adminAudit', 'Activity log'],
+                          ].map(([key, label]) =>
+                            h(
+                              'button',
+                              {
+                                key,
+                                'aria-pressed': tab === adminTabs[key],
+                                onClick: () => selectTab(key),
+                              },
+                              label,
+                            ),
                           ),
-                  ),
+                        ),
+                        busy &&
+                          h(
+                            'p',
+                            { className: 'editor-note', role: 'status' },
+                            'Refreshing access…',
+                          ),
+                        tab === 'roles'
+                          ? h(RoleManager, { snapshot, onSaved: refresh })
+                          : tab === 'accounts'
+                            ? h(AccountLifecycle, { snapshot, onSaved: refresh })
+                            : h(ActivityLog, { snapshot }),
+                      ),
   );
   return embedded
     ? content
@@ -410,7 +385,16 @@ function RoleManager({ snapshot, onSaved }) {
     [busy, setBusy] = useState(false),
     [memberRole, setMemberRole] = useState(null),
     [showArchived, setShowArchived] = useState(false),
-    [archiveTarget, setArchiveTarget] = useState(null);
+    [archiveTarget, setArchiveTarget] = useState(null),
+    [search, setSearch] = useState('');
+  const query = useGridSearch(search).trim().toLowerCase();
+  const visibleRoles = snapshot.roles
+    .filter(
+      (r) =>
+        (showArchived || r.is_active) &&
+        [r.name, r.description].some((value) => value?.toLowerCase().includes(query)),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
   function edit(role) {
     const permissions = {};
     for (const p of snapshot.permissions.filter((p) => p.app_role_id === role?.id)) {
@@ -506,35 +490,51 @@ function RoleManager({ snapshot, onSaved }) {
         onRemove: (e) => changeMember(e, true),
         onClose: () => setMemberRole(null),
       }),
+    h('h2', null, 'Roles'),
     h(
-      'label',
-      { className: 'access-check' },
-      h('input', {
-        type: 'checkbox',
-        checked: showArchived,
-        onChange: (e) => setShowArchived(e.target.checked),
-      }),
-      'Show archived roles',
+      'div',
+      { className: 'fabric-actions worksheet-actions admin-toolbar' },
+      h(GridSearch, { label: 'Search roles', value: search, onChange: setSearch }),
+      h(
+        'label',
+        { className: 'access-check' },
+        h('input', {
+          type: 'checkbox',
+          checked: showArchived,
+          onChange: (e) => setShowArchived(e.target.checked),
+        }),
+        'Include archived roles',
+      ),
+      h('button', { className: 'primary', onClick: () => edit(null) }, 'Create role'),
     ),
     archiveTarget &&
       h(
-        'section',
-        { className: 'member-confirm' },
-        h('p', null, `Archive ${archiveTarget.name}? History will be retained.`),
-        h('button', { disabled: busy, onClick: () => setArchiveTarget(null) }, 'Cancel'),
-        h('button', { disabled: busy, className: 'primary', onClick: archive }, 'Confirm archive'),
+        AdminDialog,
+        { title: 'Archive role', onClose: () => !busy && setArchiveTarget(null) },
+        h('p', null, `Archive ${archiveTarget.name}? Its history will be retained.`),
+        error && h('p', { role: 'alert', className: 'form-error' }, error),
+        h(
+          'div',
+          { className: 'editor-actions' },
+          h('button', { disabled: busy, onClick: () => setArchiveTarget(null) }, 'Cancel'),
+          h(
+            'button',
+            { disabled: busy, className: 'primary', onClick: archive },
+            'Confirm archive',
+          ),
+        ),
       ),
-    h(
-      'div',
-      { className: 'fabric-actions' },
-      h('h2', null, 'Roles'),
-      h('button', { className: 'primary', onClick: () => edit(null) }, '+ Create role'),
-    ),
-    error && h('p', { role: 'alert', className: 'form-error' }, error),
-    editing
-      ? h(
+    editing &&
+      h(
+        AdminDialog,
+        {
+          title: editing.id ? 'Edit permissions' : 'Create role',
+          onClose: () => !busy && setEditing(null),
+        },
+        h(
           'form',
           { onSubmit: save },
+          error && h('p', { role: 'alert', className: 'form-error' }, error),
           h(
             'div',
             { className: 'fabric-fields' },
@@ -620,255 +620,162 @@ function RoleManager({ snapshot, onSaved }) {
             h('button', { type: 'button', onClick: () => setEditing(null) }, 'Cancel'),
             h('button', { type: 'submit', className: 'primary', disabled: busy }, 'Save role'),
           ),
-        )
-      : h(
-          'div',
-          { className: 'overview-grid' },
-          snapshot.roles
-            .filter((r) => showArchived || r.is_active)
-            .map((r, i) =>
-              h(
-                'article',
-                { className: `overview-card tone-${i % 4}`, key: r.id },
-                h('h2', null, r.name),
-                h('p', null, r.description),
-                !r.is_active
-                  ? h('small', null, 'Archived · history retained')
-                  : h(
-                      React.Fragment,
-                      null,
-                      h(
-                        'button',
-                        { className: 'manage-members', onClick: () => setMemberRole(r) },
-                        'Manage employees →',
-                      ),
-                      r.is_system_admin
-                        ? h('small', null, 'Protected Administrator role')
-                        : h(
-                            React.Fragment,
-                            null,
-                            h('button', { onClick: () => edit(r) }, 'Edit permissions'),
-                            h(
-                              'button',
-                              {
-                                disabled: snapshot.accounts.some((a) => a.role_ids.includes(r.id)),
-                                title: 'Reassign all employees before archiving',
-                                onClick: () => setArchiveTarget(r),
-                              },
-                              'Archive role',
-                            ),
-                          ),
-                    ),
-              ),
-            ),
         ),
+      ),
+    h(
+      'div',
+      { className: 'lab-record-table-wrap admin-records' },
+      h(
+        'table',
+        { className: 'access-table' },
+        h(
+          'thead',
+          null,
+          h(
+            'tr',
+            null,
+            ['Role', 'Members', 'Status', 'Actions'].map((label) =>
+              h('th', { scope: 'col', key: label }, label),
+            ),
+          ),
+        ),
+        h(
+          'tbody',
+          null,
+          visibleRoles.map((r) => {
+            const count = snapshot.accounts.filter((a) => a.role_ids.includes(r.id)).length;
+            return h(
+              'tr',
+              { key: r.id },
+              h(
+                'td',
+                null,
+                h('strong', null, r.name),
+                r.description && h('small', null, r.description),
+              ),
+              h('td', null, count),
+              h('td', null, !r.is_active ? 'Archived' : r.is_system_admin ? 'Protected' : 'Active'),
+              h(
+                'td',
+                { className: 'admin-row-actions' },
+                r.is_active &&
+                  h(
+                    React.Fragment,
+                    null,
+                    h('button', { onClick: () => setMemberRole(r) }, 'Manage members'),
+                    !r.is_system_admin &&
+                      h(
+                        React.Fragment,
+                        null,
+                        h('button', { onClick: () => edit(r) }, 'Edit permissions'),
+                        h(
+                          'button',
+                          {
+                            disabled: count > 0,
+                            title: count ? 'Reassign members before archiving' : undefined,
+                            onClick: () => {
+                              setError('');
+                              setArchiveTarget(r);
+                            },
+                          },
+                          'Archive role',
+                        ),
+                      ),
+                  ),
+              ),
+            );
+          }),
+        ),
+      ),
+    ),
+    !visibleRoles.length && h('div', { className: 'empty-state' }, 'No roles match these filters.'),
   );
 }
-function AccountManager({ snapshot, onSaved }) {
-  const [editing, setEditing] = useState(null),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false),
-    [query, setQuery] = useState('');
-  async function save(e) {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      assertAccountLinkAvailable(snapshot.accounts, editing);
-      await rpc('erp_save_account_access', {
-        p_user_id: editing.user_id,
-        p_employee_id: editing.employee_id,
-        p_role_ids: editing.role_ids,
-        p_enabled: editing.is_active,
-        p_expected_version: editing.version ?? null,
-      });
-      setEditing(null);
-      await onSaved();
-    } catch (e) {
-      setError(accountAccessError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
+
+function ActivityLog({ snapshot }) {
+  const [search, setSearch] = useState('');
+  const [descending, setDescending] = useState(true);
+  const query = useGridSearch(search).trim().toLowerCase();
+  const accountName = (id) => snapshot.accounts.find((a) => a.user_id === id)?.name;
+  const events = snapshot.audit
+    .map((entry) => {
+      const target =
+        entry.target_type === 'employee'
+          ? snapshot.employees.find((e) => String(e.id) === entry.target_id)?.name
+          : entry.target_type === 'app_role'
+            ? entry.details?.name ||
+              snapshot.roles.find((r) => String(r.id) === entry.target_id)?.name
+            : accountName(entry.target_id);
+      return { ...entry, target: target || '—', actor: accountName(entry.actor_user_id) || '—' };
+    })
+    .filter((entry) =>
+      [entry.action, entry.target, entry.actor].some((value) =>
+        value.toLowerCase().includes(query),
+      ),
+    );
+  if (!descending) events.reverse();
   return h(
     'section',
     null,
+    h('h2', null, 'Activity log'),
     h(
       'div',
-      { className: 'fabric-actions' },
-      h('h2', null, 'Employee account access'),
-      h('input', {
-        type: 'search',
-        'aria-label': 'Find employee access',
-        placeholder: 'Search employee name or code…',
-        value: query,
-        onChange: (e) => setQuery(e.target.value),
-      }),
+      { className: 'fabric-actions worksheet-actions admin-toolbar' },
+      h(GridSearch, { label: 'Search recent activity', value: search, onChange: setSearch }),
       h(
-        'button',
+        'select',
         {
-          className: 'primary',
-          onClick: () => {
-            setError('');
-            setEditing({ user_id: '', employee_id: '', role_ids: [], is_active: false });
-          },
+          'aria-label': 'Sort activity',
+          value: descending ? 'newest' : 'oldest',
+          onChange: (e) => setDescending(e.target.value === 'newest'),
         },
-        '+ Link employee account',
+        h('option', { value: 'newest' }, 'Newest first'),
+        h('option', { value: 'oldest' }, 'Oldest first'),
       ),
     ),
-    error && h('p', { className: 'form-error', role: 'alert' }, error),
-    editing
-      ? h(
-          'form',
-          { onSubmit: save },
+    h('p', { className: 'editor-note' }, 'Showing up to 200 recent access changes.'),
+    h(
+      'div',
+      { className: 'lab-record-table-wrap admin-records' },
+      h(
+        'table',
+        { className: 'access-table' },
+        h(
+          'thead',
+          null,
           h(
-            'div',
-            { className: 'fabric-fields' },
-            h(
-              'label',
-              null,
-              'Login account',
-              h(
-                'select',
-                {
-                  required: true,
-                  disabled: !!editing.version,
-                  value: editing.user_id,
-                  onChange: (e) => setEditing((d) => ({ ...d, user_id: e.target.value })),
-                },
-                h('option', { value: '' }, 'Choose…'),
-                snapshot.auth_accounts
-                  .filter(
-                    (a) =>
-                      a.id === editing.user_id ||
-                      !snapshot.accounts.some((link) => link.user_id === a.id),
-                  )
-                  .map((a) => h('option', { key: a.id, value: a.id }, a.phone || a.email || a.id)),
-              ),
-            ),
-            h(
-              'label',
-              null,
-              'Employee',
-              h(
-                'select',
-                {
-                  required: true,
-                  disabled: !!editing.version,
-                  value: editing.employee_id,
-                  onChange: (e) => setEditing((d) => ({ ...d, employee_id: e.target.value })),
-                },
-                h('option', { value: '' }, 'Choose…'),
-                snapshot.employees
-                  .filter(
-                    (e) =>
-                      e.id === editing.employee_id ||
-                      !snapshot.accounts.some((link) => link.employee_id === e.id),
-                  )
-                  .map((e) =>
-                    h(
-                      'option',
-                      { key: e.id, value: e.id },
-                      `${e.name || 'Name not set'} · ${normaliseEmployeeCode(e.employee_code)}`,
-                    ),
-                  ),
-              ),
-            ),
-            h(
-              'label',
-              null,
-              'Roles',
-              h(
-                'select',
-                {
-                  multiple: true,
-                  required: true,
-                  value: editing.role_ids.map(String),
-                  onChange: (e) =>
-                    setEditing((d) => ({
-                      ...d,
-                      role_ids: [...e.target.selectedOptions].map((o) => o.value),
-                    })),
-                },
-                snapshot.roles
-                  .filter((r) => r.is_active)
-                  .map((r) => h('option', { key: r.id, value: r.id }, r.name)),
-              ),
-            ),
-            h(
-              'label',
-              { className: 'access-check' },
-              h('input', {
-                type: 'checkbox',
-                checked: editing.is_active,
-                onChange: (e) => setEditing((d) => ({ ...d, is_active: e.target.checked })),
-              }),
-              'Account enabled',
-            ),
-          ),
-          h(
-            'div',
-            { className: 'editor-actions' },
-            h('button', { type: 'button', onClick: () => setEditing(null) }, 'Cancel'),
-            h(
-              'button',
-              { type: 'submit', className: 'primary', disabled: busy },
-              'Save account access',
-            ),
-          ),
-        )
-      : h(
-          RecordGrid,
-          {
-            client: getAccessClient(),
-            grid: 'administration-accounts',
-            fields: [
-              ['employee', 'Employee'],
-              ['code', 'Code'],
-              ['roles', 'Roles'],
-              ['access', 'Access'],
-            ],
-          },
-          h(
-            'tbody',
+            'tr',
             null,
-            snapshot.accounts
-              .filter(
-                (a) =>
-                  !query.trim() || employeeMatches({ name: a.name, code: a.employee_code }, query),
-              )
-              .map((a) =>
-                h(
-                  'tr',
-                  { key: a.user_id },
-                  h('td', null, a.name || 'Employee'),
-                  h('td', null, a.employee_code),
-                  h(
-                    'td',
-                    null,
-                    a.role_ids
-                      .map((id) => snapshot.roles.find((r) => r.id === id)?.name)
-                      .filter(Boolean)
-                      .join(', '),
-                  ),
-                  h('td', null, a.is_active ? 'Enabled' : 'Disabled'),
-                  h(
-                    'td',
-                    null,
-                    h(
-                      'button',
-                      {
-                        onClick: () => {
-                          setError('');
-                          setEditing({ ...a });
-                        },
-                      },
-                      'Edit access',
-                    ),
-                  ),
-                ),
-              ),
+            ['Action', 'Subject', 'Changed by', 'Time'].map((label) =>
+              h('th', { scope: 'col', key: label }, label),
+            ),
           ),
         ),
+        h(
+          'tbody',
+          null,
+          events.map((entry) =>
+            h(
+              'tr',
+              { key: entry.id },
+              h('td', null, entry.action),
+              h('td', null, entry.target),
+              h('td', null, entry.actor),
+              h(
+                'td',
+                null,
+                new Date(entry.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+    !events.length &&
+      h(
+        'div',
+        { className: 'empty-state' },
+        search ? 'No activity matches your search.' : 'No access changes recorded.',
+      ),
   );
 }

@@ -21,7 +21,9 @@ cleanup() {
 }
 trap cleanup EXIT
 exec 3>"$work/replay.log"
-docker exec "$container" pg_dump -U postgres -d postgres --schema-only -n auth -n storage -n extensions > "$work/auth.sql"
+# ERP Auth triggers depend on application functions installed by the migration replay.
+docker exec "$container" pg_dump -U postgres -d postgres --schema-only -n auth -n storage -n extensions |
+  awk '!(/^CREATE TRIGGER / && / ON auth.users / && /EXECUTE FUNCTION garments_access[.]/)' > "$work/auth.sql"
 docker exec "$container" createdb -U postgres "$database"
 created_database=true
 query() { docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 >&3 2>&3; }
@@ -80,7 +82,7 @@ echo 'PASS historical docket migration'
 node database/ci/seed.mjs "$work/seed.sql"
 query < "$work/seed.sql"
 for sql in database/tests/billing-packing-dispatch.sql database/tests/access-schema-boundary.sql; do
-  { echo "select set_config('request.jwt.claims','{\"aal\":\"aal2\",\"session_id\":\"10000000-0000-4000-8000-000000000001\"}',false);"; cat "$sql"; } | query
+  { echo "select set_config('request.jwt.claims','{\"aal\":\"aal2\",\"amr\":[{\"method\":\"password\"}],\"session_id\":\"10000000-0000-4000-8000-000000000001\"}',false);"; cat "$sql"; } | query
   echo "PASS $sql"
 done
 query <<'SQL'
@@ -92,7 +94,7 @@ cross join garments_access.app_resource resource
 where role.key='ci_viewer' and resource.key in ('billingCartons','billingPacking','billingReturns','billingDispatch');
 SQL
 {
-  echo "select set_config('request.jwt.claims','{\"aal\":\"aal2\",\"session_id\":\"10000000-0000-4000-8000-000000000001\"}',false);"
+  echo "select set_config('request.jwt.claims','{\"aal\":\"aal2\",\"amr\":[{\"method\":\"password\"}],\"session_id\":\"10000000-0000-4000-8000-000000000001\"}',false);"
   awk '/^do \$\$/{exit} !/^\\set/{print}' database/tests/billing-packing-dispatch.sql
   echo 'update garments_erp.po_item_piece_per_size set pieces_ordered=3 where po_item_id=982003; insert into garments_erp.task_board_data(production_id) values (982001); insert into garments_erp.job_item_status_list(job_id) values (982001); commit;'
 } | query
@@ -151,7 +153,7 @@ SQL
 fi
 
 if [[ "${BILLING_TEST_CHROMIUM:-0}" == 1 ]]; then
-  if ! VITE_SUPABASE_URL=https://example.invalid VITE_SUPABASE_ANON_KEY=example \
+  if ! VITE_SUPABASE_URL=https://example.invalid VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ci_fixture \
     npm --prefix fabric-poc run build -- --outDir "$work/browser-dist" > "$work/browser-build.log" 2>&1; then
     tail -c 8000 "$work/browser-build.log"
     exit 1

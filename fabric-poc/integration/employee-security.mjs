@@ -47,12 +47,15 @@ async function deny(fn, label) {
 }
 try {
   await c.query('begin');
+  await c.query(
+    "insert into garments_erp.contacts(id,company_name) values (900006,'Synthetic HR contact')",
+  );
   await actor(admin);
   const before = await snapshot();
   assert.equal(before.records.length, 2);
   assert.equal(typeof before.records[0].employee.id, 'string');
   const draft = employeeDraft();
-  draft.employee.contacts_id = '900002';
+  draft.employee.contacts_id = '900006';
   draft.employee.contact_purpose_id = '900001';
   draft.employee.supporting_document_1_title = 'Synthetic HR fixture';
   const payload = { id: null, expected: null, draft };
@@ -68,7 +71,7 @@ try {
   assert.equal(record.employee.verified_by_employee_id, '900001');
   assert.equal(record.employee.is_active, true);
   assert.equal(record.employee.is_verified, true);
-  assert.equal(record.employee.contacts_id, '900002');
+  assert.equal(record.employee.contacts_id, '900006');
   assert.equal(record.banks, undefined);
   assert.deepEqual(
     (await snapshot()).contact_choices,

@@ -30,15 +30,17 @@ export const miscellaneousPages = {
     title: 'Contact items',
     singular: 'contact item',
     newLabel: '+ Add contact item',
-    subtitle: 'Names, addresses and phone numbers linked to a shared contact',
+    subtitle: 'Names, addresses, phone numbers and emails linked to a shared contact',
     entity: 'contact_items',
     header: [
       contact,
       field('name', 'Name', 'text', optional),
       field('phone', 'Phone number', 'text', optional),
       field('address', 'Address', 'text', optional),
+      field('email', 'Email', 'email', optional),
       field('primary_address', 'Primary address', 'checkbox', optional),
       field('primary_phone', 'Primary phone', 'checkbox', optional),
+      field('primary_email', 'Primary email', 'checkbox', optional),
     ],
     columns: [
       column('name', 'Name', false, 210),
@@ -47,6 +49,8 @@ export const miscellaneousPages = {
       column('address', 'Address', false, 300),
       column('primary_address', 'Primary address'),
       column('primary_phone', 'Primary phone'),
+      column('email', 'Email', false, 240),
+      column('primary_email', 'Primary email'),
     ],
   },
   contactDetails: {

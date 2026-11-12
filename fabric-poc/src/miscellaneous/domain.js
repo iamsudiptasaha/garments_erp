@@ -34,8 +34,10 @@ export function miscellaneousRows(data, page) {
       company: company(r.contact_id),
       phone: dash(r.phone),
       address: dash(r.address),
+      email: dash(r.email),
       primary_address: r.primary_address ? 'Yes' : 'No',
       primary_phone: r.primary_phone ? 'Yes' : 'No',
+      primary_email: r.primary_email ? 'Yes' : 'No',
     }));
   if (page === 'contactDetails')
     return data.contact_extra.map((r) => ({

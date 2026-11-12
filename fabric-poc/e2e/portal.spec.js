@@ -54,7 +54,7 @@ test('lab-dip swatch locks status and shade fields while keeping the date editab
 });
 test('successful sign-in lands on Overview using a mocked transport, never a real account', async ({
   page,
-}) => {
+}, testInfo) => {
   test.skip(hosted, 'Hosted smoke tests do not submit login credentials');
   const id = '00000000-0000-4000-8000-000000000003';
   const part = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -63,6 +63,13 @@ test('successful sign-in lands on Overview using a mocked transport, never a rea
     part({ sub: id, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 }),
     'synthetic_test_signature',
   ].join('.');
+  const profile = {
+    name: 'Employee Test',
+    email: 'employee@example.invalid',
+    phone: '',
+    employeeId: '87',
+    roles: ['Production operator'],
+  };
   await page.route('https://example.invalid/**', async (route) => {
     const url = route.request().url();
     let body = {};
@@ -81,7 +88,13 @@ test('successful sign-in lands on Overview using a mocked transport, never a rea
           user_metadata: {},
         },
       };
-    else if (url.includes('erp_account_security'))
+    else if (url.includes('erp_my_profile')) body = profile;
+    else if (url.includes('erp_save_my_profile')) {
+      const input = route.request().postDataJSON();
+      profile.name = input.p_name;
+      profile.phone = input.p_phone;
+      body = null;
+    } else if (url.includes('erp_account_security'))
       return route.fulfill({ json: { enabled: true, ready: true, mustChangePassword: false } });
     if (url.includes('erp_access_snapshot'))
       body = {
@@ -110,8 +123,42 @@ test('successful sign-in lands on Overview using a mocked transport, never a rea
   await expect(page.getByRole('navigation', { name: 'Personal account actions' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Account settings', exact: true })).toHaveAttribute(
     'href',
-    '/access.html',
+    '/access.html#profile',
   );
+  await page.getByRole('link', { name: 'Account settings', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'My Profile', exact: true })).toBeVisible();
+  await page.getByLabel('Name', { exact: true }).fill('Updated Employee');
+  await page.getByLabel('Primary phone', { exact: true }).fill('+91 555 123 4567');
+  await page.getByRole('button', { name: 'Save personal details' }).click();
+  await expect(account.getByText('Updated Employee')).toBeVisible();
+  await expect(page.getByText('Production operator', { exact: true })).toBeVisible();
+  await expect(page.getByText('Update Email', { exact: true })).toBeVisible();
+  const png = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#b8d9ef';
+    context.fillRect(0, 0, 300, 150);
+    context.fillStyle = '#345e80';
+    context.fillRect(95, 20, 65, 110);
+    return canvas.toDataURL();
+  });
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'test-avatar.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(png.split(',')[1], 'base64'),
+  });
+  const crop = page.getByLabel('Circular crop preview');
+  await expect(crop).toBeVisible();
+  const bounds = await crop.boundingBox();
+  await page.mouse.move(bounds.x + 60, bounds.y + 60);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 90, bounds.y + 60);
+  await page.mouse.up();
+  await page.getByLabel('Zoom', { exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  await page.screenshot({ path: testInfo.outputPath('my-profile-crop.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Cancel crop' }).click();
+  await account.click();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
 });
@@ -180,7 +227,7 @@ test('email password login stops at Authenticator without loading business data'
 });
 test('employee status actions and automatic verification preserve inactivity on edit', async ({
   page,
-}) => {
+}, testInfo) => {
   test.skip(hosted, 'Hosted smoke tests never change employees');
   await page.goto('/fabric.html#employees');
   const card = page.locator('.hr-person-card').first();
@@ -188,6 +235,8 @@ test('employee status actions and automatic verification preserve inactivity on 
   await expect(card.getByRole('button', { name: /^Deactivate / })).toHaveCount(0);
   await card.getByRole('button', { name: 'Open profile →' }).click();
   const statusDialog = page.getByRole('dialog');
+  await expect(statusDialog.getByLabel('Primary contact email')).toHaveAttribute('readonly', '');
+  await page.screenshot({ path: testInfo.outputPath('employee-contact-email.png') });
   await statusDialog.getByRole('button', { name: 'Status', exact: true }).click();
   await expect(statusDialog.getByLabel('Verified by', { exact: true })).toHaveAttribute(
     'readonly',
@@ -230,4 +279,395 @@ test('employee status actions and automatic verification preserve inactivity on 
     .getByRole('button', { name: 'Confirm & save status', exact: true })
     .click();
   await expect(page.locator('.hr-person-card .hr-status').first()).toHaveText('Active');
+});
+
+test('native invitation requires a deliberate click before setting a password', async ({
+  page,
+}, testInfo) => {
+  test.skip(hosted, 'Uses synthetic Auth responses');
+  const id = '00000000-0000-4000-8000-000000000003';
+  const part = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const user = {
+    id,
+    email: 'employee@example.invalid',
+    aud: 'authenticated',
+    app_metadata: {},
+    user_metadata: {},
+  };
+  const requests = [];
+  await page.route('https://example.invalid/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === '/auth/v1/verify') {
+      requests.push(path);
+      expect(request.postDataJSON()).toMatchObject({
+        token_hash: 'synthetic-invitation',
+        type: 'invite',
+      });
+      return route.fulfill({
+        json: {
+          user,
+          access_token: [
+            part({ alg: 'HS256', typ: 'JWT' }),
+            part({ sub: id, exp: Math.floor(Date.now() / 1000) + 3600 }),
+            'synthetic',
+          ].join('.'),
+          refresh_token: 'synthetic_refresh',
+          token_type: 'bearer',
+          expires_in: 3600,
+        },
+      });
+    }
+    if (path === '/rest/v1/rpc/erp_account_security')
+      return route.fulfill({ json: { enabled: true, ready: false, mustChangePassword: true } });
+    if (path === '/auth/v1/user') {
+      if (request.method() === 'PUT') {
+        expect(request.postDataJSON()).toMatchObject({ password: 'synthetic-password-123' });
+        requests.push(path);
+      }
+      return route.fulfill({ json: user });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto('/access.html#type=invite&token_hash=synthetic-invitation');
+  await expect(page.getByRole('heading', { name: 'Accept invitation' })).toBeVisible();
+  await expect(page).toHaveURL(/access\.html$/);
+  expect(requests).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('accept-invitation.png') });
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByLabel('New password', { exact: true }).fill('synthetic-password-123');
+  await page.getByRole('button', { name: 'Save password' }).click();
+  await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
+  expect(requests).toEqual(['/auth/v1/verify', '/auth/v1/user']);
+});
+
+test('Forgot password sends a native email request and shows a generic response', async ({
+  page,
+}, testInfo) => {
+  test.skip(hosted, 'Uses synthetic Auth responses');
+  let requestedEmail;
+  await page.route('https://example.invalid/auth/v1/recover', async (route) => {
+    requestedEmail = route.request().postDataJSON().email;
+    await route.fulfill({ status: 429, json: { message: 'rate limited' } });
+  });
+  await page.goto('/access.html');
+  await expect(page.getByRole('button', { name: /phone login/i })).toHaveCount(0);
+  await page.getByText('Forgot password?', { exact: true }).click();
+  await page.getByLabel('Registered email').fill('employee@example.invalid');
+  await page.getByRole('button', { name: 'Send reset link' }).click();
+  await expect(page.getByRole('status')).toHaveText(
+    'If this email is registered, you will receive a password reset link.',
+  );
+  expect(requestedEmail).toBe('employee@example.invalid');
+  await page.screenshot({ path: testInfo.outputPath('email-sign-in-and-recovery.png') });
+});
+
+test('Administration invites an active employee with selected roles and no mobile field', async ({
+  page,
+}, testInfo) => {
+  test.skip(hosted, 'Uses synthetic Administration responses');
+  const actor = '00000000-0000-4000-8000-000000000001';
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: actor, exp })}.synthetic`;
+  await page.addInitScript(
+    ({ actor, token, exp }) =>
+      localStorage.setItem(
+        'sb-example-auth-token',
+        JSON.stringify({
+          access_token: token,
+          refresh_token: 'synthetic',
+          expires_at: exp,
+          user: { id: actor, aud: 'authenticated', role: 'authenticated' },
+        }),
+      ),
+    { actor, token, exp },
+  );
+  const commands = [];
+  const saves = [];
+  let pending = true;
+  let pendingEmail = 'pending@example.invalid';
+  const originalRevision = '00000000-0000-4000-8000-000000000010';
+  const newRevision = '00000000-0000-4000-8000-000000000011';
+  let revision = originalRevision;
+  let enabled = true;
+  await page.route('https://example.invalid/**', async (route) => {
+    const name = new URL(route.request().url()).pathname.split('/').at(-1);
+    if (name === 'erp-accounts') {
+      const input = route.request().postDataJSON();
+      commands.push(input);
+      if (['retry', 'cancel'].includes(input.action)) pending = false;
+      if (input.action === 'invite' && input.employeeId === '10') {
+        pending = true;
+        pendingEmail = input.email;
+        revision = newRevision;
+      }
+      if (input.action === 'correct') pendingEmail = input.email;
+      return route.fulfill({
+        json: {
+          message:
+            {
+              retry: 'Employee access linked.',
+              cancel: 'Invitation cancelled.',
+              correct: 'Invitation sent to the corrected email.',
+            }[input.action] || 'Invitation sent.',
+        },
+      });
+    }
+    if (name === 'erp_save_account_access') {
+      const input = route.request().postDataJSON();
+      saves.push(input);
+      enabled = input.p_enabled;
+      return route.fulfill({ json: null });
+    }
+    const responses = {
+      erp_account_security: { enabled: true, ready: true },
+      erp_access_snapshot: { actor, enabled: true, administrator: true },
+      erp_admin_snapshot: {
+        accounts: [
+          {
+            employee_id: '9',
+            user_id: actor,
+            name: 'Ready employee',
+            is_active: enabled,
+            version: 1,
+            role_ids: ['2'],
+          },
+        ],
+        auth_accounts: [{ id: actor, email: 'ready@example.invalid', mfa_enrolled: true }],
+        pending_invitations: pending
+          ? [{ employee_id: '10', email: pendingEmail, role_ids: ['2'], revision }]
+          : [],
+        audit: [
+          {
+            id: 1,
+            action: 'Updated account access',
+            actor_user_id: actor,
+            target_id: actor,
+            target_type: 'app_user',
+            created_at: '2026-11-12T05:30:00Z',
+          },
+        ],
+        employees: [
+          { id: '7', name: 'Sample employee', employee_code: 'SCE/00007', is_active: true },
+          { id: '8', name: 'Inactive employee', employee_code: 'SCE/00008', is_active: false },
+          { id: '9', name: 'Ready employee', employee_code: 'SCE/00009', is_active: true },
+          { id: '10', name: 'Pending employee', employee_code: 'SCE/00010', is_active: true },
+        ],
+        roles: [
+          {
+            id: '2',
+            name: 'Production viewer',
+            is_active: true,
+            description: 'View production records',
+          },
+          {
+            id: '3',
+            name: 'Accounts viewer',
+            is_active: true,
+            description: 'View accounts records',
+          },
+        ],
+        permissions: [],
+        resources: [],
+      },
+    };
+    return route.fulfill({ json: responses[name] ?? {} });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/access.html');
+  await expect(page.getByRole('heading', { name: 'User Access' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Administration' })).toHaveCSS(
+    'font-size',
+    '29px',
+  );
+  await expect(page.getByRole('button', { name: 'Invite employee', exact: true })).toHaveCSS(
+    'background-color',
+    'rgb(53, 127, 183)',
+  );
+  await page.screenshot({
+    path: testInfo.outputPath('administration-user-access.png'),
+    animations: 'disabled',
+  });
+  await page.getByRole('button', { name: 'Invite employee', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Select employee', exact: true }).click();
+  await expect(page.getByRole('option', { name: /Inactive employee/ })).toHaveCount(0);
+  await page.getByRole('option', { name: /Sample employee/ }).click();
+  await page.getByLabel('Employee login email').fill('employee@example.invalid');
+  await page.getByRole('checkbox', { name: 'Production viewer' }).check();
+  await expect(page.getByLabel('Mobile number', { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('administration-invitation.png') });
+  await page.getByRole('button', { name: 'Send invitation' }).click();
+  await expect(page.getByText('Invitation sent.', { exact: true })).toBeVisible();
+  expect(commands[0]).toEqual({
+    action: 'invite',
+    employeeId: '7',
+    email: 'employee@example.invalid',
+    roleIds: ['2'],
+  });
+  await page.getByRole('combobox', { name: 'Filter access' }).selectOption('Needs attention');
+  await expect(page.getByRole('row')).toHaveCount(2);
+  const pendingRow = page.getByRole('row', { name: /Pending employee/ });
+  await pendingRow.getByRole('button', { name: 'View details' }).click();
+  await page.getByRole('button', { name: 'Cancel invitation' }).click();
+  await expect(page.getByRole('dialog')).toContainText('will no longer grant ERP access');
+  await page.screenshot({ path: testInfo.outputPath('administration-cancel-invitation.png') });
+  await page.getByRole('button', { name: 'Go back' }).click();
+  expect(commands).toHaveLength(1);
+  await pendingRow.getByRole('button', { name: 'View details' }).click();
+  await page.getByRole('button', { name: 'Cancel invitation' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel invitation' }).click();
+  await expect(page.getByText('Invitation cancelled.', { exact: true })).toBeVisible();
+  expect(commands[1]).toEqual({ action: 'cancel', employeeId: '10', revision: originalRevision });
+  await expect(page.getByText('No employees match these filters.')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Filter access' }).selectOption('');
+  await pendingRow.getByRole('button', { name: 'Invite', exact: true }).click();
+  await page.getByLabel('Employee login email').fill('pending@example.invalid');
+  await page.getByRole('checkbox', { name: 'Production viewer' }).check();
+  await page.getByRole('button', { name: 'Send invitation' }).click();
+  await expect(pendingRow).toContainText('Needs attention');
+  await page.getByRole('combobox', { name: 'Filter access' }).selectOption('Needs attention');
+  await pendingRow.getByRole('button', { name: 'View details' }).click();
+  await page.getByRole('button', { name: 'Correct email' }).click();
+  await page.getByLabel('Employee login email').fill('corrected@example.invalid');
+  await page.screenshot({ path: testInfo.outputPath('administration-correct-email.png') });
+  await page.getByRole('button', { name: 'Send corrected invitation' }).click();
+  await expect(pendingRow).toContainText('corrected@example.invalid');
+  expect(commands[3]).toEqual({
+    action: 'correct',
+    employeeId: '10',
+    email: 'corrected@example.invalid',
+    revision: newRevision,
+  });
+  await page.getByRole('button', { name: 'Retry provisioning' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Retry provisioning' }).click();
+  await expect(page.getByText('Employee access linked.', { exact: true })).toBeVisible();
+  expect(commands[4]).toEqual({ action: 'retry', employeeId: '10', revision: newRevision });
+  await expect(page.getByText('No employees match these filters.')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Filter access' }).selectOption('');
+  await page.getByRole('combobox', { name: 'Sort direction' }).selectOption('desc');
+  await expect(page.getByRole('row').nth(1)).toContainText('Sample employee');
+  await page.getByRole('searchbox', { name: 'Search users' }).fill('ready@example.invalid');
+  const ready = page.getByRole('row', { name: /Ready employee/ });
+  await expect(page.getByRole('row')).toHaveCount(2);
+  await ready.getByRole('button', { name: 'View details' }).click();
+  await page.getByRole('button', { name: 'Edit roles' }).click();
+  await page.getByRole('checkbox', { name: 'Accounts viewer' }).check();
+  await page.getByRole('button', { name: 'Save roles' }).click();
+  await expect(page.getByText('Roles updated.', { exact: true })).toBeVisible();
+  expect(saves[0].p_role_ids).toEqual(['2', '3']);
+  await ready.getByRole('button', { name: 'View details' }).click();
+  await page.getByRole('button', { name: 'Disable access' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Disable access' }).click();
+  await expect(ready).toContainText('Disabled');
+  await ready.getByRole('button', { name: 'View details' }).click();
+  await page.getByRole('button', { name: 'Restore access' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Restore access' }).click();
+  await expect(ready).toContainText('Enabled');
+  expect(saves.map((save) => save.p_enabled)).toEqual([true, false, true]);
+  const main = page.getByRole('main');
+  await main.getByRole('button', { name: 'Roles & Permissions' }).click();
+  await expect(main.getByRole('heading', { name: 'Roles', exact: true })).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath('administration-roles.png'),
+    animations: 'disabled',
+  });
+  await main.getByRole('button', { name: 'Activity log' }).click();
+  await expect(main.getByRole('heading', { name: 'Activity log' })).toBeVisible();
+  await expect(main.getByRole('table')).toContainText('Updated account access');
+  await expect(main.getByRole('table')).not.toContainText(actor);
+  await page.screenshot({
+    path: testInfo.outputPath('administration-activity.png'),
+    animations: 'disabled',
+  });
+  await main.getByRole('button', { name: 'User Access' }).click();
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect(main.getByRole('heading', { name: 'User Access' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.screenshot({
+    path: testInfo.outputPath('administration-mobile.png'),
+    animations: 'disabled',
+  });
+});
+
+test('Update Email keeps the code form open on failure and confirms a successful retry', async ({
+  page,
+}, testInfo) => {
+  test.skip(hosted, 'Uses synthetic email change responses');
+  const id = '00000000-0000-4000-8000-000000000005';
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: id, exp })}.synthetic`;
+  let email = 'current@example.invalid';
+  const newEmail = 'new@example.invalid';
+  let deliveries = 0;
+  const user = () => ({
+    id,
+    email,
+    aud: 'authenticated',
+    role: 'authenticated',
+    app_metadata: {},
+    user_metadata: {},
+  });
+  const session = () => ({
+    access_token: token,
+    refresh_token: 'synthetic',
+    expires_at: exp,
+    expires_in: 3600,
+    token_type: 'bearer',
+    user: user(),
+  });
+  await page.addInitScript(
+    (initial) => localStorage.setItem('sb-example-auth-token', JSON.stringify(initial)),
+    session(),
+  );
+  await page.route('https://example.invalid/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith('/erp_authorize_employee_email_change')) {
+      expect(request.postDataJSON()).toEqual({ p_email: newEmail });
+      return route.fulfill({ json: newEmail });
+    }
+    if (path === '/auth/v1/user') {
+      if (request.method() === 'PUT') {
+        expect(request.postDataJSON()).toMatchObject({ email: newEmail });
+        if (++deliveries > 1)
+          return route.fulfill({ status: 429, json: { message: 'email rate limit' } });
+      }
+      return route.fulfill({ json: user() });
+    }
+    if (path === '/auth/v1/verify') {
+      const input = request.postDataJSON();
+      expect(input).toMatchObject({ email: newEmail, type: 'email_change' });
+      if (input.token === '000000')
+        return route.fulfill({ status: 403, json: { message: 'invalid code' } });
+      email = newEmail;
+      return route.fulfill({ json: session() });
+    }
+    if (path === '/auth/v1/token') return route.fulfill({ json: session() });
+    if (path.endsWith('/erp_my_profile'))
+      return route.fulfill({ json: { name: 'Employee Test', email, roles: [] } });
+    if (path.endsWith('/erp_account_security'))
+      return route.fulfill({ json: { enabled: true, ready: true } });
+    if (path.endsWith('/erp_access_snapshot'))
+      return route.fulfill({
+        json: { actor: id, enabled: true, administrator: false, permissions: {} },
+      });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto('/access.html#profile');
+  await page.getByText('Update Email', { exact: true }).click();
+  await page.getByLabel('New email', { exact: true }).fill(newEmail);
+  await page.getByRole('button', { name: 'Send code', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Your current login email is still active.');
+  await page.screenshot({ path: testInfo.outputPath('update-email-otp.png') });
+  await page.getByRole('button', { name: 'Resend code' }).click();
+  await expect(page.getByRole('status')).toHaveText('Wait before requesting another code.');
+  await page.getByLabel('Email verification code').fill('000000');
+  await page.getByRole('button', { name: 'Verify new email' }).click();
+  await expect(page.getByRole('status')).toContainText('could not be verified');
+  await page.getByLabel('Email verification code').fill('123456');
+  await page.getByRole('button', { name: 'Verify new email' }).click();
+  await expect(page.getByRole('status')).toContainText('Email updated.');
+  await expect(page.getByLabel('Email verification code')).toHaveCount(0);
 });

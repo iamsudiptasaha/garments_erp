@@ -122,7 +122,7 @@ export function WorkspaceGate({ render }) {
       { className: 'fabric-main' },
       h('h1', null, 'Account awaiting activation'),
       h('p', null, state.reason),
-      h('a', { href: '/access.html' }, 'Account settings'),
+      h('a', { href: '/access.html#profile' }, 'Account settings'),
     );
   return render(state, refresh.current);
 }
