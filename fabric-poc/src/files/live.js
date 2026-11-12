@@ -19,7 +19,20 @@ export function liveFileCommands(client) {
     if (data?.error) throw Error(data.error);
     return data;
   }
+  async function upload(targetKey, recordId, file, requestId, previousAttachmentId) {
+    const body = new FormData();
+    body.append('targetKey', targetKey);
+    body.append('recordId', recordId);
+    body.append('file', file);
+    if (requestId) {
+      body.append('requestId', requestId);
+      body.append('previousAttachmentId', previousAttachmentId ?? '');
+    }
+    return invoke(body);
+  }
   return {
+    upload,
+    open: (id) => invoke({ action: 'read', attachmentId: String(id) }),
     registry: () => rpc('file_registry'),
     routes: async () => {
       const rows = await rpc('file_routes');
@@ -56,15 +69,7 @@ export function liveFileCommands(client) {
             target.max_bytes || 10485760,
           ),
         });
-        const body = new FormData();
-        body.append('targetKey', targetKey);
-        body.append('recordId', recordId);
-        body.append('file', file);
-        if (requestId) {
-          body.append('requestId', requestId);
-          body.append('previousAttachmentId', previousAttachmentId ?? '');
-        }
-        return invoke(body);
+        return upload(targetKey, recordId, file, requestId, previousAttachmentId);
       },
       remove: (targetKey, recordId, attachmentId) =>
         rpc('remove_file_link', {

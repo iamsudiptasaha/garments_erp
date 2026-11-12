@@ -7,6 +7,29 @@
     "owner": "auth.users.id",
     "scope": "Private presentation settings per authenticated account and grid. No business record writes."
   },
+  "employeeProfile": {
+    "readFunction": "public.erp_my_profile",
+    "removePhotoFunction": "public.erp_remove_my_photo",
+    "saveFunction": "public.erp_save_my_profile",
+    "writableTables": ["garments_erp.employee", "garments_erp.contacts", "garments_erp.contact_items"],
+    "photoTarget": "employeePhoto",
+    "owner": "garments_erp.employee",
+    "scope": "Verified users may access their own Employee photo through the private attachment workflow. The employee ID is resolved from the authenticated account. Each employee owns a distinct primary Contact link. Self-service can update its name and primary phone only."
+  },
+  "employeeEmailChange": {
+    "authorizationFunction": "public.erp_authorize_employee_email_change",
+    "writeTrigger": "garments_access.sync_verified_employee_email",
+    "owner": "garments_erp.contact_items",
+    "fields": ["email", "primary_email"],
+    "scope": "The logged-in account's linked employee contact. AAL2 authorizes the request. Supabase Auth verifies the new address before the trigger updates the primary email. Employee registration retains link-only ownership."
+  },
+  "employeeInvitation": {
+    "command": "public.erp_employee_invitation",
+    "reservationTable": "garments_access.employee_invitation",
+    "authBindingTrigger": "garments_access.bind_employee_invitation",
+    "linkFunction": "garments_access.save_account_access",
+    "scope": "A verified Administrator reserves access for an active employee and active roles. Native Supabase Auth binds the reservation to the invited Auth identity. Employee and Contact records remain owned by their existing workflows."
+  },
   "readOnlyScreens": {
     "finishedProducts": {
       "readFunction": "public.erp_warehouse_stock",

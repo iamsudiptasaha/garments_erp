@@ -4,7 +4,7 @@ The prepared connection replaces local business records only when `?live=1` is u
 
 ## Database change to approve
 
-`supabase/migrations/20261029194657_connect_live_fabric_colours.sql` adds:
+`supabase/migrations/20261029195400_connect_live_fabric_colours.sql` adds:
 
 - `erp_fabric_snapshot`: permission-scoped Fabric/Colours/reference reads using the existing screen-to-table catalogue. Company lookup exposes company name and ID; no GST, bank or employee records. Attachment lookup exposes referenced filenames and metadata, never private storage paths.
 - `erp_save_fabric_document`: atomic document saves through a closed, version-controlled field contract. Existing role permissions are checked by `has_screen_permission` on every call.

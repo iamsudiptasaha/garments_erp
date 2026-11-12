@@ -2,7 +2,7 @@
 \set ON_ERROR_STOP on
 begin;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
-select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000001"}',true);
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000001"}',true);
 insert into garments_erp.item(id,style_code) values(970002,'Workspace other item');
 insert into garments_erp.part_list(id,part) values(970001,'Workspace body');
 insert into garments_erp.size_list(id,size) values(970001,'Workspace size');
@@ -69,7 +69,7 @@ begin
  if not public.erp_production_workspace() @> jsonb_build_object('job_assignees',jsonb_build_array(jsonb_build_object('production_id',pid,'assigned_employees_id','900001'))) then raise exception 'TEST: failed edit partially saved';end if;
  -- No session and the unprivileged operator cannot read/write the workspace.
  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000002',true);
- perform set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000002"}',true);
+ perform set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000002"}',true);
  begin perform public.erp_production_workspace();raise exception 'TEST: unauthorized read';exception when insufficient_privilege then null;end;
  begin perform public.erp_save_production_setup('productionItems',root,'edit',changes);raise exception 'TEST: unauthorized save';exception when insufficient_privilege then null;end;
 end $$;

@@ -18,8 +18,8 @@ export const productionDocumentRoutes = {
 };
 
 const adminDestinations = {
-  adminRoles: adminPages.adminRoles,
-  adminAccess: 'Account access',
+  adminAccess: 'User Access',
+  adminRoles: 'Roles & Permissions',
   adminAudit: adminPages.adminAudit,
 };
 const productionPriority = ['productionTaskBoard', 'productionUpdateTaskStatus'];
@@ -272,7 +272,9 @@ export function WorkspaceSidebar({
     ),
     notice && h('p', { role: 'status' }, notice),
     h(AccountFooter, {
-      name: access.users.find((user) => user.id === actor)?.name || 'My account',
+      name:
+        live?.profileName || access.users.find((user) => user.id === actor)?.name || 'My account',
+      photoId: live?.profilePhoto,
       role: live ? (live.administrator ? 'Administrator' : 'Signed-in employee') : 'Local preview',
       live: !!live,
       onCollapse: onClose,

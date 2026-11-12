@@ -23,6 +23,10 @@ for (const [width, shellPadding, dialogPadding] of [
     await page.evaluate(() => document.fonts.ready);
     const screenshot = { animations: 'disabled', caret: 'hide' };
     const overview = await grid.screenshot(screenshot);
+    await page.screenshot({
+      ...screenshot,
+      path: test.info().outputPath(`colours-reference-${width}.png`),
+    });
 
     await card.getByRole('button').click();
     const dialog = page.getByRole('dialog');

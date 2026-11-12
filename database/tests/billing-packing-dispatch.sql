@@ -372,7 +372,7 @@ end;
 $$;
 -- Exercise the same database role and session claims used by PostgREST.
 select set_config('request.jwt.claims',
-  '{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000002"}', true);
+  '{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000002"}', true);
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000002',true);
 set local role authenticated;
 do $$
@@ -388,7 +388,7 @@ $$;
 reset role;
 
 select set_config('request.jwt.claims',
-  '{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000001"}', true);
+  '{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000001"}', true);
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
 set local role authenticated;
 do $$

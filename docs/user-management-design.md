@@ -1,6 +1,6 @@
 # User management · step 1 review
 
-`database/applied/20261027173551_create_user_management_structure.sql` was applied to Supabase project `kidvckaicclqvtlddeyz` as migration `20261027173551`. It supersedes the earlier `admin-rbac.sql` draft. Do not rerun either former draft. This step creates the private configuration tables only: no live client grants, Auth changes, role assignments or business-table policy changes.
+`supabase/migrations/20261027173551_create_user_management_structure.sql` was applied to Supabase project `kidvckaicclqvtlddeyz` as migration `20261027173551`. It supersedes the earlier `admin-rbac.sql` draft. Do not rerun either former draft. This step creates the private configuration tables only: no live client grants, Auth changes, role assignments or business-table policy changes.
 
 | Table | Responsibility |
 | --- | --- |

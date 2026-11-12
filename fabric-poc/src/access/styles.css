@@ -64,24 +64,10 @@
   }
 }
 
-.access-login .login-method-switch {
+.access-login .password-link-back {
   display: block;
-  margin: 16px auto 0;
-  padding: 7px 10px;
-  border: 0;
-  background: transparent;
-  color: #286c9e;
-  font-size: 13px;
-  text-align: center;
-  border-radius: 6px;
-}
-.access-login .login-method-switch:hover {
-  background: #edf6fd;
-  text-decoration: underline;
-}
-.access-login .login-method-switch:focus-visible {
-  outline: 3px solid #7bbcf1;
-  outline-offset: 3px;
+  width: fit-content;
+  margin-top: 14px;
 }
 .access-workspace > .access-live-shell {
   width: 100%;
@@ -126,4 +112,53 @@
   width: 17px;
   height: 17px;
   margin: 0;
+}
+
+.profile-avatar {
+  display: block;
+  width: 8rem;
+  height: 8rem;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile-crop {
+  cursor: grab;
+  touch-action: none;
+}
+
+.employee-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile-details-form,
+.profile-crop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+
+.profile-settings label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-settings input {
+  max-width: 100%;
+}
+
+.profile-crop-controls {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.profile-settings dt {
+  color: #4c687f;
 }

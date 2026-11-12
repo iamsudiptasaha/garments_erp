@@ -244,7 +244,8 @@ test('Administration and Files keep actions available when a saved column is hid
             is_active: true,
           },
         ],
-        employees: [],
+        employees: [{ id: '7', name: 'Test Admin', employee_code: 'EMP-7', is_active: true }],
+        auth_accounts: [{ id: actor, email: 'admin@example.invalid' }],
         roles: [],
         audit: [],
       },
@@ -275,7 +276,7 @@ test('Administration and Files keep actions available when a saved column is hid
     return route.fulfill({ json: fixtures[name] });
   });
   for (const [path, grid, field, column, action] of [
-    ['/access.html#adminAccess', 'administration-accounts', 'code', 'Code', 'Edit access'],
+    ['/access.html#adminAccess', 'administration-accounts', 'employee', 'Employee', 'View details'],
     ['/files-admin.html', 'files-buckets', 'bucket', 'Private bucket', 'Edit settings'],
     ['/files-admin.html', 'files-upload-routes', 'source', 'Attachment source', 'Edit route'],
   ]) {

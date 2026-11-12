@@ -5,7 +5,7 @@ create function pg_temp.check_ok(value boolean, message text) returns void langu
 begin if value is distinct from true then raise exception 'TEST: %',message;end if;end $$;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
 -- No recent password AMR. The portal operator's session still requires AAL2.
-select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000001"}',true);
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000001"}',true);
 insert into garments_erp.stage_type(id,name) values(980001,'Atomic test');
 insert into garments_erp.stage(id,name,abbr,sort_order,stage_type_id,track_pieces)
  values(980001,'Atomic cut','ACUT',-2147483600,980001,true),(980002,'Atomic sew','ASEW',-2147483590,980001,true),(980003,'Atomic pack','APAC',-2147483580,980001,true);
@@ -60,12 +60,12 @@ begin
  r:=public.erp_move_production(old_payload||jsonb_build_object('expected_transition_id',r->>'transition_id'),null);
  -- Reject an actor with no production permission even when they select an employee.
  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000002',true);
- perform set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000002"}',true);
+ perform set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000002"}',true);
  begin perform public.erp_move_production(old_payload,null);raise exception 'TEST: unauthorized actor accepted';
  exception when insufficient_privilege then null;end;
 end $$;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
-select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000001"}',true);
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000001"}',true);
 -- Tracked -> untracked -> tracked keeps the last tracked output, never zeroes it.
 do $$declare r jsonb; pid text; j text; visit text; q jsonb;begin
  r:=public.erp_move_production('{"action":"start","item_part_id":"980002","to_stage_id":"980001","verified_by":"900002"}',null);

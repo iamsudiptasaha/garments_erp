@@ -105,7 +105,7 @@ test('unsafe bigint JSON is rejected before it reaches selectors', () => {
 test('live migration keeps a closed write contract, permissions, stale checks and private attachment metadata', () => {
   const sql = readFileSync(
     new URL(
-      '../../supabase/migrations/20261029194657_connect_live_fabric_colours.sql',
+      '../../supabase/migrations/20261029195400_connect_live_fabric_colours.sql',
       import.meta.url,
     ),
     'utf8',

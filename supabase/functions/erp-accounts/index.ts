@@ -1,7 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import nodemailer from 'npm:nodemailer@10.3.1';
 import { accountAction } from './service.mjs';
-import { sendMailHttp } from '../../../server/mail/protocol.mjs';
 const headers = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization,x-client-info,apikey,content-type',
@@ -16,6 +14,8 @@ Deno.serve(async (req) => {
     });
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return reply({ error: 'POST required' }, 405);
+  const authorization = req.headers.get('Authorization') || '';
+  if (!authorization.startsWith('Bearer ')) return reply({ error: 'Sign in required' }, 401);
   if (Number(req.headers.get('Content-Length')) > 8192)
     return reply({ error: 'Request too large' }, 413);
   try {
@@ -42,8 +42,7 @@ Deno.serve(async (req) => {
     }
     const input = JSON.parse(new TextDecoder().decode(bytes));
     const url = Deno.env.get('SUPABASE_URL')!,
-      key = Deno.env.get('SUPABASE_ANON_KEY')!,
-      authorization = req.headers.get('Authorization') || '';
+      key = Deno.env.get('SUPABASE_ANON_KEY')!;
     const user = createClient(url, key, {
       global: { headers: { Authorization: authorization } },
       auth: { persistSession: false },
@@ -60,7 +59,6 @@ Deno.serve(async (req) => {
       return await checked(user.rpc('erp_access_snapshot'));
     }
     const io = {
-      pepper: Deno.env.get('RECOVERY_PEPPER') || '',
       actor: async () => {
         const { data, error } = await user.auth.getUser();
         if (error || !data.user) throw Error('Sign in required.');
@@ -76,105 +74,37 @@ Deno.serve(async (req) => {
         if (!s.administrator || !s.enabled || !security.ready)
           throw Error('Administrator verification required.');
       },
-      employeeAvailable: async (id: string) => {
-        const s = await checked(user.rpc('erp_admin_snapshot'));
-        if (
-          !s.employees.some((e: any) => String(e.id) === id) ||
-          s.accounts.some((a: any) => String(a.employee_id) === id)
-        )
-          throw Error('Employee already linked or unavailable.');
-      },
-      createUser: async (phone: string, password: string, email: string) => {
-        const d = await checked(
-          service.auth.admin.createUser({
-            phone,
-            email,
-            password,
-            phone_confirm: true,
-            email_confirm: true,
-          }),
-        );
-        return d.user;
-      },
-      link: async (id: string, employee: string, roles: string[], enabled: boolean) => {
+      invitation: async (
+        action: string,
+        employee: string,
+        email: string | null,
+        roles: string[] | null,
+        revision: string | null,
+      ) =>
         await checked(
-          user.rpc('erp_save_account_access', {
-            p_user_id: id,
+          user.rpc('erp_employee_invitation', {
+            p_action: action,
             p_employee_id: employee,
+            p_email: email,
             p_role_ids: roles,
-            p_enabled: enabled,
-            p_expected_version: null,
+            p_revision: revision,
+          }),
+        ),
+      invite: async (email: string, nonce: string | null) => {
+        await checked(
+          service.auth.admin.inviteUserByEmail(email, {
+            data: nonce ? { erp_invitation: nonce } : undefined,
           }),
         );
-        await checked(service.rpc('erp_account_internal', { p_action: 'force', p_user_id: id }));
-      },
-      removeUnlinked: async (id: string) => {
-        const unlinked = await checked(
-          service.rpc('erp_account_internal', { p_action: 'unlinked', p_user_id: id }),
-        );
-        if (unlinked) await checked(service.auth.admin.deleteUser(id));
-      },
-      linkedAccount: async (id: string) => {
-        const s = await checked(user.rpc('erp_admin_snapshot'));
-        const a = s.accounts.find((a: any) => a.user_id === id && a.is_active);
-        if (!a) throw Error('Choose an enabled employee account.');
-        return a;
-      },
-      reserve: async (id: string, digest: string, actor: string) =>
-        await checked(
-          service.rpc('erp_issue_recovery', { p_user_id: id, p_digest: digest, p_actor: actor }),
-        ),
-      cancel: async (id: string) => {
-        await checked(service.rpc('erp_account_internal', { p_action: 'cancel', p_ticket: id }));
-      },
-      consume: async (phone: string, digest: string) =>
-        await checked(service.rpc('erp_consume_recovery', { p_phone: phone, p_digest: digest })),
-      sendCode: async (target: any, code: string) => {
-        const endpoint = Deno.env.get('MAILER_URL');
-        if (endpoint) {
-          await sendMailHttp({
-            url: endpoint,
-            secret: Deno.env.get('MAILER_SHARED_SECRET') || '',
-            message: { type: 'account-recovery', employeeCode: target.employee_code, code },
-          });
-          return;
-        }
-        const host = Deno.env.get('SMTP_HOST'),
-          username = Deno.env.get('SMTP_USER'),
-          password = Deno.env.get('SMTP_PASSWORD'),
-          from = Deno.env.get('SMTP_FROM');
-        if (!host || !username || !password || !from)
-          throw Error('Recovery email is not configured.');
-        const transport = nodemailer.createTransport({
-          host,
-          port: 465,
-          secure: true,
-          auth: { user: username, pass: password },
-          tls: { rejectUnauthorized: true },
-          logger: false,
-          debug: false,
-          connectionTimeout: 10000,
-          socketTimeout: 15000,
-        });
-        try {
-          await transport.sendMail({
-            from,
-            to: 'sahacreationsllp0int@gmail.com',
-            subject: 'ERP employee password setup / recovery',
-            text: `Employee: ${target.employee_code}\nSingle-use code: ${code}\nExpires in 15 minutes. Give it only to this employee after verifying their identity. This code resets the password; it does not bypass Google Authenticator.`,
-          });
-        } finally {
-          transport.close();
-        }
       },
       verifyPassword: async (actor: any, password: string) => {
         const fresh = createClient(url, key, {
           auth: { persistSession: false, autoRefreshToken: false },
         });
-        const credentials = actor.phone
-          ? { phone: actor.phone, password }
-          : { email: actor.email, password };
-        const { data, error } = await fresh.auth.signInWithPassword(credentials);
+        const { data, error } = await fresh.auth.signInWithPassword({
+          email: actor.email,
+          password,
+        });
         if (error || data.user?.id !== actor.id) throw Error('Current password is incorrect.');
         await fresh.auth.signOut({ scope: 'local' });
       },

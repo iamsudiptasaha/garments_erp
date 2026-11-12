@@ -1,157 +1,127 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  accountAction,
-  recoveryCode,
-  emailAddress,
-  credentialDigest,
-  phoneNumber,
-  strongPassword,
-} from '../../supabase/functions/erp-accounts/service.mjs';
-function fake() {
+import { accountAction, strongPassword } from '../../supabase/functions/erp-accounts/service.mjs';
+import { readPasswordLink } from '../src/access/security.js';
+
+const invitation = {
+  action: 'invite',
+  employeeId: '12',
+  email: ' Employee@Example.invalid ',
+  roleIds: ['1'],
+};
+
+test('Admin validation precedes sending an invitation and linking roles', async () => {
   const events = [];
-  return {
-    events,
-    pepper: 'test-only-pepper-with-at-least-32-characters',
+  const io = {
     actor: async () => ({ id: 'admin' }),
     requireAdmin: async () => events.push('admin'),
-    requireReady: async () => events.push('ready'),
-    employeeAvailable: async () => {},
-    createUser: async () => ({ id: 'new' }),
-    link: async () => events.push('link'),
-    removeUnlinked: async () => events.push('compensate'),
-    linkedAccount: async () => ({ user_id: 'employee', employee_code: 'SCE/99999' }),
-    reserve: async () => {
-      events.push('reserve');
-      return 'ticket';
-    },
-    sendCode: async () => events.push('mail'),
-    cancel: async () => events.push('cancel'),
-    consume: async () => {
-      events.push('consume');
-      return 'employee';
-    },
-    setPassword: async () => events.push('password'),
-    passwordComplete: async () => events.push('complete'),
-    verifyPassword: async () => events.push('verify'),
-  };
-}
-test('account creation requires administrator before touching Auth and compensates failed linking', async () => {
-  const io = fake();
-  io.link = async () => {
-    throw Error('stale');
-  };
-  await assert.rejects(
-    accountAction(
-      {
-        action: 'create',
-        employeeId: '12',
-        phone: '9000000000',
+    invitation: async (...args) => {
+      events.push(args);
+      return {
+        state: 'send',
         email: 'employee@example.invalid',
-        roleIds: ['1'],
-        enabled: true,
-      },
-      io,
-    ),
-    /could not be linked/,
-  );
-  assert.deepEqual(io.events, ['admin', 'compensate']);
-});
-test('denied actor cannot create Auth account or issue recovery', async () => {
-  const io = fake();
+        nonce: 'nonce',
+        revision: 'revision',
+      };
+    },
+    invite: async (...args) => events.push(args),
+  };
+  await accountAction(invitation, io);
+  assert.deepEqual(events, [
+    'admin',
+    ['invite', '12', 'employee@example.invalid', ['1'], null],
+    ['employee@example.invalid', 'nonce'],
+    ['finish', '12', null, null, 'revision'],
+  ]);
   io.requireAdmin = async () => {
     throw Error('Denied');
   };
-  await assert.rejects(accountAction({ action: 'issueRecovery', userId: 'other' }, io), /Denied/);
-  assert.deepEqual(io.events, []);
+  await assert.rejects(accountAction(invitation, io), /Denied/);
+  assert.equal(events.length, 4);
 });
-test('recovery delivery failure invalidates the reserved credential', async () => {
-  const io = fake();
-  io.sendCode = async () => {
-    throw Error('smtp');
-  };
-  await assert.rejects(
-    accountAction({ action: 'issueRecovery', userId: 'employee' }, io),
-    /No usable code/,
-  );
-  assert.deepEqual(io.events, ['admin', 'reserve', 'cancel']);
-});
-test('recovery consumes before changing password and never returns the credential', async () => {
-  const io = fake();
-  const r = await accountAction(
-    {
-      action: 'recover',
-      phone: '9000000000',
-      code: 'A'.repeat(32),
-      password: 'a long synthetic password',
+
+test('SMTP failure does not link or grant access', async () => {
+  const io = {
+    actor: async () => ({ id: 'admin' }),
+    requireAdmin: async () => {},
+    invitation: async (action) => {
+      assert.equal(action, 'invite');
+      return { state: 'send', email: invitation.email };
     },
-    io,
-  );
-  assert.deepEqual(io.events, ['consume', 'password', 'complete']);
-  assert.equal(JSON.stringify(r).includes('AAAA'), false);
+    invite: async () => {
+      throw Error('delivery failed');
+    },
+  };
+  await assert.rejects(accountAction(invitation, io), /delivery failed/);
 });
-test('invalid recovery never calls Auth password update', async () => {
-  const io = fake();
-  io.consume = async () => null;
-  await assert.rejects(
-    accountAction(
-      {
-        action: 'recover',
-        phone: '9000000000',
-        code: 'A'.repeat(32),
-        password: 'a long synthetic password',
+
+test('provisioning retry uses the original server reservation without sending another email', async () => {
+  const result = await accountAction(
+    { action: 'retry', employeeId: 12, email: 'ignored', revision: 'reserved' },
+    {
+      actor: async () => ({ id: 'admin' }),
+      requireAdmin: async () => {},
+      invitation: async (...args) => {
+        assert.deepEqual(args, ['retry', '12', null, null, 'reserved']);
+        return { state: 'linked' };
       },
-      io,
-    ),
-    /invalid or expired/,
+      invite: () => assert.fail('unexpected email'),
+    },
   );
-  assert.deepEqual(io.events, []);
+  assert.equal(result.message, 'Employee access linked.');
 });
-test('password change verifies MFA and current password then invalidates sessions', async () => {
-  const io = fake();
+
+test('signed-in password change verifies MFA and current password and then invalidates sessions', async () => {
+  const events = [];
   await accountAction(
     { action: 'changePassword', currentPassword: 'old', password: 'a long synthetic password' },
-    io,
+    {
+      actor: async () => ({ id: 'employee' }),
+      requireReady: async () => events.push('ready'),
+      verifyPassword: async () => events.push('verify'),
+      setPassword: async () => events.push('password'),
+      passwordComplete: async () => events.push('complete'),
+    },
   );
-  assert.deepEqual(io.events, ['ready', 'verify', 'password', 'complete']);
-});
-test('recovery digest requires a configured server pepper and is deterministic without exposing code', async () => {
-  await assert.rejects(credentialDigest('code', ''), /not configured/);
-  const d = await credentialDigest('code', 'a'.repeat(32));
-  assert.equal(d.length, 64);
-  assert.equal(d, await credentialDigest('code', 'a'.repeat(32)));
-  assert.notEqual(d, await credentialDigest('code', 'b'.repeat(32)));
-});
-test('credentials enforce ten-digit phone and minimum password length', () => {
-  assert.equal(phoneNumber('9000000000'), '+919000000000');
-  assert.throws(() => phoneNumber('+919000000000'));
+  assert.deepEqual(events, ['ready', 'verify', 'password', 'complete']);
   assert.throws(() => strongPassword('short'));
 });
 
-test('recovery uses an eight-digit OTP while initial passwords retain high entropy', async () => {
-  assert.match(recoveryCode(), /^[0-9]{8}$/);
-  const io = fake();
-  io.sendCode = async (_target, code) => assert.match(code, /^[0-9]{8}$/);
-  await accountAction({ action: 'issueRecovery', userId: 'employee' }, io);
-  io.createUser = async (_phone, password) => {
-    assert.match(password, /^[A-F0-9]{32}$/);
-    return { id: 'new' };
-  };
-  await accountAction(
-    {
-      action: 'create',
-      employeeId: '12',
-      phone: '9000000000',
-      email: 'employee@example.invalid',
-      roleIds: ['1'],
-      enabled: true,
-    },
-    io,
-  );
+test('only native invitation and recovery link types open the password screen', () => {
+  assert.deepEqual(readPasswordLink('#type=invite&token_hash=abc'), {
+    type: 'invite',
+    tokenHash: 'abc',
+  });
+  assert.deepEqual(readPasswordLink('#type=recovery&token_hash=xyz'), {
+    type: 'recovery',
+    tokenHash: 'xyz',
+  });
+  assert.equal(readPasswordLink('#type=recovery'), null);
+  assert.equal(readPasswordLink('#type=email_change&token_hash=abc'), null);
 });
 
-test('employee provisioning requires a usable email login and normalises it', () => {
-  assert.equal(emailAddress(' Employee@Example.invalid '), 'employee@example.invalid');
-  assert.throws(() => emailAddress(''), /login email/);
-  assert.throws(() => emailAddress('not-an-email'), /login email/);
+test('cancel never sends mail and correction finishes only its replacement reservation', async () => {
+  const events = [];
+  const io = {
+    actor: async () => ({ id: 'admin' }),
+    requireAdmin: async () => {},
+    invitation: async (...args) => {
+      events.push(args);
+      return args[0] === 'cancel'
+        ? { state: 'cancelled' }
+        : { state: 'send', email: 'correct@example.invalid', nonce: 'new-nonce', revision: 'new' };
+    },
+    invite: async (...args) => events.push(args),
+  };
+  await accountAction({ action: 'cancel', employeeId: 12, revision: 'old' }, io);
+  await accountAction(
+    { action: 'correct', employeeId: 12, revision: 'old', email: ' Correct@Example.invalid ' },
+    io,
+  );
+  assert.deepEqual(events, [
+    ['cancel', '12', null, null, 'old'],
+    ['correct', '12', 'correct@example.invalid', null, 'old'],
+    ['correct@example.invalid', 'new-nonce'],
+    ['finish', '12', null, null, 'new'],
+  ]);
 });

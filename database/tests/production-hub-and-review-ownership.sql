@@ -96,8 +96,9 @@ begin
 end $$;
 -- Employee saves use the logged-in operator, including self-edits. Activation is
 -- explicit and an ordinary edit cannot reactivate an inactive employee.
+insert into garments_erp.contacts(id,company_name) values (900006,'Synthetic HR contact');
 do $$declare payload jsonb; r jsonb; employee_key bigint; doc jsonb; rev text;begin
- payload:=jsonb_build_object('draft',jsonb_build_object('employee',jsonb_build_object('contacts_id','900002','contact_purpose_id','900001')));
+ payload:=jsonb_build_object('draft',jsonb_build_object('employee',jsonb_build_object('contacts_id','900006','contact_purpose_id','900001')));
  r:=public.erp_save_employee(payload,null);
  select id into employee_key from garments_erp.employee where id not in(900001,900002) order by id desc limit 1;
  perform pg_temp.assert_true((select is_active and is_verified and verified_by_employee_id=900001 and activated_by_employee_id=900001 from garments_erp.employee where id=employee_key),'new employee active and operator verified');
@@ -112,6 +113,9 @@ do $$declare payload jsonb; r jsonb; employee_key bigint; doc jsonb; rev text;be
 end $$;
 -- Verify real browser-role denial and self-deactivation, rather than relying
 -- only on catalog grants or running the commands as the fixture owner.
+-- Keep a second eligible Administrator for the self-deactivation scenario.
+insert into garments_access.app_user_role(user_id,role_id)
+select '00000000-0000-4000-8000-000000000002',id from garments_access.app_role where key='ci_admin';
 set local role authenticated;
 do $$declare r jsonb; own_record jsonb;begin
  begin

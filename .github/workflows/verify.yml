@@ -2,11 +2,7 @@ name: ERP CI
 on:
   pull_request:
   push:
-    branches: [main]
-  schedule:
-    - cron: '17 2 * * 1'
-  workflow_dispatch:
-  workflow_call:
+    branches: [dev, main]
 permissions:
   contents: read
 concurrency:
@@ -50,18 +46,6 @@ jobs:
       - run: node scripts/ci/bundle-guard.mjs
       - run: npm --prefix fabric-poc exec playwright install --with-deps chromium
       - run: npm --prefix fabric-poc run e2e
-      - name: Portable build provenance
-        run: |
-          mkdir -p reports
-          node --input-type=module -e 'import {writeFileSync} from "node:fs"; writeFileSync("reports/release.json",JSON.stringify({commit:process.env.GITHUB_SHA,run:process.env.GITHUB_RUN_ID},null,2))'
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: portable-build-${{ github.run_id }}
-          path: |
-            fabric-poc/dist/
-            reports/release.json
-          retention-days: 7
-          if-no-files-found: error
   security:
     name: Dependencies and secrets
     runs-on: ubuntu-latest
@@ -124,10 +108,14 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm --prefix fabric-poc ci --ignore-scripts
+      - name: Copy Auth templates into the disposable project
+        run: bash scripts/ci/prepare-database-project.sh
       - name: Start disposable local database
         run: npx --yes supabase@2.122.0 start --workdir database/ci/project -x realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor > /tmp/erp-ci-db-start.log 2>&1
       - name: Schema replay, permissions, constraints, atomicity, concurrency and restore
         run: bash scripts/ci/test-database.sh
+      - name: Verify Supabase CLI migration ordering and failure recovery
+        run: bash scripts/ci/test-supabase-release.sh
       - name: Real local Auth, TOTP and private Storage integration
         run: |
           umask 077
@@ -158,46 +146,51 @@ jobs:
   deploy:
     name: Deploy production Worker
     needs: gate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.gate.result == 'success'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: production
-    concurrency:
-      group: cloudflare-workers-production
-      cancel-in-progress: false
-    permissions:
-      contents: read
     env:
       VITE_DATA_MODE: supabase
       VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
-      RELEASE_GATE_RESULT: ${{ needs.gate.result }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: fabric-poc/package-lock.json
-      - name: Validate release context and scoped configuration
-        run: node --input-type=module -e "import {deploymentConfig} from './scripts/ci/workers-deploy.mjs'; deploymentConfig(process.env)"
       - run: npm --prefix fabric-poc ci
-      - name: Require the applied database manifest before deploying the Worker
-        run: node scripts/ci/check-db-approval.mjs
-        env:
-          APPLIED_DATABASE_MANIFEST_SHA256: ${{ vars.APPLIED_DATABASE_MANIFEST_SHA256 }}
-      - name: Build production configuration from the checked commit
-        run: node scripts/ci/build-public.mjs
+      - run: node scripts/ci/build-public.mjs
       - run: node scripts/ci/bundle-guard.mjs
       - run: npm --prefix deploy/cloudflare ci --ignore-scripts
-      - name: Deploy through GitHub Actions only
+      - name: Confirm this is still the current main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [ "$current" != "$GITHUB_SHA" ]; then
+            echo "::error::This release has been superseded by a newer main commit."
+            exit 1
+          fi
+      - name: Apply pending Supabase migrations
+        run: node scripts/ci/migrate-production.mjs
+        env:
+          PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      - name: Deploy erp-accounts when changed
+        run: node scripts/ci/deploy-accounts.mjs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy Cloudflare Worker
         run: node scripts/ci/workers-deploy.mjs
-      - name: Verify production deployment and commit
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify production health and commit
         run: node scripts/ci/verify-deployment.mjs
         env:
           DEPLOYMENT_URL: https://garments-erp.sahacreationsllp0int.workers.dev

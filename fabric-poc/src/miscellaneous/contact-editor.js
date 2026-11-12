@@ -56,6 +56,7 @@ export function ContactEditor({ data, id, onSave, onClose, can = () => true }) {
               ),
             )
           : h('input', {
+              type: field.type === 'email' ? 'email' : 'text',
               'aria-label': prefix + field.label,
               value: row[field.key] ?? '',
               disabled,
