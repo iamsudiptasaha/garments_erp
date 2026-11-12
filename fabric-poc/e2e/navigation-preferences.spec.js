@@ -153,6 +153,21 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
             pages: { challans: true, billing: true },
           };
           break;
+        case 'erp_contacts_workspace':
+          json = {
+            contacts: [{ id: '11', company_name: 'Navigation fixture contact' }],
+            contact_items: [{ id: '12', contact_id: '11', name: 'Dispatch' }],
+            contact_extra: [],
+            contact_bank_account: [],
+            bank_account_type: [],
+            contactDelete: {
+              contacts: false,
+              contact_items: false,
+              contact_extra: false,
+              contact_bank_account: false,
+            },
+          };
+          break;
         case 'erp_grid_preferences':
           expect(args.p_owner).toBe(actor);
           expect([first, second]).toContain(actor);
