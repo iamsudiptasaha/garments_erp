@@ -37,6 +37,13 @@ import { ProductionOverview } from '../production/cards.js';
 import { InventoryCard } from '../inventory/cards.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BillingCartons } from '../billing/cartons.js';
+import { BillingReturns } from '../billing/returns.js';
+import { BillingDispatch } from '../billing/dispatch.js';
+import { BillingSummary } from '../billing/summary.js';
+import { PackingLists } from '../billing/packing-lists.js';
+import { BuyerPO } from '../billing/buyer-po.js';
+import { BillingInvoices } from '../billing/invoices.js';
 import { finishedGoodsPages } from '../finished-goods/pages.js';
 import { FinishedGoods } from '../finished-goods/workspace.js';
 import { pages } from './catalog.js';
@@ -108,6 +115,16 @@ const finishedGoodsPreviewPages = {
   priceTypes: 'price-types',
 };
 
+const billingPages = {
+  billingBuyerPO: BuyerPO,
+  billingInvoices: BillingInvoices,
+  billingPacking: PackingLists,
+  billingDispatch: BillingDispatch,
+  billingSummary: BillingSummary,
+  billingCartons: BillingCartons,
+  billingReturns: BillingReturns,
+};
+
 function workspaceRoute() {
   const params = new URLSearchParams(location.search);
   const finishedGoods = params.get('finishedGoods');
@@ -129,6 +146,10 @@ function isManagementPage(page, live) {
 }
 
 function App({ live, refreshWorkspaceAccess }) {
+  const [billingInvoice, setBillingInvoice] = useState(null);
+  const [billingPO, setBillingPO] = useState(null);
+  const [billingTransport, setBillingTransport] = useState(null);
+  const [billingFormalPO, setBillingFormalPO] = useState(null);
   const [{ page, finishedGoodsPage, floor, task }, setRoute] = useState(workspaceRoute);
   const [workspaceDataStarted, setWorkspaceDataStarted] = useState(
     () => !isManagementPage(page, live),
@@ -915,33 +936,93 @@ function App({ live, refreshWorkspaceAccess }) {
                 contactChoices: data.contacts || [],
                 contactItems: data.contact_items || [],
               })
-            : page === 'finishedProducts'
-              ? can('view', 'finishedProducts')
-                ? !live && Object.hasOwn(finishedGoodsPreviewPages, finishedGoodsPage)
-                  ? h('iframe', {
-                      title: finishedGoodsPages[finishedGoodsPage],
-                      src:
-                        './finished-goods-preview.html?page=' +
-                        finishedGoodsPreviewPages[finishedGoodsPage],
-                      sandbox: 'allow-scripts',
-                      style: { width: '100%', minHeight: '80vh', border: 0 },
-                    })
-                  : h(FinishedGoods, {
-                      client: live ? getAccessClient() : null,
-                      key: actor + ':' + finishedGoodsPage,
-                      screen: finishedGoodsPage,
-                      canCreate: live && can('create'),
+            : page === 'finishedProducts' || Object.hasOwn(billingPages, page)
+              ? page !== 'finishedProducts'
+                ? live && can('view', page)
+                  ? h(billingPages[page], {
+                      client: getAccessClient(),
+                      key: actor + ':' + page,
+                      canCreate: can('create', page),
+                      canEdit: can('edit', page),
+                      canDelete: can('delete', page),
+                      canViewPacking: can('view', 'billingPacking'),
+                      canViewCartons: can('view', 'billingCartons'),
+                      canCreatePacking: can('create', 'billingPacking'),
+                      openInvoices: can('view', 'billingInvoices')
+                        ? () => navigate('billingInvoices')
+                        : undefined,
+                      canViewReturns: can('view', 'billingReturns'),
+                      canCreateReturn:
+                        can('view', 'billingReturns') && can('create', 'billingReturns'),
+                      poToOpen: billingPO,
+                      onPOOpened: () => setBillingPO(null),
+                      openPO: can('view', 'billingBuyerPO')
+                        ? (id) => {
+                            setBillingPO(id);
+                            navigate('billingBuyerPO');
+                          }
+                        : undefined,
+                      transportToOpen: billingTransport,
+                      onTransportOpened: () => setBillingTransport(null),
+                      openTransport: can('view', 'billingDispatch')
+                        ? (id) => {
+                            setBillingTransport(id);
+                            navigate('billingDispatch');
+                          }
+                        : undefined,
+                      invoiceToOpen: billingInvoice,
+                      formalPO: billingFormalPO,
+                      onFormalPOOpened: () => setBillingFormalPO(null),
+                      createInvoice: can('create', 'billingInvoices')
+                        ? (id) => {
+                            setBillingFormalPO(id ?? '');
+                            navigate('billingInvoices');
+                          }
+                        : undefined,
+                      onInvoiceOpened: () => setBillingInvoice(null),
+                      openInvoice: can('view', 'billingInvoices')
+                        ? (id) => {
+                            setBillingInvoice(id);
+                            navigate('billingInvoices');
+                          }
+                        : undefined,
                       capabilities: {
-                        format: can('format', 'finishedProducts'),
-                        export: can('export', 'finishedProducts'),
-                        print: can('print', 'finishedProducts'),
+                        format: can('format', page),
+                        export: can('export', page),
+                        print: can('print', page),
                       },
                     })
-                : h(
-                    'section',
-                    { className: 'access-denied' },
-                    h('h1', null, 'Finished Goods access restricted'),
-                  )
+                  : h(
+                      'section',
+                      { className: 'access-denied' },
+                      h('h1', null, pages[page].title + ' access restricted'),
+                    )
+                : can('view', 'finishedProducts')
+                  ? !live && Object.hasOwn(finishedGoodsPreviewPages, finishedGoodsPage)
+                    ? h('iframe', {
+                        title: finishedGoodsPages[finishedGoodsPage],
+                        src:
+                          './finished-goods-preview.html?page=' +
+                          finishedGoodsPreviewPages[finishedGoodsPage],
+                        sandbox: 'allow-scripts',
+                        style: { width: '100%', minHeight: '80vh', border: 0 },
+                      })
+                    : h(FinishedGoods, {
+                        client: live ? getAccessClient() : null,
+                        key: actor + ':' + finishedGoodsPage,
+                        screen: finishedGoodsPage,
+                        canCreate: live && can('create'),
+                        capabilities: {
+                          format: can('format', 'finishedProducts'),
+                          export: can('export', 'finishedProducts'),
+                          print: can('print', 'finishedProducts'),
+                        },
+                      })
+                  : h(
+                      'section',
+                      { className: 'access-denied' },
+                      h('h1', null, 'Finished Goods access restricted'),
+                    )
               : live && (!liveReady || activeLiveError)
                 ? h(
                     'section',

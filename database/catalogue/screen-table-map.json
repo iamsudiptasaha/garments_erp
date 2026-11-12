@@ -548,6 +548,78 @@
       "route": "/fabric.html#adminAudit",
       "sort_order": 60,
       "admin_only": true
+    },
+    {
+      "key": "section:billing",
+      "name": "Billing",
+      "resource_type": "section",
+      "parent": null,
+      "route": null,
+      "sort_order": 61,
+      "admin_only": false
+    },
+    {
+      "key": "billingSummary",
+      "name": "Billing Summary",
+      "resource_type": "screen",
+      "parent": "section:billing",
+      "route": "/fabric.html#billingSummary",
+      "sort_order": 62,
+      "admin_only": false
+    },
+    {
+      "key": "billingBuyerPO",
+      "name": "Buyer PO",
+      "resource_type": "screen",
+      "parent": "section:billing",
+      "route": "/fabric.html#billingBuyerPO",
+      "sort_order": 63,
+      "admin_only": false
+    },
+    {
+      "key": "billingInvoices",
+      "name": "Invoices",
+      "resource_type": "screen",
+      "parent": "section:billing",
+      "route": "/fabric.html#billingInvoices",
+      "sort_order": 64,
+      "admin_only": false
+    },
+    {
+      "key": "billingPacking",
+      "name": "Packing Lists",
+      "resource_type": "screen",
+      "parent": "section:billing",
+      "route": "/fabric.html#billingPacking",
+      "sort_order": 65,
+      "admin_only": false
+    },
+    {
+      "key": "billingCartons",
+      "name": "Cartons",
+      "resource_type": "screen",
+      "parent": "section:billing",
+      "route": "/fabric.html#billingCartons",
+      "sort_order": 66,
+      "admin_only": false
+    },
+    {
+      "key": "billingDispatch",
+      "name": "Dispatch / Transport",
+      "resource_type": "screen",
+      "parent": "section:billing",
+      "route": "/fabric.html#billingDispatch",
+      "sort_order": 67,
+      "admin_only": false
+    },
+    {
+      "key": "billingReturns",
+      "name": "Returns",
+      "resource_type": "screen",
+      "parent": "section:billing",
+      "route": "/fabric.html#billingReturns",
+      "sort_order": 68,
+      "admin_only": false
     }
   ],
   "tables": [

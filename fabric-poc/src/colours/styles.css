@@ -67,7 +67,8 @@
   background: #dcedfc;
   color: #226b9b;
 }
-.lab-node.failed {
+.lab-node.failed,
+.lab-status.failed {
   background: #fff0e9;
   color: #a35237;
 }

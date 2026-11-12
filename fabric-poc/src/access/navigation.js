@@ -225,6 +225,7 @@ export function WorkspaceSidebar({
         pageButtons('miscellaneous'),
         'miscellaneous-nav',
       ),
+      live && section('billing', 'Billing', 'Billing pages', pageButtons('billing')),
       can('finishedProducts') &&
         section(
           'finished-goods',
