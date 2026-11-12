@@ -38,6 +38,14 @@ const files = [
   '20261109191200_production_challan_alignment.sql',
   '20261109191300_production_challan_commands.sql',
   '20261111180000_grid_preferences.sql',
+  '20261112044630_bind_billing_to_purchase_order.sql',
+  '20261112045449_billing_portal_access.sql',
+  '20261112050919_billing_buyer_po_workspace.sql',
+  '20261112051356_billing_portal_fulfilment.sql',
+  '20261112052422_billing_transport_docket_independence.sql',
+  '20261112052706_billing_dispatch_summary_workspace.sql',
+  '20261112052959_billing_carton_return_workspace.sql',
+  '20261112053306_billing_invoice_editor_workspace.sql',
 ];
 // Files before the first release migration belong to the deployed baseline.
 export function releaseMigrationFiles() {
@@ -215,6 +223,31 @@ export async function applyRelease(client, migrations) {
       and not has_function_privilege('anon','public.erp_save_raw_material_transaction(text,bigint,timestamptz,jsonb)','execute')
       and not has_function_privilege('anon','public.erp_raw_material_transaction_snapshot()','execute')
       and not has_function_privilege('anon','public.erp_save_raw_material_setup(text,bigint,timestamptz,jsonb,jsonb)','execute')
+      and exists (select 1 from pg_constraint where conrelid='garments_erp.billing'::regclass
+        and conname='billing_one_purchase_order' and convalidated)
+      and exists (select 1 from pg_index where indexrelid='garments_erp.billing_issued_invoice_number'::regclass
+        and indisunique and indisvalid and indpred is not null)
+      and not exists (select 1 from information_schema.columns where table_schema='garments_erp'
+        and table_name='transport_docket' and column_name='transport_number_id')
+      and (select count(*)=2 from pg_constraint where conrelid='garments_erp.transport_bill_item'::regclass
+        and contype='f' and convalidated)
+      and not has_table_privilege('authenticated','garments_erp.transport_docket','insert')
+      and (select count(*)=7 from garments_access.app_resource child
+        join garments_access.app_resource parent on parent.id=child.parent_resource_id
+        where parent.key='section:billing')
+      and (select count(*)=8 from unnest(array[
+        'public.erp_portal_save_invoice(uuid,bigint,jsonb)',
+        'public.erp_portal_invoice_choices(bigint,bigint)',
+        'public.erp_portal_buyer_po(bigint,text,integer)',
+        'public.erp_portal_packing_lists(bigint,bigint,text,integer)',
+        'public.erp_portal_carton_workspace(bigint,bigint,integer)',
+        'public.erp_portal_dispatch_workspace(integer,bigint)',
+        'public.erp_portal_return_workspace(bigint,integer)',
+        'public.erp_portal_billing_summary(text,integer)'
+      ]) as required(signature)
+      where to_regprocedure(signature) is not null
+        and has_function_privilege('authenticated',to_regprocedure(signature),'execute')
+        and not has_function_privilege('anon',to_regprocedure(signature),'execute'))
       as valid`);
     if (result.rows[0]?.valid !== true)
       throw new ReleaseError('Post-migration schema/security verification failed.');

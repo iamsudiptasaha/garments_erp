@@ -113,8 +113,11 @@ for (const [route, title, open, edit, add, record] of [
         const name = new URL(request.request().url()).pathname.split('/').at(-1);
         const args = request.request().postDataJSON();
         let json;
-        if (name === 'erp_access_snapshot') {
+        if (name === 'erp_account_security') {
+          json = { enabled: true, ready: true };
+        } else if (name === 'erp_access_snapshot') {
           json = {
+            actor,
             enabled: true,
             permissions: { productionChallans: { view: true }, jobWorkerBills: { view: true } },
           };

@@ -47,6 +47,24 @@ export function inspectBoundaries({schema,catalogue,policy,functions,links=emplo
    errors.push('Finished Goods: catalogue write boundary differs from its reviewed contract');
   }
  }
+ for (const [name, contract] of Object.entries(policy.billingPortal || {})) {
+  const entry = functions.get(name);
+  if (!entry?.includes(`garments_erp.billing_employee('${contract.permissionScreen}')`))
+   errors.push(`${name}: Billing page guard differs from its reviewed contract`);
+  const visited = new Set();
+  const check = routine => {
+   if (visited.has(routine)) return;
+   visited.add(routine);
+   const body = functions.get(routine);
+   if (!body) return;
+   if (/\bexecute\b/i.test(body)) errors.push(`${name}: ${routine} uses dynamic SQL`);
+   for (const [, table] of body.matchAll(/\b(?:insert\s+into|update|delete\s+from)\s+(?:garments_erp|garments_access)\.(\w+)/gi))
+    if (!contract.writableTables.includes(table)) errors.push(`${name}: unreviewed write to ${table}`);
+   for (const [, called] of body.matchAll(/\b((?:garments_erp|garments_access|public)\.\w+)\s*\(/g))
+    check(called);
+  };
+  check(name);
+ }
  for(const [screen,c]of Object.entries(policy.screens)){
   for(const table of Object.keys(relations))if(!c.writableTables.includes(table))errors.push(`${screen}: ${table} is linked data, not an owned write table`);
   for(const m of catalogue.mappings.filter(m=>m.resource_key===screen&&(m.can_create||m.can_edit)))if(![...c.writableTables,...c.maintenanceTables].includes(m.table_name))errors.push(`${screen}: forbidden writable mapping to ${m.table_name}`);

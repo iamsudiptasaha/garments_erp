@@ -1,0 +1,66 @@
+.billing-table-frame {
+  border: 1px solid var(--erp-border);
+  border-radius: 10px;
+}
+
+.billing-table-frame tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.billing-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+
+.billing-meta dt {
+  margin-bottom: 5px;
+  color: #63829b;
+  font-size: 11px;
+}
+
+.billing-meta dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.billing-totals {
+  max-width: 430px;
+  margin-left: auto;
+}
+
+.billing-totals dl {
+  margin: 0;
+}
+
+.billing-totals dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--erp-border);
+}
+
+.billing-totals dl > div:last-child {
+  border: 0;
+  font-weight: 650;
+}
+
+.billing-totals dd {
+  margin: 0;
+}
+
+@media (max-width: 700px) {
+  .billing-totals {
+    max-width: none;
+  }
+}
+
+.billing-invoice-editor input[name='mode']:disabled {
+  background: #edf2f6;
+  color: #627f95;
+  cursor: default;
+}

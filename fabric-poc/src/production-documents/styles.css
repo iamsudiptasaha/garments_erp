@@ -1,0 +1,33 @@
+.production-documents .print-only,
+.production-documents .form-error:empty {
+  display: none;
+}
+
+@media print {
+  .fabric-shell[data-production-documents] {
+    display: block !important;
+  }
+  [data-production-documents] .fabric-sidebar,
+  [data-production-documents] .workspace-toolbar,
+  .production-documents .fabric-status,
+  .production-documents button {
+    display: none;
+  }
+  .production-documents .print-only {
+    display: inline;
+  }
+  .production-documents [data-challan-detail] {
+    display: block !important;
+    position: static;
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+    border: 0;
+  }
+  .production-documents [data-challan-detail]::backdrop {
+    display: none;
+  }
+  .production-documents .lab-detail {
+    break-inside: avoid;
+  }
+}

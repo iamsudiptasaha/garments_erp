@@ -21,6 +21,99 @@
     "writableTables": ["sellable_product", "sellable_unit", "item_in_store_price", "price_type"],
     "referenceTables": ["item", "item_size_list", "size_list", "employee", "item_costing"]
   },
+  "billingPortal": {
+    "public.erp_portal_carton_workspace": {
+      "permissionScreen": "billingCartons",
+      "writableTables": []
+    },
+    "public.erp_portal_return_workspace": {
+      "permissionScreen": "billingReturns",
+      "writableTables": []
+    },
+    "public.erp_portal_save_carton": {
+      "permissionScreen": "billingCartons",
+      "writableTables": ["packing_list", "carton", "carton_item", "carton_item_piece_per_size", "transport_item", "billing_audit"]
+    },
+    "public.erp_portal_dispatch_workspace": {
+      "permissionScreen": "billingDispatch",
+      "writableTables": []
+    },
+    "public.erp_portal_billing_summary": {
+      "permissionScreen": "billingSummary",
+      "writableTables": []
+    },
+    "public.erp_portal_create_transport": {
+      "permissionScreen": "billingDispatch",
+      "writableTables": ["transport", "transport_docket", "transport_item", "app_activity_log"]
+    },
+    "public.erp_portal_create_packing_list": {
+      "permissionScreen": "billingPacking",
+      "writableTables": ["packing_list", "billing_audit"]
+    },
+    "public.erp_portal_packing_lists": {
+      "permissionScreen": "billingPacking",
+      "writableTables": []
+    },
+    "public.erp_portal_buyer_po": {
+      "permissionScreen": "billingBuyerPO",
+      "writableTables": []
+    },
+    "public.erp_portal_buyer_po_choices": {
+      "permissionScreen": "billingBuyerPO",
+      "writableTables": []
+    },
+    "public.erp_portal_create_buyer_po": {
+      "permissionScreen": "billingBuyerPO",
+      "writableTables": [
+        "buyer_po",
+        "po_item",
+        "po_item_piece_per_size",
+        "app_activity_log"
+      ]
+    },
+    "public.erp_portal_save_invoice": {
+      "permissionScreen": "billingInvoices",
+      "writableTables": [
+        "billing",
+        "billing_item",
+        "billing_item_piece_per_size",
+        "billing_audit",
+        "portal_invoice_request",
+        "buyer_po",
+        "po_item",
+        "po_item_piece_per_size"
+      ]
+    },
+    "public.erp_portal_invoice": {
+      "permissionScreen": "billingInvoices",
+      "writableTables": []
+    },
+    "public.erp_portal_invoice_choices": {
+      "permissionScreen": "billingInvoices",
+      "writableTables": []
+    },
+    "public.erp_portal_invoice_list": {
+      "permissionScreen": "billingInvoices",
+      "writableTables": []
+    },
+    "public.erp_portal_dispatch_transport": {
+      "permissionScreen": "billingDispatch",
+      "writableTables": [
+        "billing",
+        "billing_audit",
+        "transport"
+      ]
+    },
+    "public.erp_portal_verify_return": {
+      "permissionScreen": "billingReturns",
+      "writableTables": [
+        "billing_audit",
+        "return_bill",
+        "return_bill_item",
+        "return_bill_item_piece_per_size"
+      ]
+    }
+  },
   "screens": {
     "employees": {
       "root": "employee",

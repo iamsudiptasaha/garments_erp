@@ -52,6 +52,62 @@ update garments_erp.po_item set sellable_product_id = 982001, ordered_units = 3,
 where id = 982001;
 insert into garments_erp.po_item_piece_per_size (po_item_id, item_size_list_id, pieces_ordered, share_weight)
 values (982001, 982001, 6, 2), (982002, 982001, 20, null), (982003, 982001, 2, null);
+insert into garments_erp.buyer_po (id, po_number, buyer_list_id, po_source_type_id)
+select 982002, 'BILL-SECOND-PO', 982001, id from garments_erp.po_source_type where type = 'formal';
+insert into garments_erp.po_item (id, buyer_po_id, sale_mode_type_id)
+select 982004, 982002, id from garments_erp.sale_mode_type where type = 'exception';
+insert into garments_erp.po_item_piece_per_size (po_item_id, item_size_list_id, pieces_ordered)
+values (982004, 982001, 3);
+
+do $$
+declare
+  first_invoice bigint;
+  second_invoice bigint;
+  line jsonb;
+begin
+  first_invoice := public.erp_billing_command(gen_random_uuid(), 900002,
+    '{"action":"create","formal_po_id":982001,"mode":"exception","gst_percentage":5}');
+  second_invoice := public.erp_billing_command(gen_random_uuid(), 900002,
+    '{"action":"create","formal_po_id":982001,"mode":"exception","gst_percentage":5}');
+  if not exists (select 1 from garments_erp.billing where id = first_invoice
+      and formal_po_id = 982001 and buyer_list_id = 982001 and invoice_number is null) then
+    raise exception 'TEST: formal draft did not derive buyer or allow an absent number';
+  end if;
+  line := jsonb_build_object('action','save_line','billing_id',first_invoice,'po_item_id',982004,
+    'pieces','[{"size_id":982001,"pieces":1,"price":40}]'::jsonb);
+  begin
+    perform public.erp_billing_command(gen_random_uuid(),900002,line);
+    raise exception 'TEST: accepted a line from a different PO for the same buyer';
+  exception when no_data_found then null;
+  end;
+  line := line || '{"po_item_id":982003}'::jsonb;
+  perform public.erp_billing_command(gen_random_uuid(),900002,line);
+  perform public.erp_billing_command(gen_random_uuid(),900002,line || jsonb_build_object('billing_id',second_invoice));
+  begin
+    perform public.erp_billing_command(gen_random_uuid(),900002,line);
+    raise exception 'TEST: exceeded the cumulative PO draft reservation';
+  exception when others then
+    if sqlerrm <> 'Insufficient physical stock or PO allowance' then raise; end if;
+  end;
+  begin
+    perform public.erp_billing_command(gen_random_uuid(),900002,
+      jsonb_build_object('action','finalize','billing_id',first_invoice));
+    raise exception 'TEST: finalized an invoice without a number';
+  exception when check_violation then null;
+  end;
+  perform public.erp_billing_command(gen_random_uuid(),900002,
+    jsonb_build_object('action','finalize','billing_id',first_invoice,'invoice_number','BILL-RESERVE'));
+  begin
+    perform public.erp_billing_command(gen_random_uuid(),900002,
+      jsonb_build_object('action','finalize','billing_id',second_invoice,'invoice_number',' BILL-RESERVE '));
+    raise exception 'TEST: accepted a duplicate issued number';
+  exception when unique_violation then null;
+  end;
+  -- Roll back this scenario so the original stock and dispatch fixture remains independent.
+  raise exception using errcode = 'P1234', message = 'rollback verified scenario';
+exception when sqlstate 'P1234' then null;
+end $$;
+
 insert into garments_erp.transporter (id, contact_purpose_id, contacts_id) values (982001, 900001, 900002);
 
 do $$
@@ -78,7 +134,7 @@ declare
   line jsonb;
 begin
   adhoc_id := public.erp_billing_command(gen_random_uuid(), 900002,
-    '{"action":"create","buyer_list_id":982001,"invoice_number":"BILL-ADHOC","mode":"standard","adhoc":true}');
+    '{"action":"create","buyer_list_id":982001,"invoice_number":"BILL-ADHOC","gst_percentage":5,"mode":"standard","adhoc":true}');
   select adhoc_po_id into strict adhoc_order from garments_erp.billing where id = adhoc_id;
   line := jsonb_build_object('action','save_line','billing_id',adhoc_id,
     'variation_id',982001,'sets',2,'unit_price',135,
@@ -124,13 +180,13 @@ begin
   end if;
 
   standard_id := public.erp_billing_command(request_id, 900002,
-    '{"action":"create","buyer_list_id":982001,"invoice_number":"BILL-STD","mode":"standard"}');
+    '{"action":"create","formal_po_id":982001,"gst_percentage":5,"invoice_number":"BILL-STD","mode":"standard"}');
   if standard_id <> public.erp_billing_command(request_id, 900002,
-    '{"action":"create","buyer_list_id":982001,"invoice_number":"BILL-STD","mode":"standard"}') then
+    '{"action":"create","formal_po_id":982001,"gst_percentage":5,"invoice_number":"BILL-STD","mode":"standard"}') then
     raise exception 'TEST: request retry did not preserve invoice identity';
   end if;
   cancelled_id := public.erp_billing_command(gen_random_uuid(), 900002,
-    '{"action":"create","buyer_list_id":982001,"invoice_number":"BILL-CANCEL","mode":"exception"}');
+    '{"action":"create","formal_po_id":982001,"gst_percentage":5,"invoice_number":"BILL-CANCEL","mode":"exception"}');
   perform public.erp_billing_command(gen_random_uuid(), 900002, jsonb_build_object(
     'action','save_line','billing_id',cancelled_id,'po_item_id',982003,
     'pieces','[{"size_id":982001,"pieces":2,"price":40}]'::jsonb));
@@ -146,7 +202,7 @@ begin
     raise exception 'TEST: cancellation failed to release holds and preserve invoice lines';
   end if;
   exception_id := public.erp_billing_command(gen_random_uuid(), 900002,
-    '{"action":"create","buyer_list_id":982001,"invoice_number":"BILL-EX","mode":"exception"}');
+    '{"action":"create","formal_po_id":982001,"gst_percentage":5,"invoice_number":"BILL-EX","mode":"exception"}');
   line := jsonb_build_object('action','save_line','billing_id',standard_id,
     'po_item_id',982001,'variation_id',982001,'price_version_id',982001,'sets',2,'unit_price',125);
   perform public.erp_billing_command(gen_random_uuid(), 900002, line);
@@ -266,12 +322,30 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'Cumulative return exceeds dispatched pieces' then raise; end if;
   end;
+  begin
+    perform public.erp_verify_billing_return(gen_random_uuid(),standard_id,900002,
+      jsonb_build_array(jsonb_build_object('billed_piece_id',component_id,'pieces',1,'price',126)));
+    raise exception 'TEST: returned piece price exceeded original set price';
+  exception when raise_exception then
+    if sqlerrm <> 'Return price exceeds the original billed unit price' then raise; end if;
+  end;
+  begin
+    perform public.erp_verify_billing_return(gen_random_uuid(),standard_id,900002,
+      jsonb_build_array(jsonb_build_object('billed_piece_id',component_id,'pieces',2,'price',125)));
+    raise exception 'TEST: accepted a cumulative return above the original billed value';
+  exception when raise_exception then
+    if sqlerrm <> 'Cumulative return credit exceeds original billed value' then raise; end if;
+  end;
   return_lines := jsonb_build_array(
     jsonb_build_object('mode','set','billing_item_id',standard_line,'returned_units',1,'unit_price',125),
     jsonb_build_object('mode','piece','billing_item_id',standard_line,'pieces_by_size',
       jsonb_build_array(jsonb_build_object('billed_piece_id',component_id,'pieces',1,'price',35)))
   );
   returned_bill := public.erp_verify_billing_return(return_request,standard_id,900002,return_lines);
+  if not exists (
+    select 1 from garments_erp.billing_value(standard_id) where original_value = 250
+    and verified_credit = 195 and taxable_value = 55 and gst_amount = 2.75 and total_including_gst = 57.75
+  ) then raise exception 'TEST: incorrect GST or taxable value after verified returns'; end if;
   if public.erp_verify_billing_return(return_request,standard_id,900002,return_lines) <> returned_bill
     or (select available from garments_erp.finished_balances(982001)) <> 8
     or (select remaining from public.erp_billing_po_allowance(982001)) <> 2
@@ -294,6 +368,87 @@ begin
     or has_column_privilege('service_role','garments_erp.transport','transport_status_type_id','update') then
     raise exception 'TEST: direct billing mutation bypass exists';
   end if;
+end;
+$$;
+-- Exercise the same database role and session claims used by PostgREST.
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000002","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000002"}', true);
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000002',true);
+set local role authenticated;
+do $$
+begin
+  begin
+    perform public.erp_portal_save_invoice(gen_random_uuid(), null,
+      '[{"action":"create","formal_po_id":982001,"mode":"exception"}]');
+    raise exception 'TEST: unentitled employee created an invoice';
+  exception when insufficient_privilege then null;
+  end;
+end;
+$$;
+reset role;
+
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000001"}', true);
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
+set local role authenticated;
+do $$
+declare
+  request_id uuid := gen_random_uuid();
+  command jsonb := '{"action":"create","formal_po_id":982001,"mode":"exception","gst_percentage":5}';
+  invoice text;
+  details jsonb;
+  po_request uuid := gen_random_uuid();
+  po_id text;
+  order_data jsonb := '{"number":"PORTAL-PO","buyer_id":982001,"issue_date":"2026-11-12","lines":[
+    {"mode":"standard","sellable_product_id":982001,"quantity":2,"price":115,"codes":{"982001":{"hsn_code":"06204"}}},
+    {"mode":"exception","size_id":982001,"quantity":1,"price":30}]}';
+begin
+  begin
+    perform public.erp_portal_save_invoice(gen_random_uuid(), null, jsonb_build_array(command || '{"employee_id":900002}'));
+    raise exception 'TEST: caller supplied invoice employee identity';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    perform public.erp_portal_save_invoice(request_id, null, jsonb_build_array(command,
+      '{"action":"save_line","po_item_id":982004,"pieces":[{"size_id":982001,"pieces":1,"price":40}]}'::jsonb));
+    raise exception 'TEST: batch accepted a foreign PO line';
+  exception when no_data_found then null;
+  end;
+  invoice := public.erp_portal_save_invoice(request_id, null, jsonb_build_array(command));
+  if invoice is distinct from public.erp_portal_save_invoice(request_id, null, jsonb_build_array(command)) then
+    raise exception 'TEST: retry returned a different invoice';
+  end if;
+  details := public.erp_portal_invoice(invoice::bigint);
+  if details->>'status' is distinct from 'draft' or details->>'buyer' is distinct from 'Billing test buyer'
+      or (details->'totals'->>'original_value')::numeric is distinct from 0 then
+    raise exception 'TEST: invoice read returned incorrect data';
+  end if;
+  if jsonb_array_length(public.erp_portal_invoice_list('Billing test buyer', 'draft', 1)) <> 1 then
+    raise exception 'TEST: invoice search did not return its bounded page';
+  end if;
+  po_id := public.erp_portal_create_buyer_po(po_request, order_data);
+  if po_id is distinct from public.erp_portal_create_buyer_po(po_request, order_data) then
+    raise exception 'TEST: PO retry returned a different record';
+  end if;
+  perform set_config('billing.test.po_id', po_id, true);
+  perform set_config('billing.test.request_id', request_id::text, true);
+end;
+$$;
+reset role;
+do $$
+begin
+  if not exists (select 1 from garments_erp.billing_audit
+    where request_id = md5(current_setting('billing.test.request_id') || ':1')::uuid and employee_id = 900001) then
+    raise exception 'TEST: authenticated portal actor missing from audit';
+  end if;
+  if (select count(distinct p.sale_mode_type_id)
+      from garments_erp.po_item p where p.buyer_po_id = current_setting('billing.test.po_id')::bigint) <> 2
+    or not exists (
+      select 1 from garments_erp.po_item p
+      join garments_erp.po_item_piece_per_size s on s.po_item_id = p.id
+      where p.buyer_po_id = current_setting('billing.test.po_id')::bigint
+        and p.ordered_units = 2 and s.share_weight = 2 and s.pieces_ordered = 4 and s.hsn_code = '06204'
+    ) then raise exception 'TEST: mixed-mode PO did not derive the frozen recipe'; end if;
 end;
 $$;
 rollback;

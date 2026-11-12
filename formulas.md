@@ -29,7 +29,7 @@ Sources: [cut allocation](fabric-poc/src/production/item-model.js) and [Task Boa
 
 ## Finished Goods, billing and returns
 
-Sources: [billing alignment](supabase/migrations/20261108110000_align_billing_er.sql) and [return composition and current warehouse calculations](supabase/migrations/20261108130000_return_bill_composition.sql).
+Sources: [local Billing value and return checks](supabase/migrations/20261112044630_bind_billing_to_purchase_order.sql), [billing alignment](supabase/migrations/20261108110000_align_billing_er.sql), [return composition and current warehouse calculations](supabase/migrations/20261108130000_return_bill_composition.sql), and the [return editor projection](supabase/migrations/20261112052959_billing_carton_return_workspace.sql).
 
 | Calculation | Rule |
 | --- | --- |
@@ -37,9 +37,17 @@ Sources: [billing alignment](supabase/migrations/20261108110000_align_billing_er
 | Sellable variation capacity | Take the minimum across recipe components of floor(available physical pieces ÷ component share weight). A missing component balance contributes zero. |
 | Finished Goods summaries | Produced physical units per size use the limiting item part across current complete jobs. Open ordered sets are formal non-cancelled PO units less dispatched sets, floored at zero per line. Available percentage is available set capacity ÷ produced sets × 100, rounded to two decimals. Zero produced sets leaves the percentage unknown. [Summary RPC](supabase/migrations/20261109142922_finished_goods_catalogue.sql) |
 | Produced sets for a variation | Take the minimum across recipe components of floor(produced physical pieces ÷ component share weight). |
+| Ordered standard component pieces | Ordered sets × verified sellable-product component share weight for each size. PO entry preserves the recipe. |
 | Billed component pieces | Billed sets × component share weight. Piece-level billing and returns preserve the size-level composition. |
-| Returned sets | For each billing item within a verified return event, calculate the minimum across recipe components of floor(returned component pieces ÷ component share weight). Sum complete sets across events. |
+| Returned sets | For each billing item within a verified return event, calculate the minimum across recipe components of floor(returned component pieces ÷ component share weight). Sum complete sets across events. This is a stock summary and does not determine credit eligibility or value. |
+| Original billed value, local SQL | Sum billed sets × invoiced set price for standard lines, or billed pieces × invoiced size-row price for exception lines. Use the original invoice currency, before GST. |
+| Suggested return price per physical piece, local SQL | Standard sale: original invoiced set price ÷ sum of the frozen billed component weights per set. A ₹300 set of two tops and one pant suggests ₹100 per piece. Exception sale: original invoiced price per piece on the billed size row. |
+| Verified return value, local SQL | Sum returned whole physical pieces × operator-confirmed credit price per piece across verified returns, in the original invoice currency before GST. The confirmed price is nonnegative and capped at the original invoiced set price for standard components or the original invoiced piece price for exception pieces. Historical set-mode returns contribute their verified set count × stored confirmed set price. Cumulative verified credit cannot exceed original billed value, and verified quantities cannot exceed the original pieces billed on each size row. |
+| Taxable value after verified returns, local SQL | Net billed value = original billed value − verified return value. The invoice-wide credit cap keeps taxable value nonnegative. |
+| GST and GST-inclusive total, local SQL | GST amount = taxable value × stored invoice GST percentage ÷ 100. GST-inclusive total = taxable value + GST amount. Use existing numeric and display conventions without additional accounting-specific rounding rules. See the [Billing contract](database/billing-contract.md). |
 | Stock valuation | In-house pieces × final unit cost from the newest finalized costing linked to the receipt. Physical quantity includes draft holds and finalized pieces awaiting dispatch. Missing linked costing leaves value unknown. The [valuation RPC](supabase/migrations/20261109140609_finished_goods_costing_valuation.sql) uses database numeric precision. |
+
+The [invoice editor](fabric-poc/src/billing/invoice-editor.js) previews the unsaved amount from the entered sets or pieces, invoice prices and GST percentage. The display formats currency to two decimals. Saved invoice totals come from the database.
 
 ## Item costing
 

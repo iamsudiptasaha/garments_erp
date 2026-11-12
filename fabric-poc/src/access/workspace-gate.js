@@ -1,5 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { getAccessClient } from './client.js';
+import { accountReturnPath, adminPath } from './workspace-routes.js';
+
+function openSignIn() {
+  const returnTo = accountReturnPath(location.pathname + location.search + location.hash);
+  location.replace(returnTo ? adminPath + '?returnTo=' + encodeURIComponent(returnTo) : adminPath);
+}
 const h = React.createElement;
 export function sessionAccessModel(session) {
   const administrator = session.administrator === true,
@@ -31,9 +37,11 @@ export function sessionAccessModel(session) {
 export function WorkspaceGate({ render }) {
   const [state, setState] = useState(null),
     [error, setError] = useState('');
+  const refresh = useRef(null);
   useEffect(() => {
     let active = true,
       revision = 0,
+      sessionUserId,
       client;
     try {
       client = getAccessClient();
@@ -45,15 +53,20 @@ export function WorkspaceGate({ render }) {
       const ticket = ++revision;
       try {
         const { data: auth, error: authError } = await client.auth.getSession();
+        if (!active || ticket !== revision) return;
         if (authError) throw authError;
+        sessionUserId = auth.session?.user.id;
         if (!auth.session) {
-          location.replace('/access.html');
+          setState(null);
+          openSignIn();
           return;
         }
         const security = await client.rpc('erp_account_security');
+        if (!active || ticket !== revision) return;
         if (security.error) throw security.error;
         if (security.data?.enabled && !security.data.ready) {
-          location.replace('/access.html');
+          setState(null);
+          openSignIn();
           return;
         }
         const { data, error } = await client.rpc('erp_access_snapshot');
@@ -69,10 +82,14 @@ export function WorkspaceGate({ render }) {
         }
       }
     }
+    refresh.current = load;
     void load();
-    const { data } = client.auth.onAuthStateChange(() => {
+    const { data } = client.auth.onAuthStateChange((_event, session) => {
       if (active) {
-        setState(null);
+        const nextUserId = session?.user.id;
+        // Refocusing another tab can emit SIGNED_IN again for the same account.
+        if (nextUserId !== sessionUserId) setState(null);
+        sessionUserId = nextUserId;
         void load();
       }
     });
@@ -107,5 +124,5 @@ export function WorkspaceGate({ render }) {
       h('p', null, state.reason),
       h('a', { href: '/access.html' }, 'Account settings'),
     );
-  return render(state);
+  return render(state, refresh.current);
 }

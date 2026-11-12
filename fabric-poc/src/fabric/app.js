@@ -1,5 +1,14 @@
+import { AccessApp } from '../access/app.js';
+import { FilesWorkspace } from '../files/app.js';
+import { adminTabs, workspacePath, workspacePathPage } from '../access/workspace-routes.js';
 import { GridSearch, useGridSearch } from './grid-toolbar.js';
-import { WorkspaceMenuToolbar, WorkspaceSidebar, useWorkspaceMenu } from '../access/navigation.js';
+import {
+  productionDocumentPath,
+  productionDocumentRoutes,
+  WorkspaceMenuToolbar,
+  WorkspaceSidebar,
+  useWorkspaceMenu,
+} from '../access/navigation.js';
 import { inventoryCommands, liveInventoryPage } from './inventory-live.js';
 import { ProductionItemEditor } from '../production-task-board/item-editor.js';
 import {
@@ -26,8 +35,15 @@ import { ItemEditor } from '../production/item-editor.js';
 import { JobEditor } from '../production/editor.js';
 import { ProductionOverview } from '../production/cards.js';
 import { InventoryCard } from '../inventory/cards.js';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BillingCartons } from '../billing/cartons.js';
+import { BillingReturns } from '../billing/returns.js';
+import { BillingDispatch } from '../billing/dispatch.js';
+import { BillingSummary } from '../billing/summary.js';
+import { PackingLists } from '../billing/packing-lists.js';
+import { BuyerPO } from '../billing/buyer-po.js';
+import { BillingInvoices } from '../billing/invoices.js';
 import { finishedGoodsPages } from '../finished-goods/pages.js';
 import { FinishedGoods } from '../finished-goods/workspace.js';
 import { pages } from './catalog.js';
@@ -43,6 +59,7 @@ import { FabricSheet } from './sheet.js';
 import { WorkspaceViewToggle } from './view-toggle.js';
 import { BillEditor } from './editor.js';
 import './styles.css';
+import { ProductionDocuments } from '../production-documents/app.js';
 import { adminPages, initialAccess, allowed, upgradeAccess } from '../admin/model.js';
 import { AdminPanel } from '../admin/panel.js';
 import { HRPanel } from '../hr/panel.js';
@@ -98,13 +115,48 @@ const finishedGoodsPreviewPages = {
   priceTypes: 'price-types',
 };
 
-function App({ live }) {
-  const [finishedGoodsPage, setFinishedGoodsPage] = useState(() => {
-    const key = new URLSearchParams(location.search).get('finishedGoods');
-    return Object.hasOwn(finishedGoodsPages, key) ? key : 'sizes';
-  });
+const billingPages = {
+  billingBuyerPO: BuyerPO,
+  billingInvoices: BillingInvoices,
+  billingPacking: PackingLists,
+  billingDispatch: BillingDispatch,
+  billingSummary: BillingSummary,
+  billingCartons: BillingCartons,
+  billingReturns: BillingReturns,
+};
+
+function workspaceRoute() {
+  const params = new URLSearchParams(location.search);
+  const finishedGoods = params.get('finishedGoods');
+  const documentPage = location.pathname === productionDocumentPath;
+  return {
+    page: documentPage
+      ? location.hash === '#worker-bills'
+        ? 'jobWorkerBills'
+        : 'productionChallans'
+      : workspacePathPage(location) || pageFromHash(),
+    finishedGoodsPage: Object.hasOwn(finishedGoodsPages, finishedGoods) ? finishedGoods : 'sizes',
+    floor: location.pathname === '/fabric.html' && params.get('floor') === '1',
+    task: params.get('task'),
+  };
+}
+
+function isManagementPage(page, live) {
+  return live && workspacePath(page);
+}
+
+function App({ live, refreshWorkspaceAccess }) {
+  const [billingInvoice, setBillingInvoice] = useState(null);
+  const [billingPO, setBillingPO] = useState(null);
+  const [billingTransport, setBillingTransport] = useState(null);
+  const [billingFormalPO, setBillingFormalPO] = useState(null);
+  const [{ page, finishedGoodsPage, floor, task }, setRoute] = useState(workspaceRoute);
+  const [workspaceDataStarted, setWorkspaceDataStarted] = useState(
+    () => !isManagementPage(page, live),
+  );
+  const routeHref = useRef(location.href);
+  const documentListState = useRef({ productionChallans: {}, jobWorkerBills: {} });
   const [sidebarOpen, setSidebarOpen] = useWorkspaceMenu();
-  const floor = new URLSearchParams(location.search).get('floor') === '1';
   const [access, setAccess] = useState(() => (live ? sessionAccessModel(live) : loadAccess())),
     [actor, setActor] = useState(live?.actor || 'owner');
   useEffect(() => {
@@ -137,22 +189,42 @@ function App({ live }) {
           }
         : load(),
     ),
-    [page, setPage] = useState(pageFromHash),
     [view, setView] = useState('overview'),
     [query, setQuery] = useState(''),
     [selected, setSelected] = useState(null),
     [editor, setEditor] = useState(null),
     [notice, setNotice] = useState('Local workspace · sample data · no live database writes');
+  function syncRoute() {
+    if (routeHref.current === location.href) return;
+    routeHref.current = location.href;
+    const next = workspaceRoute();
+    setRoute(next);
+    if (!isManagementPage(next.page, live)) setWorkspaceDataStarted(true);
+    setQuery('');
+    setSelected(null);
+    setView('overview');
+    setEditor(null);
+  }
   useEffect(() => {
-    const handle = () => {
-      setPage(pageFromHash());
-      setQuery('');
-      setSelected(null);
-      setView('overview');
+    window.addEventListener('hashchange', syncRoute);
+    window.addEventListener('popstate', syncRoute);
+    return () => {
+      window.removeEventListener('hashchange', syncRoute);
+      window.removeEventListener('popstate', syncRoute);
     };
-    window.addEventListener('hashchange', handle);
-    return () => window.removeEventListener('hashchange', handle);
   }, []);
+  useEffect(() => {
+    const titles = {
+      jobWorkerBills: 'Worker bills',
+      productionChallans: 'Production Challans',
+      files: 'Files · Garment workspace',
+      'files-admin': 'Bucket settings · Garment workspace',
+    };
+    document.title =
+      live && Object.hasOwn(adminTabs, page)
+        ? 'User management · Garment workspace'
+        : titles[page] || 'Fabric · Garment workspace';
+  }, [page, !!live]);
   const [liveReady, setLiveReady] = useState(!live),
     [liveError, setLiveError] = useState(''),
     [productionError, setProductionError] = useState(''),
@@ -269,8 +341,8 @@ function App({ live }) {
     }
   }
   useEffect(() => {
-    if (commands) void refreshLive();
-  }, [commands, live]);
+    if (commands && workspaceDataStarted) void refreshLive();
+  }, [commands, live, workspaceDataStarted]);
   const data = useMemo(
     () => ({
       ...state.data,
@@ -319,26 +391,27 @@ function App({ live }) {
       return false;
     }
   }
-  function navigate(key, finishedGoods) {
-    if (live && Object.hasOwn(adminPages, key)) {
-      location.href = '/access.html#' + key;
-      return;
-    }
+  function navigate(key, finishedGoods, floorUrl) {
     if (window.matchMedia('(max-width:700px)').matches) setSidebarOpen(false);
-    if (floor) {
+    const path = live && workspacePath(key);
+    if (path || Object.hasOwn(productionDocumentRoutes, key) || floorUrl) {
+      const url =
+        floorUrl || path || productionDocumentPath + '#' + productionDocumentRoutes[key][1];
+      if (location.pathname + location.search + location.hash !== url)
+        history.pushState(null, '', url);
+    } else {
       const url = new URL(location.href);
+      if (url.pathname !== '/fabric.html') {
+        url.pathname = '/fabric.html';
+        url.search = live ? '?live=1' : '';
+      }
       url.searchParams.delete('floor');
       url.searchParams.delete('task');
       if (finishedGoods) url.searchParams.set('finishedGoods', finishedGoods);
       url.hash = key === 'home' ? '' : key;
-      location.assign(url);
-      return;
+      if (url.href !== location.href) history.pushState(null, '', url);
     }
-    setPage(key);
-    location.hash = key === 'home' ? '' : key;
-    setQuery('');
-    setSelected(null);
-    setView('overview');
+    syncRoute();
     setNotice(
       live
         ? 'Live Supabase records · saved changes are shared'
@@ -773,6 +846,7 @@ function App({ live }) {
           preferenceClient: live ? getAccessClient() : null,
           data,
           actor,
+          key: task,
           mode: 'floor',
           live: !!live,
           liveTasks: live ? productionTasks(data) : undefined,
@@ -785,38 +859,29 @@ function App({ live }) {
         })
       : h('section', { className: 'access-denied' }, h('h1', null, 'Access restricted'));
   }
-  const shell = { className: `fabric-shell${sidebarOpen ? '' : ' sidebar-collapsed'}` };
-  const main = { className: 'fabric-main' };
-  const sidebar = h(WorkspaceSidebar, {
-    live,
-    access,
-    actor,
-    page: floor ? 'productionUpdateTaskStatus' : page,
-    finishedGoodsPage,
-    open: sidebarOpen,
-    onClose: () => setSidebarOpen(false),
-    onPage: navigate,
-    onFinishedGoods: (key) => {
-      setFinishedGoodsPage(key);
-      navigate('finishedProducts', key);
-    },
-  });
-  const toolbar = h(WorkspaceMenuToolbar, {
-    open: sidebarOpen,
-    onToggle: () => setSidebarOpen((open) => !open),
-  });
-  if (floor) return h('div', shell, sidebar, h('main', main, toolbar, renderFloor()));
-  return h(
-    React.Fragment,
-    null,
-    h(
-      'div',
-      shell,
-      sidebar,
-      h(
-        'main',
-        main,
-        toolbar,
+  const documentPage = Object.hasOwn(productionDocumentRoutes, page);
+  const administrationPage = live && Object.hasOwn(adminTabs, page);
+  const filesPage = page === 'files' || page === 'files-admin';
+  function renderWorkspace() {
+    if (administrationPage)
+      return h(AccessApp, {
+        key: actor,
+        workspaceAccess: live,
+        page,
+        navigate,
+        refreshWorkspaceAccess,
+      });
+    if (filesPage)
+      return h(FilesWorkspace, {
+        key: page,
+        access: live,
+        admin: page === 'files-admin',
+        navigate,
+      });
+    if (!floor && !documentPage) {
+      return h(
+        React.Fragment,
+        null,
         live
           ? h(
               'div',
@@ -859,8 +924,8 @@ function App({ live }) {
                 ),
               ),
             ),
-        live && Object.hasOwn(adminPages, page)
-          ? h('section', null, h('a', { href: '/access.html#' + page }, 'Open live Administration'))
+        Object.hasOwn(adminPages, page)
+          ? h(AdminPanel, { page, access, actor, onSave: saveAccess })
           : Object.hasOwn(hrPages, page)
             ? h(HRPanel, {
                 key: page,
@@ -871,10 +936,68 @@ function App({ live }) {
                 contactChoices: data.contacts || [],
                 contactItems: data.contact_items || [],
               })
-            : Object.hasOwn(adminPages, page)
-              ? h(AdminPanel, { page, access, actor, onSave: saveAccess })
-              : page === 'finishedProducts'
-                ? can('view', 'finishedProducts')
+            : page === 'finishedProducts' || Object.hasOwn(billingPages, page)
+              ? page !== 'finishedProducts'
+                ? live && can('view', page)
+                  ? h(billingPages[page], {
+                      client: getAccessClient(),
+                      key: actor + ':' + page,
+                      canCreate: can('create', page),
+                      canEdit: can('edit', page),
+                      canDelete: can('delete', page),
+                      canViewPacking: can('view', 'billingPacking'),
+                      canViewCartons: can('view', 'billingCartons'),
+                      canCreatePacking: can('create', 'billingPacking'),
+                      openInvoices: can('view', 'billingInvoices')
+                        ? () => navigate('billingInvoices')
+                        : undefined,
+                      canViewReturns: can('view', 'billingReturns'),
+                      canCreateReturn:
+                        can('view', 'billingReturns') && can('create', 'billingReturns'),
+                      poToOpen: billingPO,
+                      onPOOpened: () => setBillingPO(null),
+                      openPO: can('view', 'billingBuyerPO')
+                        ? (id) => {
+                            setBillingPO(id);
+                            navigate('billingBuyerPO');
+                          }
+                        : undefined,
+                      transportToOpen: billingTransport,
+                      onTransportOpened: () => setBillingTransport(null),
+                      openTransport: can('view', 'billingDispatch')
+                        ? (id) => {
+                            setBillingTransport(id);
+                            navigate('billingDispatch');
+                          }
+                        : undefined,
+                      invoiceToOpen: billingInvoice,
+                      formalPO: billingFormalPO,
+                      onFormalPOOpened: () => setBillingFormalPO(null),
+                      createInvoice: can('create', 'billingInvoices')
+                        ? (id) => {
+                            setBillingFormalPO(id ?? '');
+                            navigate('billingInvoices');
+                          }
+                        : undefined,
+                      onInvoiceOpened: () => setBillingInvoice(null),
+                      openInvoice: can('view', 'billingInvoices')
+                        ? (id) => {
+                            setBillingInvoice(id);
+                            navigate('billingInvoices');
+                          }
+                        : undefined,
+                      capabilities: {
+                        format: can('format', page),
+                        export: can('export', page),
+                        print: can('print', page),
+                      },
+                    })
+                  : h(
+                      'section',
+                      { className: 'access-denied' },
+                      h('h1', null, pages[page].title + ' access restricted'),
+                    )
+                : can('view', 'finishedProducts')
                   ? !live && Object.hasOwn(finishedGoodsPreviewPages, finishedGoodsPage)
                     ? h('iframe', {
                         title: finishedGoodsPages[finishedGoodsPage],
@@ -900,228 +1023,266 @@ function App({ live }) {
                       { className: 'access-denied' },
                       h('h1', null, 'Finished Goods access restricted'),
                     )
-                : live && (!liveReady || activeLiveError)
+              : live && (!liveReady || activeLiveError)
+                ? h(
+                    'section',
+                    null,
+                    h(
+                      'h2',
+                      null,
+                      activeLiveError ? 'Unable to load live records' : 'Loading database records…',
+                    ),
+                    activeLiveError && h('p', { role: 'alert' }, activeLiveError),
+                    activeLiveError && h('button', { onClick: refreshLive }, 'Retry'),
+                  )
+                : live && page !== 'home' && page !== 'fabricOverview' && !connectedPage(page)
                   ? h(
                       'section',
                       null,
-                      h(
-                        'h2',
-                        null,
-                        activeLiveError
-                          ? 'Unable to load live records'
-                          : 'Loading database records…',
-                      ),
-                      activeLiveError && h('p', { role: 'alert' }, activeLiveError),
-                      activeLiveError && h('button', { onClick: refreshLive }, 'Retry'),
+                      h('h2', null, 'This section is not connected yet'),
+                      h('p', null, 'This module is awaiting its live backend connection.'),
                     )
-                  : live && page !== 'home' && page !== 'fabricOverview' && !connectedPage(page)
-                    ? h(
-                        'section',
-                        null,
-                        h('h2', null, 'This section is not connected yet'),
-                        h('p', null, 'This module is awaiting its live backend connection.'),
-                      )
-                    : page === 'home'
-                      ? h(OverviewPanel, {
-                          data,
-                          canView: (key) => can('view', key),
-                          onNavigate: navigate,
-                          live: !!live,
-                        })
-                      : page === 'fabricOverview'
-                        ? fabricHome()
-                        : !can('view')
-                          ? h(
-                              'section',
-                              { className: 'access-denied' },
-                              h('h1', null, 'Access restricted'),
-                              h(
-                                'p',
-                                null,
-                                'This page is not available to the selected preview role.',
-                              ),
-                            )
-                          : page === 'productionJobs'
-                            ? h(JobHistory, {
+                  : page === 'home'
+                    ? h(OverviewPanel, {
+                        data,
+                        canView: (key) => can('view', key),
+                        onNavigate: navigate,
+                        live: !!live,
+                      })
+                    : page === 'fabricOverview'
+                      ? fabricHome()
+                      : !can('view')
+                        ? h(
+                            'section',
+                            { className: 'access-denied' },
+                            h('h1', null, 'Access restricted'),
+                            h(
+                              'p',
+                              null,
+                              'This page is not available to the selected preview role.',
+                            ),
+                          )
+                        : page === 'productionJobs'
+                          ? h(JobHistory, {
+                              data,
+                              onUpdate: () => navigate('productionUpdateTaskStatus'),
+                              canUpdate: can('edit', 'productionJobs'),
+                            })
+                          : ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(page)
+                            ? h(PortalTaskBoard, {
+                                preferenceClient: live ? getAccessClient() : null,
+                                key: page,
                                 data,
-                                onUpdate: () => navigate('productionUpdateTaskStatus'),
-                                canUpdate: can('edit', 'productionJobs'),
+                                live: !!live,
+                                liveTasks: live ? productionTasks(data) : undefined,
+                                onCommit: live ? commitProduction : undefined,
+                                onImage: live ? production.image : undefined,
+                                onStart: live
+                                  ? async (part, employee) =>
+                                      applyProduction(await production.start(data, part, employee))
+                                  : undefined,
+                                actor,
+                                mode: page === 'productionTaskBoard' ? 'board' : 'update',
+                                onOpenFloor: (url) =>
+                                  navigate('productionUpdateTaskStatus', undefined, url),
+                                canEdit: can('edit'),
+                                canCreate: can('create', 'productionJobs'),
+                                onCreate: (next) => {
+                                  if (live || !can('create', 'productionJobs')) return;
+                                  save({ ...state, data: next });
+                                },
+                                onSave: (next) => {
+                                  if (live || !can('edit')) return;
+                                  save({ ...state, data: next });
+                                },
                               })
-                            : ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(page)
-                              ? h(PortalTaskBoard, {
-                                  preferenceClient: live ? getAccessClient() : null,
-                                  key: page,
-                                  data,
-                                  live: !!live,
-                                  liveTasks: live ? productionTasks(data) : undefined,
-                                  onCommit: live ? commitProduction : undefined,
-                                  onImage: live ? production.image : undefined,
-                                  onStart: live
-                                    ? async (part, employee) =>
-                                        applyProduction(
-                                          await production.start(data, part, employee),
-                                        )
-                                    : undefined,
-                                  actor,
-                                  mode: page === 'productionTaskBoard' ? 'board' : 'update',
-                                  canEdit: can('edit'),
-                                  canCreate: can('create', 'productionJobs'),
-                                  onCreate: (next) => {
-                                    if (live || !can('create', 'productionJobs')) return;
-                                    save({ ...state, data: next });
-                                  },
-                                  onSave: (next) => {
-                                    if (live || !can('edit')) return;
-                                    save({ ...state, data: next });
-                                  },
-                                })
-                              : h(
-                                  React.Fragment,
-                                  null,
-                                  h(
-                                    'header',
-                                    { className: 'fabric-page-header' },
-                                    h(
-                                      'div',
-                                      null,
-                                      h(
-                                        'p',
-                                        { className: 'eyebrow' },
-                                        (spec.section === 'colours'
-                                          ? 'COLOURS / '
-                                          : spec.section === 'production'
-                                            ? 'PRODUCTION / '
-                                            : spec.section === 'inventory'
-                                              ? 'RAW MATERIAL INVENTORY / '
-                                              : spec.section === 'miscellaneous'
-                                                ? 'MISCELLANEOUS / '
-                                                : 'FABRIC / ') + spec.title.toUpperCase(),
-                                      ),
-                                      h('h1', null, spec.title),
-                                      h('p', null, spec.subtitle),
-                                    ),
-                                    h(WorkspaceViewToggle, {
-                                      view,
-                                      onChange: (mode) => {
-                                        setView(mode);
-                                        setSelected(null);
-                                      },
-                                    }),
-                                  ),
+                            : h(
+                                React.Fragment,
+                                null,
+                                h(
+                                  'header',
+                                  { className: 'fabric-page-header' },
                                   h(
                                     'div',
-                                    {
-                                      className:
-                                        view === 'sheet'
-                                          ? 'fabric-actions worksheet-actions'
-                                          : 'fabric-actions',
-                                    },
-                                    view === 'sheet'
-                                      ? h(GridSearch, {
-                                          label: 'Search ' + spec.title,
-                                          placeholder: searchPlaceholder,
-                                          value: query,
-                                          onChange: (value) => {
-                                            setQuery(value);
-                                            setSelected(null);
-                                          },
-                                        })
-                                      : h('input', {
-                                          type: 'search',
-                                          'aria-label': 'Search ' + spec.title,
-                                          placeholder: searchPlaceholder,
-                                          value: query,
-                                          onChange: (e) => {
-                                            setQuery(e.target.value);
-                                            setSelected(null);
-                                          },
-                                        }),
-                                    !spec.readonly &&
-                                      can('create') &&
-                                      h(
-                                        'button',
-                                        { className: 'primary', onClick: () => edit(null) },
-                                        spec.newLabel ||
-                                          (page === 'suppliers'
-                                            ? '+ Add supplier'
-                                            : '+ New document'),
-                                      ),
-                                    !spec.readonly &&
-                                      can('edit') &&
-                                      view === 'sheet' &&
-                                      h(
-                                        'button',
-                                        {
-                                          disabled:
-                                            query !== sheetQuery ||
-                                            !selected?.documentId ||
-                                            !records.includes(selected),
-                                          onClick: () => edit(selected.documentId),
-                                        },
-                                        spec.master
-                                          ? 'Edit selected record'
-                                          : 'Edit selected document',
-                                      ),
+                                    null,
+                                    h(
+                                      'p',
+                                      { className: 'eyebrow' },
+                                      (spec.section === 'colours'
+                                        ? 'COLOURS / '
+                                        : spec.section === 'production'
+                                          ? 'PRODUCTION / '
+                                          : spec.section === 'inventory'
+                                            ? 'RAW MATERIAL INVENTORY / '
+                                            : spec.section === 'miscellaneous'
+                                              ? 'MISCELLANEOUS / '
+                                              : 'FABRIC / ') + spec.title.toUpperCase(),
+                                    ),
+                                    h('h1', null, spec.title),
+                                    h('p', null, spec.subtitle),
                                   ),
-                                  page === 'materialStock' &&
+                                  h(WorkspaceViewToggle, {
+                                    view,
+                                    onChange: (mode) => {
+                                      setView(mode);
+                                      setSelected(null);
+                                    },
+                                  }),
+                                ),
+                                h(
+                                  'div',
+                                  {
+                                    className:
+                                      view === 'sheet'
+                                        ? 'fabric-actions worksheet-actions'
+                                        : 'fabric-actions',
+                                  },
+                                  view === 'sheet'
+                                    ? h(GridSearch, {
+                                        label: 'Search ' + spec.title,
+                                        placeholder: searchPlaceholder,
+                                        value: query,
+                                        onChange: (value) => {
+                                          setQuery(value);
+                                          setSelected(null);
+                                        },
+                                      })
+                                    : h('input', {
+                                        type: 'search',
+                                        'aria-label': 'Search ' + spec.title,
+                                        placeholder: searchPlaceholder,
+                                        value: query,
+                                        onChange: (e) => {
+                                          setQuery(e.target.value);
+                                          setSelected(null);
+                                        },
+                                      }),
+                                  !spec.readonly &&
+                                    can('create') &&
+                                    h(
+                                      'button',
+                                      { className: 'primary', onClick: () => edit(null) },
+                                      spec.newLabel ||
+                                        (page === 'suppliers'
+                                          ? '+ Add supplier'
+                                          : '+ New document'),
+                                    ),
+                                  !spec.readonly &&
+                                    can('edit') &&
                                     view === 'sheet' &&
-                                    can('create', 'materialIssues') &&
                                     h(
                                       'button',
                                       {
-                                        className: 'primary',
-                                        disabled: !selected || selected.left <= 0,
-                                        onClick: () => reconcile(selected.id),
+                                        disabled:
+                                          query !== sheetQuery ||
+                                          !selected?.documentId ||
+                                          !records.includes(selected),
+                                        onClick: () => edit(selected.documentId),
                                       },
-                                      'Reconcile selected stock',
+                                      spec.master
+                                        ? 'Edit selected record'
+                                        : 'Edit selected document',
                                     ),
+                                ),
+                                page === 'materialStock' &&
+                                  view === 'sheet' &&
+                                  can('create', 'materialIssues') &&
+                                  h(
+                                    'button',
+                                    {
+                                      className: 'primary',
+                                      disabled: !selected || selected.left <= 0,
+                                      onClick: () => reconcile(selected.id),
+                                    },
+                                    'Reconcile selected stock',
+                                  ),
+                                h(
+                                  'div',
+                                  {
+                                    className: 'fabric-status',
+                                    role: 'status',
+                                    'aria-live': 'polite',
+                                  },
+                                  notice,
+                                  live && h('button', { onClick: refreshLive }, 'Refresh records'),
+                                ),
+                                view === 'overview' &&
+                                  records.length === 0 &&
                                   h(
                                     'div',
-                                    {
-                                      className: 'fabric-status',
-                                      role: 'status',
-                                      'aria-live': 'polite',
-                                    },
-                                    notice,
-                                    live &&
-                                      h('button', { onClick: refreshLive }, 'Refresh records'),
-                                  ),
-                                  view === 'overview' &&
-                                    records.length === 0 &&
+                                    { className: 'empty-state' },
+                                    h('h2', null, 'Nothing here yet'),
                                     h(
-                                      'div',
-                                      { className: 'empty-state' },
-                                      h('h2', null, 'Nothing here yet'),
-                                      h(
-                                        'p',
-                                        null,
-                                        query
-                                          ? 'Try a different search.'
-                                          : spec.master
-                                            ? 'Add the first record to get started.'
-                                            : 'Add the first document to get started.',
-                                      ),
+                                      'p',
+                                      null,
+                                      query
+                                        ? 'Try a different search.'
+                                        : spec.master
+                                          ? 'Add the first record to get started.'
+                                          : 'Add the first document to get started.',
                                     ),
-                                  view === 'overview'
-                                    ? overview()
-                                    : h(FabricSheet, {
-                                        key: actor + ':' + page,
-                                        page,
-                                        spec,
-                                        records,
-                                        client: live ? getAccessClient() : null,
-                                        preferences,
-                                        onSelect: setSelected,
-                                        onNotice: setNotice,
-                                        capabilities: {
-                                          format: can('format'),
-                                          export: can('export'),
-                                          print: can('print'),
-                                        },
-                                      }),
-                                ),
-      ),
-    ),
+                                  ),
+                                view === 'overview'
+                                  ? overview()
+                                  : h(FabricSheet, {
+                                      key: actor + ':' + page,
+                                      page,
+                                      spec,
+                                      records,
+                                      client: live ? getAccessClient() : null,
+                                      preferences,
+                                      onSelect: setSelected,
+                                      onNotice: setNotice,
+                                      capabilities: {
+                                        format: can('format'),
+                                        export: can('export'),
+                                        print: can('print'),
+                                      },
+                                    }),
+                              ),
+      );
+    }
+    if (floor) return renderFloor();
+    return can('view')
+      ? h(ProductionDocuments, {
+          key: page,
+          billing: page === 'jobWorkerBills',
+          listState: documentListState.current[page],
+        })
+      : h('section', { className: 'access-denied' }, h('h1', null, 'Access restricted'));
+  }
+  const shell = {
+    'data-production-documents': documentPage ? '' : undefined,
+    className: `fabric-shell${administrationPage || filesPage ? ' access-workspace' : ''}${sidebarOpen ? '' : ' sidebar-collapsed'}`,
+  };
+  const main = {
+    className: filesPage
+      ? 'access-live-shell files-live'
+      : administrationPage
+        ? 'access-live-shell'
+        : 'fabric-main',
+  };
+  const sidebar = h(WorkspaceSidebar, {
+    live,
+    access,
+    actor,
+    page: floor ? 'productionUpdateTaskStatus' : page,
+    finishedGoodsPage,
+    open: sidebarOpen,
+    onClose: () => setSidebarOpen(false),
+    onPage: navigate,
+    onWorkspaceLink: live ? navigate : undefined,
+    onProductionDocument: navigate,
+    onFinishedGoods: (key) => navigate('finishedProducts', key),
+  });
+  const toolbar = h(WorkspaceMenuToolbar, {
+    open: sidebarOpen,
+    onToggle: () => setSidebarOpen((open) => !open),
+  });
+  return h(
+    React.Fragment,
+    null,
+    h('div', shell, sidebar, h('main', main, toolbar, renderWorkspace())),
     editor &&
       h(
         editor.page === 'labDips'
@@ -1160,8 +1321,12 @@ function App({ live }) {
   );
 }
 createRoot(document.getElementById('fabric-root')).render(
-  new URLSearchParams(location.search).get('live') === '1' ||
+  location.pathname === productionDocumentPath ||
+    workspacePathPage(location) ||
+    new URLSearchParams(location.search).get('live') === '1' ||
     (import.meta.env.PROD && import.meta.env.VITE_DATA_MODE === 'supabase')
-    ? h(WorkspaceGate, { render: (live) => h(App, { live }) })
+    ? h(WorkspaceGate, {
+        render: (live, refreshWorkspaceAccess) => h(App, { live, refreshWorkspaceAccess }),
+      })
     : h(App),
 );
