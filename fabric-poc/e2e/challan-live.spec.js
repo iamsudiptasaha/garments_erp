@@ -72,7 +72,16 @@ test('authenticated Challan and Worker Bill CRUD with real Supabase', async ({ p
   await page.getByRole('link', { name: 'Challans', exact: true }).click();
   await expect(page).toHaveURL(/production-challan[.]html#challans$/);
   await page.getByRole('button', { name: '+ New challan' }).click();
+  const description = page.getByLabel('Description').first();
+  const descriptionNode = await description.elementHandle();
   await page.getByLabel('Job worker').selectOption('974001');
+  await description.fill('Draft survives editing job lines');
+  await page.getByRole('button', { name: 'Add job line' }).click();
+  await page.getByRole('button', { name: 'Remove', exact: true }).last().click();
+  await expect(description).toHaveValue('Draft survives editing job lines');
+  expect(await description.evaluate((node, original) => node === original, descriptionNode)).toBe(
+    true,
+  );
   await page.getByRole('button', { name: 'Select job variant' }).click();
   await page.getByRole('searchbox', { name: 'Search job variants' }).fill('CHALLAN-TEST');
   await page.getByRole('button', { name: /Select CHALLAN-TEST.*TEST-JOB/ }).click();
@@ -108,6 +117,7 @@ test('authenticated Challan and Worker Bill CRUD with real Supabase', async ({ p
   await page.getByLabel('Billed price for item 1').fill('3');
   await page.getByLabel('Billed price for item 2').fill('4');
   await page.getByRole('button', { name: 'Save worker bill' }).click();
+  await expect(page.getByRole('dialog', { name: 'New worker bill' })).toBeHidden();
   await page.getByRole('button', { name: new RegExp(invoice) }).click();
   await expect(detail.getByRole('cell', { name: challanNumber, exact: true })).toBeVisible();
   await expect(detail.getByRole('cell', { name: issued[0].id, exact: true })).toBeVisible();
