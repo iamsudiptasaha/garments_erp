@@ -69,21 +69,6 @@
   width: fit-content;
   margin-top: 14px;
 }
-.account-email-settings {
-  max-width: 420px;
-  margin-block: 14px;
-}
-.account-email-settings form,
-.account-email-settings label {
-  display: grid;
-  gap: 8px;
-}
-.account-email-settings form {
-  margin-top: 12px;
-}
-.account-email-settings button {
-  justify-self: start;
-}
 .access-workspace > .access-live-shell {
   width: 100%;
   max-width: none;

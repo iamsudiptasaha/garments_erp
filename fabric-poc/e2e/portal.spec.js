@@ -132,7 +132,9 @@ test('successful sign-in lands on Overview using a mocked transport, never a rea
   await page.getByRole('button', { name: 'Save personal details' }).click();
   await expect(account.getByText('Updated Employee')).toBeVisible();
   await expect(page.getByText('Production operator', { exact: true })).toBeVisible();
-  await expect(page.getByText('Update Email', { exact: true })).toBeVisible();
+  await expect(page.getByText('employee@example.invalid', { exact: true })).toBeVisible();
+  await expect(page.getByText('Change my password', { exact: true })).toBeVisible();
+  await expect(page.getByText('Update Email', { exact: true })).toHaveCount(0);
   const png = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
@@ -588,86 +590,4 @@ test('Administration invites an active employee with selected roles and no mobil
     path: testInfo.outputPath('administration-mobile.png'),
     animations: 'disabled',
   });
-});
-
-test('Update Email keeps the code form open on failure and confirms a successful retry', async ({
-  page,
-}, testInfo) => {
-  test.skip(hosted, 'Uses synthetic email change responses');
-  const id = '00000000-0000-4000-8000-000000000005';
-  const exp = Math.floor(Date.now() / 1000) + 3600;
-  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
-  const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: id, exp })}.synthetic`;
-  let email = 'current@example.invalid';
-  const newEmail = 'new@example.invalid';
-  let deliveries = 0;
-  const user = () => ({
-    id,
-    email,
-    aud: 'authenticated',
-    role: 'authenticated',
-    app_metadata: {},
-    user_metadata: {},
-  });
-  const session = () => ({
-    access_token: token,
-    refresh_token: 'synthetic',
-    expires_at: exp,
-    expires_in: 3600,
-    token_type: 'bearer',
-    user: user(),
-  });
-  await page.addInitScript(
-    (initial) => localStorage.setItem('sb-example-auth-token', JSON.stringify(initial)),
-    session(),
-  );
-  await page.route('https://example.invalid/**', async (route) => {
-    const request = route.request();
-    const path = new URL(request.url()).pathname;
-    if (path.endsWith('/erp_authorize_employee_email_change')) {
-      expect(request.postDataJSON()).toEqual({ p_email: newEmail });
-      return route.fulfill({ json: newEmail });
-    }
-    if (path === '/auth/v1/user') {
-      if (request.method() === 'PUT') {
-        expect(request.postDataJSON()).toMatchObject({ email: newEmail });
-        if (++deliveries > 1)
-          return route.fulfill({ status: 429, json: { message: 'email rate limit' } });
-      }
-      return route.fulfill({ json: user() });
-    }
-    if (path === '/auth/v1/verify') {
-      const input = request.postDataJSON();
-      expect(input).toMatchObject({ email: newEmail, type: 'email_change' });
-      if (input.token === '000000')
-        return route.fulfill({ status: 403, json: { message: 'invalid code' } });
-      email = newEmail;
-      return route.fulfill({ json: session() });
-    }
-    if (path === '/auth/v1/token') return route.fulfill({ json: session() });
-    if (path.endsWith('/erp_my_profile'))
-      return route.fulfill({ json: { name: 'Employee Test', email, roles: [] } });
-    if (path.endsWith('/erp_account_security'))
-      return route.fulfill({ json: { enabled: true, ready: true } });
-    if (path.endsWith('/erp_access_snapshot'))
-      return route.fulfill({
-        json: { actor: id, enabled: true, administrator: false, permissions: {} },
-      });
-    return route.fulfill({ json: {} });
-  });
-  await page.goto('/access.html#profile');
-  await page.getByText('Update Email', { exact: true }).click();
-  await page.getByLabel('New email', { exact: true }).fill(newEmail);
-  await page.getByRole('button', { name: 'Send code', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Your current login email is still active.');
-  await page.screenshot({ path: testInfo.outputPath('update-email-otp.png') });
-  await page.getByRole('button', { name: 'Resend code' }).click();
-  await expect(page.getByRole('status')).toHaveText('Wait before requesting another code.');
-  await page.getByLabel('Email verification code').fill('000000');
-  await page.getByRole('button', { name: 'Verify new email' }).click();
-  await expect(page.getByRole('status')).toContainText('could not be verified');
-  await page.getByLabel('Email verification code').fill('123456');
-  await page.getByRole('button', { name: 'Verify new email' }).click();
-  await expect(page.getByRole('status')).toContainText('Email updated.');
-  await expect(page.getByLabel('Email verification code')).toHaveCount(0);
 });

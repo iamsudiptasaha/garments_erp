@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { createVerificationClient, getAccessClient } from './client.js';
+import { getAccessClient } from './client.js';
 const h = React.createElement;
 export async function accountCommand(input) {
   const { data, error } = await getAccessClient().functions.invoke('erp-accounts', { body: input });
@@ -262,118 +262,6 @@ export function Authenticator({ onVerified }) {
             ),
             h('button', { type: 'submit', disabled: busy }, 'Verify authenticator'),
           ),
-  );
-}
-export function EmailSettings({ onUpdated } = {}) {
-  const [email, setEmail] = useState(''),
-    [pending, setPending] = useState(''),
-    [code, setCode] = useState(''),
-    [message, setMessage] = useState(''),
-    [busy, setBusy] = useState(false);
-  const client = getAccessClient();
-  async function send(e) {
-    e.preventDefault();
-    setBusy(true);
-    setMessage('');
-    try {
-      const approval = await client.rpc('erp_authorize_employee_email_change', { p_email: email });
-      if (approval.error) throw approval.error;
-      const sent = await client.auth.updateUser({ email: approval.data });
-      if (sent.error) {
-        if (sent.error.status === 429) throw Error('Wait before requesting another code.');
-        throw Error('Could not send a code to that address. Check it or use a different email.');
-      }
-      setPending(approval.data);
-      setCode('');
-      setMessage(
-        'Enter the code sent to your new email. Your current login email is still active.',
-      );
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function verify(e) {
-    e.preventDefault();
-    setBusy(true);
-    setMessage('');
-    try {
-      // The email verification session must not replace the original password and TOTP session.
-      const verifier = createVerificationClient();
-      const verified = await verifier.auth.verifyOtp({
-        email: pending,
-        token: code,
-        type: 'email_change',
-      });
-      if (verified.data?.session) await verifier.auth.signOut({ scope: 'local' });
-      const user = await client.auth.getUser();
-      if (user.data.user?.email?.toLowerCase() !== pending) {
-        if (verified.error?.status === 429) throw Error('Too many attempts. Wait before retrying.');
-        throw Error('The change could not be verified. Retry the code or request a new one.');
-      }
-      const refreshed = await client.auth.refreshSession();
-      setPending('');
-      setEmail('');
-      setCode('');
-      setMessage(
-        refreshed.error
-          ? 'Email updated. Sign out and sign in with the new address.'
-          : 'Email updated. Use the new address the next time you sign in.',
-      );
-      onUpdated?.(user.data.user.email);
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return h(
-    'details',
-    { className: 'account-email-settings' },
-    h('summary', null, 'Update Email'),
-    h(
-      'form',
-      { onSubmit: send },
-      h(
-        'label',
-        null,
-        'New email',
-        h('input', {
-          type: 'email',
-          value: email,
-          required: true,
-          autoComplete: 'email',
-          onChange: (e) => setEmail(e.target.value),
-        }),
-      ),
-      h(
-        'button',
-        { type: 'submit', disabled: busy },
-        pending && pending === email.trim().toLowerCase() ? 'Resend code' : 'Send code',
-      ),
-    ),
-    pending &&
-      h(
-        'form',
-        { onSubmit: verify },
-        h(
-          'label',
-          null,
-          'Email verification code',
-          h('input', {
-            value: code,
-            required: true,
-            inputMode: 'numeric',
-            autoComplete: 'one-time-code',
-            pattern: '[0-9]{6}',
-            maxLength: 6,
-            onChange: (e) => setCode(e.target.value),
-          }),
-        ),
-        h('button', { type: 'submit', disabled: busy }, 'Verify new email'),
-      ),
-    message && h('p', { role: 'status' }, message),
   );
 }
 export function PasswordSettings() {

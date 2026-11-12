@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getAccessClient } from './client.js';
 import { liveFileCommands } from '../files/live.js';
-import { PasswordSettings, EmailSettings } from './security.js';
+import { PasswordSettings } from './security.js';
 
 const h = React.createElement;
 
@@ -260,7 +260,6 @@ export function MyProfile() {
         ),
       ),
     h('h2', null, 'Sign-in settings'),
-    h(EmailSettings, { onUpdated: (email) => setProfile((old) => ({ ...old, email })) }),
     h(PasswordSettings),
     h('p', null, 'Authenticator app verification is active.'),
   );
