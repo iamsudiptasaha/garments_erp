@@ -9,11 +9,6 @@ export function challanDocuments(client = getAccessClient()) {
     return data;
   }
   return {
-    async authenticate() {
-      const { data, error } = await client.auth.getSession();
-      if (error) throw error;
-      return Boolean(data.session);
-    },
     async read(billing) {
       const data = await rpc('erp_challan_documents', { p_billing: billing });
       const sortSizes = (sizes) => data.sizeOrder.filter((size) => sizes.includes(size));

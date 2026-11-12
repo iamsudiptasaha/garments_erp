@@ -1,7 +1,6 @@
 import { flushNavigationPreferences } from './navigation-preferences.js';
 import { RecordGrid } from '../fabric/record-grid.js';
 import React, { useEffect, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { getAccessClient, getLoginMethods } from './client.js';
 import { WorkspaceMenuToolbar, WorkspaceSidebar, useWorkspaceMenu } from './navigation.js';
 import { Authenticator, RecoveryForm, PasswordSettings } from './security.js';
@@ -15,25 +14,28 @@ import {
 import '../fabric/styles.css';
 import '../admin/styles.css';
 import './styles.css';
+import { accountReturnPath, adminTabs, workspacePath } from './workspace-routes.js';
 import { RoleMembers, employeeMatches } from '../admin/members.js';
 const h = React.createElement;
 const flags = ['view', 'create', 'edit', 'format', 'export', 'print'];
-let client = null,
-  configurationError = '';
-try {
-  client = getAccessClient();
-} catch (e) {
-  configurationError = e.message;
+function accessConfiguration() {
+  try {
+    return { client: getAccessClient(), configurationError: '' };
+  } catch (error) {
+    return { client: null, configurationError: error.message };
+  }
 }
 async function rpc(name, args) {
-  const { data, error } = await client.rpc(name, args);
+  const { data, error } = await getAccessClient().rpc(name, args);
   if (error) throw error;
   return data;
 }
-function AccessApp() {
+export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAccess }) {
+  const [{ client, configurationError }] = useState(accessConfiguration);
+  const embedded = !!workspaceAccess;
   const [user, setUser] = useState(null),
-    [ready, setReady] = useState(false),
-    [access, setAccess] = useState(null),
+    [ready, setReady] = useState(embedded),
+    [access, setAccess] = useState(workspaceAccess ?? null),
     [security, setSecurity] = useState(null),
     [snapshot, setSnapshot] = useState(null),
     [error, setError] = useState(''),
@@ -42,14 +44,34 @@ function AccessApp() {
     [emailLogin, setEmailLogin] = useState(true),
     [phoneEnabled, setPhoneEnabled] = useState(false),
     [password, setPassword] = useState(''),
-    [tab, setTab] = useState(
-      () =>
-        ({ adminRoles: 'roles', adminAccess: 'accounts', adminAudit: 'audit' })[
-          location.hash.slice(1)
-        ] || 'roles',
-    );
-  const [menuOpen, setMenuOpen] = useWorkspaceMenu();
+    [localPage, setLocalPage] = useState('adminRoles');
+  const signedInUser = embedded || !!user;
+  const tab = adminTabs[embedded ? page : localPage] || 'roles';
+  function selectTab(key) {
+    if (embedded) navigate(key);
+    else {
+      const url = workspacePath(key);
+      if (location.pathname + location.search + location.hash !== url)
+        history.pushState(null, '', url);
+      setLocalPage(key);
+    }
+  }
+  function enterWorkspace() {
+    const returnTo = new URLSearchParams(location.search).get('returnTo');
+    location.assign(accountReturnPath(returnTo) || '/fabric.html?live=1');
+  }
   useEffect(() => {
+    if (embedded) return;
+    const syncTab = () => setLocalPage(location.hash.slice(1) || 'adminRoles');
+    window.addEventListener('popstate', syncTab);
+    window.addEventListener('hashchange', syncTab);
+    return () => {
+      window.removeEventListener('popstate', syncTab);
+      window.removeEventListener('hashchange', syncTab);
+    };
+  }, [embedded]);
+  useEffect(() => {
+    if (embedded) return;
     if (!client) {
       setReady(true);
       return;
@@ -76,8 +98,8 @@ function AccessApp() {
       active = false;
       data.subscription.unsubscribe();
     };
-  }, []);
-  async function refresh() {
+  }, [embedded]);
+  async function refresh(updateWorkspace = true) {
     setError('');
     setBusy(true);
     try {
@@ -86,11 +108,17 @@ function AccessApp() {
       if (checked?.enabled && !checked.ready) {
         setAccess(null);
         setSnapshot(null);
+        if (embedded) await refreshWorkspaceAccess();
         return;
       }
       const own = await rpc('erp_access_snapshot');
       setAccess(own);
-      setSnapshot(own.administrator ? await rpc('erp_admin_snapshot') : null);
+      setSnapshot(
+        own.administrator && (!embedded || workspaceAccess.administrator)
+          ? await rpc('erp_admin_snapshot')
+          : null,
+      );
+      if (embedded && updateWorkspace) await refreshWorkspaceAccess();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -98,8 +126,8 @@ function AccessApp() {
     }
   }
   useEffect(() => {
-    if (user) void refresh();
-  }, [user]);
+    if (signedInUser) void refresh(false);
+  }, [signedInUser, user, workspaceAccess?.administrator]);
   async function signIn(e) {
     e.preventDefault();
     setBusy(true);
@@ -113,7 +141,7 @@ function AccessApp() {
       setPassword('');
       const checked = await rpc('erp_account_security');
       setSecurity(checked);
-      if (checked?.ready) location.assign('/fabric.html?live=1');
+      if (checked?.ready) enterWorkspace();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -133,233 +161,249 @@ function AccessApp() {
       h('h1', null, 'User management'),
       h('p', { role: 'alert' }, configurationError),
     );
-  const signedIn = !!user && access?.enabled;
-  const adminTabs = { adminRoles: 'roles', adminAccess: 'accounts', adminAudit: 'audit' };
+  const signedIn = signedInUser && access?.enabled;
+  const content = h(
+    React.Fragment,
+    null,
+    h(
+      'header',
+      { className: 'access-live-header' },
+      h(
+        'div',
+        null,
+        h('p', { className: 'eyebrow' }, 'GARMENT WORKSPACE'),
+        h('h1', null, signedInUser ? 'User management' : 'Sign in'),
+      ),
+      signedInUser &&
+        h(
+          'div',
+          null,
+          h('button', { disabled: busy, onClick: () => refresh() }, 'Refresh access'),
+          !signedIn && h('button', { onClick: signOut }, 'Sign out'),
+        ),
+    ),
+    error && h('p', { className: 'form-error', role: 'alert' }, error),
+    signedIn && h(PasswordSettings),
+    !ready
+      ? h('p', null, 'Loading session…')
+      : !signedInUser
+        ? h(
+            'section',
+            { className: 'access-login' },
+            h(
+              'p',
+              null,
+              emailLogin
+                ? 'Use your email and password.'
+                : 'Use your 10-digit mobile number and password.',
+            ),
+            h(
+              'form',
+              { onSubmit: signIn },
+              h(
+                'label',
+                null,
+                emailLogin ? 'Email' : 'Mobile number',
+                h('input', {
+                  type: emailLogin ? 'email' : 'tel',
+                  autoComplete: emailLogin ? 'username' : 'tel-national',
+                  inputMode: emailLogin ? 'email' : 'numeric',
+                  maxLength: emailLogin ? undefined : 10,
+                  placeholder: emailLogin ? 'you@example.com' : '10-digit mobile number',
+                  value: phone,
+                  onChange: (e) => setPhone(e.target.value),
+                  required: true,
+                }),
+              ),
+              h(
+                'label',
+                null,
+                'Password',
+                h('input', {
+                  type: 'password',
+                  autoComplete: 'current-password',
+                  value: password,
+                  onChange: (e) => setPassword(e.target.value),
+                  required: true,
+                }),
+              ),
+              h(
+                'button',
+                { className: 'primary', disabled: busy, type: 'submit' },
+                busy ? 'Signing in…' : 'Sign in',
+              ),
+            ),
+            phoneEnabled &&
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'login-method-switch',
+                  onClick: () => {
+                    setEmailLogin((v) => !v);
+                    setPhone('');
+                    setError('');
+                  },
+                },
+                emailLogin ? 'Use phone login' : 'Use email login',
+              ),
+            h(RecoveryForm),
+            h(
+              'p',
+              { className: 'editor-note' },
+              'An Administrator must create and enable your account before you can access the portal.',
+            ),
+          )
+        : security?.enabled && !security.ready
+          ? security.mustChangePassword
+            ? h(
+                'section',
+                null,
+                h('h2', null, 'Set your password'),
+                h(
+                  'p',
+                  null,
+                  'Ask your Administrator to send a setup code, sign out, and use Forgot password.',
+                ),
+                h('button', { onClick: signOut }, 'Sign out'),
+              )
+            : h(Authenticator, {
+                onVerified: async () => {
+                  await refresh();
+                  enterWorkspace();
+                },
+              })
+          : !access
+            ? h(
+                'p',
+                null,
+                busy
+                  ? 'Checking account permissions…'
+                  : 'Access could not be loaded. Use Refresh access to retry.',
+              )
+            : !access.enabled
+              ? h(
+                  'section',
+                  { className: 'access-denied' },
+                  h('h2', null, 'Account awaiting activation'),
+                  h('p', null, access.reason),
+                )
+              : !access.administrator || (embedded && !workspaceAccess.administrator)
+                ? h(
+                    'section',
+                    null,
+                    h('h2', null, 'Signed in'),
+                    h(
+                      'p',
+                      null,
+                      'Your account is enabled. Administration is restricted to Administrators.',
+                    ),
+                    h(
+                      'p',
+                      { className: 'editor-note' },
+                      'Business-data integration is still separate from this live access panel.',
+                    ),
+                  )
+                : snapshot &&
+                  h(
+                    React.Fragment,
+                    null,
+                    h(
+                      'div',
+                      { className: 'access-info' },
+                      'Live Supabase account management · changes save to the database',
+                    ),
+                    h(
+                      'div',
+                      { className: 'fabric-view-toggle' },
+                      [
+                        ['adminRoles', 'Roles & permissions'],
+                        ['adminAccess', 'Account access'],
+                        ['adminAudit', 'Activity log'],
+                      ].map(([key, label]) =>
+                        h(
+                          'button',
+                          {
+                            key,
+                            'aria-pressed': tab === adminTabs[key],
+                            onClick: () => selectTab(key),
+                          },
+                          label,
+                        ),
+                      ),
+                    ),
+                    tab === 'roles'
+                      ? h(RoleManager, { snapshot, onSaved: refresh })
+                      : tab === 'accounts'
+                        ? h(
+                            React.Fragment,
+                            null,
+                            h(AccountLifecycle, { snapshot, onSaved: refresh }),
+                            h(AccountManager, { snapshot, onSaved: refresh }),
+                          )
+                        : h(
+                            'section',
+                            { className: 'audit-list' },
+                            snapshot.audit.length
+                              ? snapshot.audit.map((a) =>
+                                  h(
+                                    'article',
+                                    { key: a.id },
+                                    h(
+                                      'div',
+                                      null,
+                                      h('strong', null, a.action),
+                                      h('p', null, `${a.target_type} · ${a.target_id || ''}`),
+                                    ),
+                                    h(
+                                      'time',
+                                      null,
+                                      new Date(a.created_at).toLocaleString('en-IN', {
+                                        timeZone: 'Asia/Kolkata',
+                                      }),
+                                    ),
+                                  ),
+                                )
+                              : h('p', null, 'No access changes recorded.'),
+                          ),
+                  ),
+  );
+  return embedded
+    ? content
+    : h(
+        AccessShell,
+        { access, signedIn, page: localPage, onAdmin: selectTab, onSignOut: signOut },
+        content,
+      );
+}
+
+function AccessShell({ access, signedIn, page, onAdmin, onSignOut, children }) {
+  const [open, setOpen] = useWorkspaceMenu();
   return h(
     'div',
     {
       className: signedIn
-        ? `fabric-shell access-workspace${menuOpen ? '' : ' sidebar-collapsed'}`
+        ? `fabric-shell access-workspace${open ? '' : ' sidebar-collapsed'}`
         : undefined,
     },
     signedIn &&
       h(WorkspaceSidebar, {
         live: access,
-        onSignOut: signOut,
-        page: Object.keys(adminTabs).find((key) => adminTabs[key] === tab),
-        onAdmin: (key) => setTab(adminTabs[key]),
-        open: menuOpen,
-        onClose: () => setMenuOpen(false),
+        page,
+        onAdmin,
+        onSignOut,
+        open,
+        onClose: () => setOpen(false),
       }),
     h(
       'main',
       { className: 'access-live-shell' },
-      signedIn &&
-        h(WorkspaceMenuToolbar, {
-          open: menuOpen,
-          onToggle: () => setMenuOpen((value) => !value),
-        }),
-      h(
-        'header',
-        { className: 'access-live-header' },
-        h(
-          'div',
-          null,
-          h('p', { className: 'eyebrow' }, 'GARMENT WORKSPACE'),
-          h('h1', null, user ? 'User management' : 'Sign in'),
-        ),
-        user &&
-          h(
-            'div',
-            null,
-            h('button', { disabled: busy, onClick: refresh }, 'Refresh access'),
-            !signedIn && h('button', { onClick: signOut }, 'Sign out'),
-          ),
-      ),
-      error && h('p', { className: 'form-error', role: 'alert' }, error),
-      signedIn && h(PasswordSettings),
-      !ready
-        ? h('p', null, 'Loading session…')
-        : !user
-          ? h(
-              'section',
-              { className: 'access-login' },
-              h(
-                'p',
-                null,
-                emailLogin
-                  ? 'Use your email and password.'
-                  : 'Use your 10-digit mobile number and password.',
-              ),
-              h(
-                'form',
-                { onSubmit: signIn },
-                h(
-                  'label',
-                  null,
-                  emailLogin ? 'Email' : 'Mobile number',
-                  h('input', {
-                    type: emailLogin ? 'email' : 'tel',
-                    autoComplete: emailLogin ? 'username' : 'tel-national',
-                    inputMode: emailLogin ? 'email' : 'numeric',
-                    maxLength: emailLogin ? undefined : 10,
-                    placeholder: emailLogin ? 'you@example.com' : '10-digit mobile number',
-                    value: phone,
-                    onChange: (e) => setPhone(e.target.value),
-                    required: true,
-                  }),
-                ),
-                h(
-                  'label',
-                  null,
-                  'Password',
-                  h('input', {
-                    type: 'password',
-                    autoComplete: 'current-password',
-                    value: password,
-                    onChange: (e) => setPassword(e.target.value),
-                    required: true,
-                  }),
-                ),
-                h(
-                  'button',
-                  { className: 'primary', disabled: busy, type: 'submit' },
-                  busy ? 'Signing in…' : 'Sign in',
-                ),
-              ),
-              phoneEnabled &&
-                h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'login-method-switch',
-                    onClick: () => {
-                      setEmailLogin((v) => !v);
-                      setPhone('');
-                      setError('');
-                    },
-                  },
-                  emailLogin ? 'Use phone login' : 'Use email login',
-                ),
-              h(RecoveryForm),
-              h(
-                'p',
-                { className: 'editor-note' },
-                'An Administrator must create and enable your account before you can access the portal.',
-              ),
-            )
-          : security?.enabled && !security.ready
-            ? security.mustChangePassword
-              ? h(
-                  'section',
-                  null,
-                  h('h2', null, 'Set your password'),
-                  h(
-                    'p',
-                    null,
-                    'Ask your Administrator to send a setup code, sign out, and use Forgot password.',
-                  ),
-                  h('button', { onClick: signOut }, 'Sign out'),
-                )
-              : h(Authenticator, {
-                  onVerified: async () => {
-                    await refresh();
-                    location.assign('/fabric.html?live=1');
-                  },
-                })
-            : !access
-              ? h(
-                  'p',
-                  null,
-                  busy
-                    ? 'Checking account permissions…'
-                    : 'Access could not be loaded. Use Refresh access to retry.',
-                )
-              : !access.enabled
-                ? h(
-                    'section',
-                    { className: 'access-denied' },
-                    h('h2', null, 'Account awaiting activation'),
-                    h('p', null, access.reason),
-                  )
-                : !access.administrator
-                  ? h(
-                      'section',
-                      null,
-                      h('h2', null, 'Signed in'),
-                      h(
-                        'p',
-                        null,
-                        'Your account is enabled. Administration is restricted to Administrators.',
-                      ),
-                      h(
-                        'p',
-                        { className: 'editor-note' },
-                        'Business-data integration is still separate from this live access panel.',
-                      ),
-                    )
-                  : snapshot &&
-                    h(
-                      React.Fragment,
-                      null,
-                      h(
-                        'div',
-                        { className: 'access-info' },
-                        'Live Supabase account management · changes save to the database',
-                      ),
-                      h(
-                        'div',
-                        { className: 'fabric-view-toggle' },
-                        [
-                          ['roles', 'Roles & permissions'],
-                          ['accounts', 'Account access'],
-                          ['audit', 'Activity log'],
-                        ].map(([key, label]) =>
-                          h(
-                            'button',
-                            { key, 'aria-pressed': tab === key, onClick: () => setTab(key) },
-                            label,
-                          ),
-                        ),
-                      ),
-                      tab === 'roles'
-                        ? h(RoleManager, { snapshot, onSaved: refresh })
-                        : tab === 'accounts'
-                          ? h(
-                              React.Fragment,
-                              null,
-                              h(AccountLifecycle, { snapshot, onSaved: refresh }),
-                              h(AccountManager, { snapshot, onSaved: refresh }),
-                            )
-                          : h(
-                              'section',
-                              { className: 'audit-list' },
-                              snapshot.audit.length
-                                ? snapshot.audit.map((a) =>
-                                    h(
-                                      'article',
-                                      { key: a.id },
-                                      h(
-                                        'div',
-                                        null,
-                                        h('strong', null, a.action),
-                                        h('p', null, `${a.target_type} · ${a.target_id || ''}`),
-                                      ),
-                                      h(
-                                        'time',
-                                        null,
-                                        new Date(a.created_at).toLocaleString('en-IN', {
-                                          timeZone: 'Asia/Kolkata',
-                                        }),
-                                      ),
-                                    ),
-                                  )
-                                : h('p', null, 'No access changes recorded.'),
-                            ),
-                    ),
+      signedIn && h(WorkspaceMenuToolbar, { open, onToggle: () => setOpen((value) => !value) }),
+      children,
     ),
   );
 }
+
 function RoleManager({ snapshot, onSaved }) {
   const [editing, setEditing] = useState(null),
     [error, setError] = useState(''),
@@ -776,7 +820,7 @@ function AccountManager({ snapshot, onSaved }) {
       : h(
           RecordGrid,
           {
-            client: client,
+            client: getAccessClient(),
             grid: 'administration-accounts',
             fields: [
               ['employee', 'Employee'],
@@ -828,4 +872,3 @@ function AccountManager({ snapshot, onSaved }) {
         ),
   );
 }
-createRoot(document.getElementById('access-root')).render(h(AccessApp));

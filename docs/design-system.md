@@ -40,6 +40,8 @@ The workspace shell has a 235px sidebar and 34px × 38px main padding. Page head
 
 Navigation disclosures share stable section keys across signed-in workspaces. Persist each explicit expand or collapse through the shared account preference store. Keep the current-page indicator and responsive sidebar visibility independent of disclosure state. Verify the sidebar across workspace routes using the same account, including an account with restricted permissions. [Navigation regression checks](../fabric-poc/e2e/navigation-preferences.spec.js)
 
+Use the existing workspace route handler for internal navigation so the application shell stays mounted. Challans, Worker Bills, Administration tabs, Files, and Bucket Groups retain their bookmarkable URLs and open in the authenticated workspace. Sign-in, recovery, and security setup use the account entry document. Update Tasks and direct floor QR links use the same handover form. ERP Update Tasks offers manual task selection, and QR links supply the task through the existing URL parameter. Keep real links for deep links and standard browser link actions. Verify browser Back and Forward, direct entry, permissions, and document and shell identity when adding a workspace route.
+
 ## Record grids
 
 Use FabricSheet for configurable record grids. Use GridSearch for labelled, debounced search with no separate submit button. Keep existing server search semantics and label exact matches explicitly. If a grid sorts or filters a server page locally, disclose that scope next to the controls.

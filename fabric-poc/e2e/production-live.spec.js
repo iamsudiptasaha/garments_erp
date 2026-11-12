@@ -1,39 +1,39 @@
 import { test, expect } from '@playwright/test';
 import { productionFixture } from '../tests/fixtures/production-live.js';
 
-async function liveWorkspace(page, { rejectMovement = false } = {}) {
+async function liveWorkspace(page, { rejectMovement = false, authenticated = true } = {}) {
   const snapshot = productionFixture(),
     calls = [];
   let studioPreferences = {};
   const actor = '00000000-0000-4000-8000-000000000003';
   const encode = (x) => Buffer.from(JSON.stringify(x)).toString('base64url');
   const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: actor, role: 'authenticated', aal: 'aal2', exp: Math.floor(Date.now() / 1000) + 3600 })}.synthetic`;
-  await page.addInitScript(
-    ({ token, actor }) =>
-      localStorage.setItem(
-        'sb-example-auth-token',
-        JSON.stringify({
-          access_token: token,
-          refresh_token: 'synthetic-refresh',
-          expires_at: Math.floor(Date.now() / 1000) + 3600,
-          expires_in: 3600,
-          token_type: 'bearer',
-          user: {
-            id: actor,
-            email: 'operator@example.invalid',
-            aud: 'authenticated',
-            role: 'authenticated',
-          },
-        }),
-      ),
-    { token, actor },
-  );
+  const session = {
+    access_token: token,
+    refresh_token: 'synthetic-refresh',
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    expires_in: 3600,
+    token_type: 'bearer',
+    user: {
+      id: actor,
+      email: 'operator@example.invalid',
+      aud: 'authenticated',
+      role: 'authenticated',
+    },
+  };
+  if (authenticated)
+    await page.addInitScript(
+      (session) => localStorage.setItem('sb-example-auth-token', JSON.stringify(session)),
+      session,
+    );
   await page.route('https://example.invalid/**', async (route) => {
     const name = new URL(route.request().url()).pathname.split('/').at(-1);
     const args = route.request().postDataJSON();
     calls.push({ name, args });
     let body;
-    if (name === 'erp_account_security') body = { enabled: true, ready: true };
+    if (name === 'settings') body = { external: {} };
+    else if (name === 'token') body = session;
+    else if (name === 'erp_account_security') body = { enabled: true, ready: true };
     else if (name === 'erp_access_snapshot')
       body = {
         actor,
@@ -203,4 +203,95 @@ test('live Items selects shared variants and persists batch number through the s
   const changes = calls.find((c) => c.name === 'erp_save_production_setup').args.p_changes;
   expect(changes.some((c) => c.table === 'variant')).toBe(false);
   expect(changes.find((c) => c.table === 'item').values.batch_number).toBe('000987');
+});
+
+test('live floor QR enters directly and shares the authenticated Update Tasks form', async ({
+  page,
+  context,
+}, testInfo) => {
+  const { calls } = await liveWorkspace(page);
+  const updateUrl = '/fabric.html?live=1#productionUpdateTaskStatus';
+  const floorUrl = '/fabric.html?live=1&floor=1&task=31#productionUpdateTaskStatus';
+  await page.goto(updateUrl);
+  const picker = page.getByRole('combobox', { name: 'Design / task', exact: true });
+  await expect(picker).toBeVisible();
+  const documents = [];
+  page.on('request', (request) => {
+    if (request.resourceType() === 'document' && request.frame() === page.mainFrame())
+      documents.push(request.url());
+  });
+  const shell = await page.locator('.fabric-shell').elementHandle();
+  const sidebar = await page.locator('#workspace-sidebar').elementHandle();
+  const link = page.getByRole('link', { name: /Open standalone floor form/ });
+  await expect(link).toHaveAttribute('href', floorUrl);
+  await link.click();
+  await expect(page).toHaveURL(new RegExp('floor=1&task=31'));
+  await expect(picker).toHaveCount(0);
+  await expect(page.locator('.operator-context')).toContainText('Cotton polo');
+  await page.goBack();
+  await expect(picker).toBeVisible();
+  await page.goForward();
+  await expect(picker).toHaveCount(0);
+  await expect(page.locator('.size-entry-grid input')).toHaveCount(2);
+  expect(documents).toEqual([]);
+  expect(await shell.evaluate((node) => node === document.querySelector('.fabric-shell'))).toBe(
+    true,
+  );
+  expect(
+    await sidebar.evaluate((node) => node === document.querySelector('#workspace-sidebar')),
+  ).toBe(true);
+
+  const direct = await context.newPage();
+  try {
+    await liveWorkspace(direct);
+    await direct.setViewportSize({ width: 390, height: 844 });
+    await direct.goto(floorUrl);
+    await expect(direct.locator('.operator-context')).toContainText('Cotton polo');
+    await expect(direct.getByRole('combobox', { name: 'Design / task', exact: true })).toHaveCount(
+      0,
+    );
+    expect(await direct.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      390,
+    );
+    await direct.screenshot({
+      path: testInfo.outputPath('floor-qr-mobile.png'),
+      animations: 'disabled',
+    });
+    await direct.reload();
+    await expect(direct.locator('.size-entry-grid input')).toHaveCount(2);
+    await direct.goto(floorUrl.replace('task=31', 'task=unknown'));
+    await expect(direct.getByRole('heading', { name: 'Task unavailable' })).toBeVisible();
+  } finally {
+    await direct.close();
+  }
+
+  const inputs = page.locator('.size-entry-grid input');
+  await inputs.nth(0).fill('7');
+  await page
+    .getByLabel('Handed over by', { exact: true })
+    .selectOption({ label: 'Asha Das (EMP-71)' });
+  const submit = page.getByRole('button', { name: 'Hand over to Printing', exact: true });
+  await expect(submit).toBeDisabled();
+  await inputs.nth(1).fill('9');
+  await submit.click();
+  await expect(page.getByRole('heading', { name: 'Handed over', exact: true })).toBeVisible();
+  expect(calls.filter((call) => call.name === 'erp_move_production')).toHaveLength(1);
+});
+
+test('signed-out live floor QR retains the task URL through the sign-in document', async ({
+  page,
+}) => {
+  const { calls } = await liveWorkspace(page, { authenticated: false });
+  const path = '/fabric.html?live=1&floor=1&task=31#productionUpdateTaskStatus';
+  await page.goto(path);
+  const signIn = page.getByRole('heading', { name: 'Sign in', exact: true });
+  await expect(signIn).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('returnTo')).toBe(path);
+  expect(calls.some(({ name }) => name === 'erp_production_workspace')).toBe(false);
+  await page.getByRole('textbox', { name: 'Email', exact: true }).fill('operator@example.invalid');
+  await page.getByLabel('Password', { exact: true }).fill('fixture-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page).toHaveURL(new URL(path, page.url()).href);
+  await expect(page.locator('.operator-context')).toContainText('Cotton polo');
+  await expect(page.getByRole('combobox', { name: 'Design / task', exact: true })).toHaveCount(0);
 });

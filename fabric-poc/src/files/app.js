@@ -1,20 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import Select from 'react-select';
 import { getAccessClient } from '../access/client.js';
-import { WorkspaceGate } from '../access/workspace-gate.js';
-import { WorkspaceMenuToolbar, WorkspaceSidebar, useWorkspaceMenu } from '../access/navigation.js';
 import { UploadRoutes } from './routes.js';
 import { liveFileCommands } from './live.js';
 import { BucketSettings } from './settings.js';
 import { FilePanel } from './panel.js';
-import '../admin/styles.css';
-import '../fabric/styles.css';
-import '../access/styles.css';
 import './styles.css';
-const h = React.createElement,
-  admin = !!document.getElementById('file-admin-root');
-function FilesWorkspace({ access }) {
+import { followWorkspaceLink, workspacePath } from '../access/workspace-routes.js';
+const h = React.createElement;
+export function FilesWorkspace({ access, admin, navigate }) {
   const commands = useMemo(() => liveFileCommands(getAccessClient()), []),
     [registry, setRegistry] = useState([]),
     [routes, setRoutes] = useState([]),
@@ -26,7 +20,6 @@ function FilesWorkspace({ access }) {
     [selected, setSelected] = useState(null),
     [loading, setLoading] = useState(false),
     [busy, setBusy] = useState(false);
-  const [open, setOpen] = useWorkspaceMenu();
   const targets = routes.filter((t) => access.permissions?.[t.resource]?.view),
     target = targets.find((t) => t.key === key) || targets[0],
     store = useMemo(() => commands.store(registry, routes), [commands, registry, routes]);
@@ -41,8 +34,8 @@ function FilesWorkspace({ access }) {
     }
   }
   useEffect(() => {
-    void refresh();
-  }, [commands]);
+    if (!admin || access.administrator) void refresh();
+  }, [commands, admin, access.administrator]);
   useEffect(() => {
     setSelected(null);
     setRecords([]);
@@ -125,132 +118,122 @@ function FilesWorkspace({ access }) {
     }
   }
   return h(
-    'div',
-    { className: `fabric-shell access-workspace${open ? '' : ' sidebar-collapsed'}` },
-    h(WorkspaceSidebar, {
-      live: access,
-      page: admin ? 'files-admin' : 'files',
-      open,
-      onClose: () => setOpen(false),
-    }),
+    React.Fragment,
+    null,
     h(
-      'main',
-      { className: 'access-live-shell files-live' },
-      h(WorkspaceMenuToolbar, {
-        open,
-        onToggle: () => setOpen((value) => !value),
-      }),
-      h(
-        'header',
-        null,
-        h('p', { className: 'eyebrow' }, admin ? 'ADMINISTRATION' : 'SAVED RECORD ATTACHMENTS'),
-        h('h1', null, admin ? 'Bucket groups' : 'Files'),
-      ),
-      error && h('p', { role: 'alert', className: 'form-error' }, error),
-      notice && h('p', { role: 'status', className: 'file-notice' }, notice),
-      admin
-        ? !access.administrator
-          ? h('p', null, 'Administrator access required.')
-          : h(
-              React.Fragment,
-              null,
-              h(
-                'p',
-                { className: 'files-boundary' },
-                'Live Supabase configuration · private buckets · group keys and bucket addresses stay fixed to preserve file links.',
-              ),
-              h(BucketSettings, {
-                preferenceClient: getAccessClient(),
-                registry,
-                buckets: registry.map((g) => ({ id: g.bucket_id, private: g.private })),
-                isAdministrator: true,
-                onSave: save,
-                onCreate: createGroup,
-                onRemove: removeGroup,
-                lockBucket: true,
-              }),
-              h(UploadRoutes, {
-                routes,
-                registry,
-                onSave: saveRoute,
-                preferenceClient: getAccessClient(),
-              }),
-              h(
-                'div',
-                { className: 'file-admin-actions' },
-                h('a', { href: '/files.html' }, 'Open files'),
-                h(
-                  'button',
-                  { disabled: busy, onClick: cleanup },
-                  busy ? 'Cleaning…' : 'Clean up interrupted uploads',
-                ),
-              ),
-            )
+      'header',
+      null,
+      h('p', { className: 'eyebrow' }, admin ? 'ADMINISTRATION' : 'SAVED RECORD ATTACHMENTS'),
+      h('h1', null, admin ? 'Bucket groups' : 'Files'),
+    ),
+    error && h('p', { role: 'alert', className: 'form-error' }, error),
+    notice && h('p', { role: 'status', className: 'file-notice' }, notice),
+    admin
+      ? !access.administrator
+        ? h('p', null, 'Administrator access required.')
         : h(
             React.Fragment,
             null,
             h(
               'p',
               { className: 'files-boundary' },
-              'Live files attach to saved Supabase records. Local sample bills are not listed here.',
+              'Live Supabase configuration · private buckets · group keys and bucket addresses stay fixed to preserve file links.',
             ),
-            targets.length
-              ? h(
-                  React.Fragment,
-                  null,
+            h(BucketSettings, {
+              preferenceClient: getAccessClient(),
+              registry,
+              buckets: registry.map((g) => ({ id: g.bucket_id, private: g.private })),
+              isAdministrator: true,
+              onSave: save,
+              onCreate: createGroup,
+              onRemove: removeGroup,
+              lockBucket: true,
+            }),
+            h(UploadRoutes, {
+              routes,
+              registry,
+              onSave: saveRoute,
+              preferenceClient: getAccessClient(),
+            }),
+            h(
+              'div',
+              { className: 'file-admin-actions' },
+              h(
+                'a',
+                {
+                  href: workspacePath('files'),
+                  onClick: (event) => followWorkspaceLink(event, () => navigate('files')),
+                },
+                'Open files',
+              ),
+              h(
+                'button',
+                { disabled: busy, onClick: cleanup },
+                busy ? 'Cleaning…' : 'Clean up interrupted uploads',
+              ),
+            ),
+          )
+      : h(
+          React.Fragment,
+          null,
+          h(
+            'p',
+            { className: 'files-boundary' },
+            'Live files attach to saved Supabase records. Local sample bills are not listed here.',
+          ),
+          targets.length
+            ? h(
+                React.Fragment,
+                null,
+                h(
+                  'div',
+                  { className: 'fabric-fields file-record-picker' },
                   h(
-                    'div',
-                    { className: 'fabric-fields file-record-picker' },
+                    'label',
+                    null,
+                    'Document type',
                     h(
-                      'label',
-                      null,
-                      'Document type',
-                      h(
-                        'select',
-                        { value: target.key, onChange: (e) => setKey(e.target.value) },
-                        targets.map((t) => h('option', { key: t.key, value: t.key }, t.label)),
-                      ),
-                    ),
-                    h(
-                      'label',
-                      { id: 'saved-record-label' },
-                      'Saved record',
-                      h(Select, {
-                        'aria-labelledby': 'saved-record-label',
-                        classNamePrefix: 'employee-select',
-                        options: records.map((r) => ({
-                          value: r.id,
-                          label: `${r.label} · #${r.id}`,
-                        })),
-                        value: selected,
-                        onChange: setSelected,
-                        onInputChange: (value, meta) => {
-                          if (meta.action === 'input-change') setQuery(value);
-                        },
-                        isLoading: loading,
-                        placeholder: 'Search a saved record…',
-                        noOptionsMessage: () => (loading ? 'Loading…' : 'No saved records found'),
-                      }),
+                      'select',
+                      { value: target.key, onChange: (e) => setKey(e.target.value) },
+                      targets.map((t) => h('option', { key: t.key, value: t.key }, t.label)),
                     ),
                   ),
-                  selected &&
-                    h(FilePanel, {
-                      store,
-                      registry,
-                      targetKey: target.key,
-                      recordId: selected.value,
-                      recordLabel: selected.label,
-                      targetDefinition: target,
-                      canRead: true,
-                      canWrite:
-                        target.enabled && access.permissions?.[target.resource]?.edit === true,
+                  h(
+                    'label',
+                    { id: 'saved-record-label' },
+                    'Saved record',
+                    h(Select, {
+                      'aria-labelledby': 'saved-record-label',
+                      classNamePrefix: 'employee-select',
+                      options: records.map((r) => ({
+                        value: r.id,
+                        label: `${r.label} · #${r.id}`,
+                      })),
+                      value: selected,
+                      onChange: setSelected,
+                      onInputChange: (value, meta) => {
+                        if (meta.action === 'input-change') setQuery(value);
+                      },
+                      isLoading: loading,
+                      placeholder: 'Search a saved record…',
+                      noOptionsMessage: () => (loading ? 'Loading…' : 'No saved records found'),
                     }),
-                )
-              : h('p', null, 'No attachment-enabled screens are available to your role.'),
-          ),
-    ),
+                  ),
+                ),
+                selected &&
+                  h(FilePanel, {
+                    store,
+                    registry,
+                    targetKey: target.key,
+                    recordId: selected.value,
+                    recordLabel: selected.label,
+                    targetDefinition: target,
+                    canRead: true,
+                    canWrite:
+                      target.enabled && access.permissions?.[target.resource]?.edit === true,
+                  }),
+              )
+            : h('p', null, 'No attachment-enabled screens are available to your role.'),
+        ),
   );
 }
-createRoot(document.getElementById(admin ? 'file-admin-root' : 'files-root')).render(
-  h(WorkspaceGate, { render: (access) => h(FilesWorkspace, { access }) }),
-);

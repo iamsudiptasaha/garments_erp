@@ -5,6 +5,7 @@ import { portalTasks, savePortalTasks } from './portal-data';
 import styles from './studio.css?inline';
 import type { Task } from './model';
 import { StartProduction } from './start-production';
+import { followWorkspaceLink } from '../access/workspace-routes.js';
 
 // Keep isolated component styles, using the portal palette in portal/floor modes.
 const portalPalette: Record<string, string> = {
@@ -54,6 +55,7 @@ type Props = {
   liveTasks?: Task[];
   onImage?: (id: string) => Promise<string>;
   onCommit?: (before: Task[], after: Task[]) => Promise<Task[]>;
+  onOpenFloor?: (url: string) => void;
   onStart?: (part: string, employee: string) => Promise<void>;
 };
 export function PortalTaskBoard({
@@ -69,6 +71,7 @@ export function PortalTaskBoard({
   liveTasks,
   onCommit,
   onStart,
+  onOpenFloor,
   onImage,
 }: Props) {
   const [starting, setStarting] = useState(false);
@@ -95,6 +98,7 @@ export function PortalTaskBoard({
     canEdit,
     onSave: (tasks) => onSave(savePortalTasks(data, tasks)),
   };
+  const floorUrl = `/fabric.html?${live ? 'live=1&' : ''}floor=1&task=${encodeURIComponent(portal.tasks[0]?.id || '')}#productionUpdateTaskStatus`;
   return (
     <div ref={host} data-production-workspace="true">
       {shadow &&
@@ -165,7 +169,10 @@ export function PortalTaskBoard({
             {mode === 'update' && (
               <div style={{ textAlign: 'right', padding: '10px 20px' }}>
                 <a
-                  href={`/fabric.html?floor=1&task=${encodeURIComponent(portal.tasks[0]?.id || '')}#productionUpdateTaskStatus`}
+                  href={floorUrl}
+                  onClick={(event) =>
+                    followWorkspaceLink(event, onOpenFloor && (() => onOpenFloor(floorUrl)))
+                  }
                 >
                   Open standalone floor form ↗
                 </a>

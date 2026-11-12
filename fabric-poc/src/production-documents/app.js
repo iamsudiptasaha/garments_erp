@@ -1,15 +1,24 @@
-import { WorkspaceMenuToolbar, WorkspaceSidebar, useWorkspaceMenu } from '../access/navigation.js';
 import { getAccessClient } from '../access/client.js';
-import React from 'react';
-import { createPortal } from 'react-dom';
+import React, { useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FabricSheet } from '../fabric/sheet.js';
 import { worksheetSearchDelay } from '../fabric/grid-toolbar.js';
 import '../colours/styles.css';
+import './styles.css';
 import { challanDocuments } from './live.js';
-(() => {
-  const root = document.getElementById('challan-review');
+export function ProductionDocuments({ billing, listState }) {
+  const host = useRef(null);
+  useEffect(() => mountDocuments(host.current, billing, listState), [billing, listState]);
+  return React.createElement('section', {
+    ref: host,
+    className: 'production-documents',
+    'aria-label': 'Production documents',
+  });
+}
+
+function mountDocuments(root, billing, listState) {
   const api = challanDocuments();
+  let active = true;
   let jobs = {},
     workers = [],
     employees = [],
@@ -24,13 +33,13 @@ import { challanDocuments } from './live.js';
   async function load(billing) {
     const ticket = ++revision;
     const data = await api.read(billing);
-    if (ticket !== revision) return false;
+    if (!active || ticket !== revision) return false;
     ({ jobs, workers, employees, records, stockIn, bills, permissions } = data);
     return true;
   }
-  let view = 'list',
-    presentation = 'overview',
-    search = '',
+  let view = billing ? 'billing' : 'list',
+    presentation = listState.presentation || 'overview',
+    search = listState.search || '',
     sheetSearchTimer,
     selected,
     draft,
@@ -248,6 +257,7 @@ import { challanDocuments } from './live.js';
     return `<header class="fabric-page-header"><div><p class="eyebrow">PRODUCTION / ${view === 'billing' ? 'WORKER BILLS' : 'CHALLANS'}</p><h1>${e(title)}</h1></div>${actions}</header>`;
   }
   function render() {
+    if (!active) return;
     clearTimeout(sheetSearchTimer);
     sheetSearchTimer = null;
     sheetRoot?.unmount();
@@ -755,74 +765,24 @@ import { challanDocuments } from './live.js';
       if (submit) submit.disabled = false;
     }
   });
-  async function navigate() {
-    clearTimeout(sheetSearchTimer);
-    sheetSearchTimer = null;
-    const billing = location.hash === '#worker-bills';
-    view = billing ? 'billing' : 'list';
-    search = '';
-    presentation = 'overview';
-    document.title = billing ? 'Worker bills' : 'Production Challans';
-    sheetRoot?.unmount();
-    sheetRoot = null;
+  async function start() {
     root.innerHTML = '<p role="status">Loading production documents…</p>';
     try {
-      if (!(await api.authenticate())) {
-        location.replace('/access.html');
-        return;
-      }
-      refreshNavigation();
       if (await load(billing)) render();
     } catch (error) {
+      if (!active) return;
       root.innerHTML = '<p class="form-error" role="alert"></p>';
       root.querySelector('[role="alert"]').textContent = error.message;
     }
   }
-  window.addEventListener('hashchange', navigate);
-  const navigation = createRoot(document.getElementById('challan-navigation'));
-  const toolbar = document.getElementById('challan-toolbar');
-  const shell = document.getElementById('challan-shell');
-  let accessRequest;
-  function DocumentNavigation({ access, page }) {
-    const [open, setOpen] = useWorkspaceMenu();
-    React.useLayoutEffect(() => {
-      shell.classList.toggle('sidebar-collapsed', !open);
-    }, [open]);
-    return React.createElement(
-      React.Fragment,
-      null,
-      React.createElement(WorkspaceSidebar, {
-        live: access,
-        page,
-        open,
-        onClose: () => setOpen(false),
-      }),
-      createPortal(
-        React.createElement(WorkspaceMenuToolbar, {
-          open,
-          onToggle: () => setOpen((value) => !value),
-        }),
-        toolbar,
-      ),
-    );
-  }
-  async function refreshNavigation() {
-    accessRequest ??= getAccessClient().rpc('erp_access_snapshot');
-    const { data, error } = await accessRequest;
-    if (error) {
-      accessRequest = null;
-      navigation.render(
-        React.createElement('p', { role: 'status' }, 'Unable to load workspace navigation.'),
-      );
-      return;
-    }
-    if (data?.enabled)
-      navigation.render(
-        React.createElement(DocumentNavigation, {
-          access: data,
-          page: location.hash === '#worker-bills' ? 'jobWorkerBills' : 'productionChallans',
-        }),
-      );
-  }
-  navigate();
-})();
+  void start();
+  return () => {
+    active = false;
+    listState.presentation = presentation;
+    listState.search = search;
+    clearTimeout(sheetSearchTimer);
+    const mountedSheet = sheetRoot;
+    // React is still committing the enclosing route's unmount.
+    if (mountedSheet) queueMicrotask(() => mountedSheet.unmount());
+  };
+}

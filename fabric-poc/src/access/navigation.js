@@ -7,10 +7,16 @@ import { otherModules, pages } from '../fabric/catalog.js';
 import { finishedGoodsPages } from '../finished-goods/pages.js';
 import { hrPages } from '../hr/model.js';
 import { sessionAccessModel } from './workspace-gate.js';
+import { adminPath, followWorkspaceLink, workspacePath } from './workspace-routes.js';
 
 const h = React.createElement;
 const workspaceUrl = '/fabric.html?live=1';
-const adminUrl = '/access.html';
+export const productionDocumentPath = '/production-challan.html';
+export const productionDocumentRoutes = {
+  productionChallans: ['Challans', 'challans'],
+  jobWorkerBills: ['Worker bills', 'worker-bills'],
+};
+
 const adminDestinations = {
   adminRoles: adminPages.adminRoles,
   adminAccess: 'Account access',
@@ -113,7 +119,9 @@ export function WorkspaceSidebar({
   onPage = (key) => location.assign(workspaceUrl + (key === 'home' ? '' : '#' + key)),
   onFinishedGoods = (key) =>
     location.assign(workspaceUrl + '&finishedGoods=' + key + '#finishedProducts'),
-  onAdmin = (key) => location.assign(adminUrl + '#' + key),
+  onProductionDocument,
+  onAdmin = (key) => location.assign(adminPath + '#' + key),
+  onWorkspaceLink,
   onSignOut,
 }) {
   const sidebar = useRef(null);
@@ -123,7 +131,17 @@ export function WorkspaceSidebar({
   const current = (key) => (page === key ? 'page' : undefined);
   const button = (key, title, action = onPage, active = current(key)) =>
     h('button', { key, type: 'button', 'aria-current': active, onClick: () => action(key) }, title);
-  const link = (key, title, href) => h('a', { key, href, 'aria-current': current(key) }, title);
+  const link = (key, title, href, navigate = onWorkspaceLink) =>
+    h(
+      'a',
+      {
+        key,
+        href,
+        'aria-current': current(key),
+        onClick: (event) => followWorkspaceLink(event, navigate && (() => navigate(key))),
+      },
+      title,
+    );
   const section = (key, title, label, entries, className) =>
     entries.length > 0 &&
     h(
@@ -140,16 +158,19 @@ export function WorkspaceSidebar({
       .sort(([a], [b]) => (group === 'production' ? productionRank(a) - productionRank(b) : 0))
       .map(([key, p]) => button(key, p.title));
   const productionLinks = live
-    ? [
-        ['productionChallans', 'Challans', '/production-challan.html#challans'],
-        ['jobWorkerBills', 'Worker bills', '/production-challan.html#worker-bills'],
-      ]
+    ? Object.entries(productionDocumentRoutes)
         .filter(([key]) => can(key))
-        .map(([key, title, href]) => link(key, title, href))
+        .map(([key, [title, hash]]) =>
+          link(key, title, productionDocumentPath + '#' + hash, onProductionDocument ?? null),
+        )
     : [];
   const adminLinks = Object.entries(live ? adminDestinations : adminPages)
     .filter(([key]) => key === 'adminAccess' || can(key))
-    .map(([key, title]) => button(key, title, live ? onAdmin : onPage));
+    .map(([key, title]) =>
+      live && onWorkspaceLink
+        ? link(key, title, workspacePath(key))
+        : button(key, title, live ? onAdmin : onPage),
+    );
 
   return h(
     'aside',
@@ -241,11 +262,11 @@ export function WorkspaceSidebar({
           'administration',
           'Administration',
           'Administration pages',
-          [...adminLinks, link('files-admin', 'Bucket groups', '/files-admin.html')],
+          [...adminLinks, link('files-admin', 'Bucket groups', workspacePath('files-admin'))],
           'admin-nav',
         ),
       section('files', 'File Uploads', 'File Uploads pages', [
-        link('files', 'Saved-record files', '/files.html'),
+        link('files', 'Saved-record files', workspacePath('files')),
       ]),
     ),
     notice && h('p', { role: 'status' }, notice),
