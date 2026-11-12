@@ -104,6 +104,9 @@ test('production migrations accept only the pinned project and force certificate
   const history = (remote) => JSON.stringify({ migrations: [{ local: '20261112113000', remote }] });
   assert.ok(hasCutoverHistory(history('20261112113000')));
   assert.ok(!hasCutoverHistory(history('')));
+  assert.ok(hasCutoverHistory('   20261112113000 | 20261112113000 | 2026-11-12 11:30:00'));
+  assert.ok(hasCutoverHistory('   `20261112113000` | `20261112113000` | `2026-11-12 11:30:00`'));
+  assert.ok(!hasCutoverHistory('   20261112113000 |                | 2026-11-12 11:30:00'));
 });
 
 test('account release compares the deployed tree and deploys if that commit is unavailable', () => {

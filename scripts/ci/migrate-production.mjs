@@ -49,10 +49,18 @@ export function productionDatabaseUrl(value) {
 }
 
 export function hasCutoverHistory(output) {
-  const { migrations } = JSON.parse(output);
-  return migrations.some(
-    ({ local, remote }) => local === cutoverVersion && remote === cutoverVersion,
-  );
+  if (output.trimStart().startsWith('{')) {
+    const { migrations } = JSON.parse(output);
+    return (
+      Array.isArray(migrations) &&
+      migrations.some(({ local, remote }) => local === cutoverVersion && remote === cutoverVersion)
+    );
+  }
+  // CLI 2.122.0 can also render the same history as a table.
+  return output.split('\n').some((line) => {
+    const [local, remote] = line.split('|').map((cell) => cell.replaceAll('`', '').trim());
+    return local === cutoverVersion && remote === cutoverVersion;
+  });
 }
 
 function migrate() {
