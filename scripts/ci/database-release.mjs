@@ -46,6 +46,10 @@ const files = [
   '20261112052706_billing_dispatch_summary_workspace.sql',
   '20261112052959_billing_carton_return_workspace.sql',
   '20261112053306_billing_invoice_editor_workspace.sql',
+  '20261112094239_native_employee_email_auth.sql',
+  '20261112095749_verified_employee_email_change.sql',
+  '20261112112000_retry_employee_invitation.sql',
+  '20261112113000_employee_profile.sql',
 ];
 // Files before the first release migration belong to the deployed baseline.
 export function releaseMigrationFiles() {

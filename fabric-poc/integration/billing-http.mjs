@@ -12,6 +12,7 @@ function token(n, aal = 'aal2') {
     encode({ alg: 'HS256', typ: 'JWT' }),
     encode({
       sub: '00000000-0000-4000-8000-' + suffix,
+      amr: [{ method: 'password' }],
       session_id: '10000000-0000-4000-8000-' + suffix,
       role: 'authenticated',
       aal,

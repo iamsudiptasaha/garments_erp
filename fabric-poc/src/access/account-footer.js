@@ -1,23 +1,28 @@
+import { EmployeeAvatar } from '../hr/avatar.js';
 import { flushNavigationPreferences } from './navigation-preferences.js';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { getAccessClient } from './client.js';
 const h = React.createElement;
 export function AccountFooter({
   name = 'My account',
   role = 'Signed-in workspace',
+  photoId,
   live = true,
   onCollapse,
   onSignOut,
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase();
+  const [updatedProfile, setUpdatedProfile] = useState(null);
+  const displayName = updatedProfile?.name || name;
+  const currentPhoto = updatedProfile ? updatedProfile.photo : photoId;
+  useEffect(() => {
+    function update(event) {
+      setUpdatedProfile(event.detail);
+    }
+    window.addEventListener('erp-profile-updated', update);
+    return () => window.removeEventListener('erp-profile-updated', update);
+  }, []);
   async function signOut() {
     setBusy(true);
     setError('');
@@ -45,18 +50,26 @@ export function AccountFooter({
       h(
         'summary',
         { 'aria-label': 'Personal account' },
-        h('span', { className: 'sidebar-account-avatar', 'aria-hidden': true }, initials),
+        h(EmployeeAvatar, {
+          className: 'sidebar-account-avatar',
+          photoId: live ? currentPhoto : null,
+          name: displayName,
+        }),
         h(
           'span',
           { className: 'sidebar-account-identity' },
-          h('strong', null, name),
+          h('strong', null, displayName),
           h('small', null, role),
         ),
       ),
       h(
         'nav',
         { 'aria-label': 'Personal account actions' },
-        h('a', { href: '/access.html' }, live ? 'Account settings' : 'Live sign-in'),
+        h(
+          'a',
+          { href: live ? '/access.html#profile' : '/access.html' },
+          live ? 'Account settings' : 'Live sign-in',
+        ),
         live &&
           h(
             'button',

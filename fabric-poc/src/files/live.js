@@ -19,7 +19,16 @@ export function liveFileCommands(client) {
     if (data?.error) throw Error(data.error);
     return data;
   }
+  async function upload(targetKey, recordId, file) {
+    const body = new FormData();
+    body.append('targetKey', targetKey);
+    body.append('recordId', recordId);
+    body.append('file', file);
+    return invoke(body);
+  }
   return {
+    upload,
+    open: (id) => invoke({ action: 'read', attachmentId: String(id) }),
     registry: () => rpc('file_registry'),
     routes: async () => {
       const rows = await rpc('file_routes');
@@ -56,11 +65,7 @@ export function liveFileCommands(client) {
             target.max_bytes || 10485760,
           ),
         });
-        const body = new FormData();
-        body.append('targetKey', targetKey);
-        body.append('recordId', recordId);
-        body.append('file', file);
-        return invoke(body);
+        return upload(targetKey, recordId, file);
       },
       open: (attachment) => invoke({ action: 'read', attachmentId: String(attachment.id) }),
     }),

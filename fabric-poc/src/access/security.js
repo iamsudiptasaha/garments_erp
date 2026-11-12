@@ -8,9 +8,7 @@ export async function accountCommand(input) {
   return data;
 }
 export function RecoveryForm() {
-  const [phone, setPhone] = useState(''),
-    [code, setCode] = useState(''),
-    [password, setPassword] = useState(''),
+  const [email, setEmail] = useState(''),
     [message, setMessage] = useState(''),
     [busy, setBusy] = useState(false);
   return h(
@@ -18,24 +16,17 @@ export function RecoveryForm() {
     null,
     h('summary', null, 'Forgot password?'),
     h(
-      'p',
-      null,
-      'Contact your Administrator for a single-use recovery code sent to their email. Your Google Authenticator remains required.',
-    ),
-    h(
       'form',
       {
         onSubmit: async (e) => {
           e.preventDefault();
           setBusy(true);
           try {
-            const r = await accountCommand({ action: 'recover', phone, code, password });
-            setCode('');
-            setPassword('');
-            setMessage(r.message);
-          } catch (e) {
-            setMessage(e.message);
+            await getAccessClient().auth.resetPasswordForEmail(email.trim());
+          } catch {
+            // Use the same response for every address.
           } finally {
+            setMessage('If this email is registered, you will receive a password reset link.');
             setBusy(false);
           }
         },
@@ -43,47 +34,105 @@ export function RecoveryForm() {
       h(
         'label',
         null,
-        'Employee mobile number',
+        'Registered email',
         h('input', {
-          type: 'tel',
+          type: 'email',
           required: true,
-          maxLength: 10,
-          value: phone,
-          onChange: (e) => setPhone(e.target.value),
+          autoComplete: 'email',
+          value: email,
+          onChange: (e) => setEmail(e.target.value),
         }),
       ),
-      h(
-        'label',
-        null,
-        'Recovery code',
-        h('input', {
-          required: true,
-          autoComplete: 'one-time-code',
-          inputMode: 'numeric',
-          placeholder: '8-digit recovery code',
-          value: code,
-          onChange: (e) => setCode(e.target.value.trim().toUpperCase()),
-        }),
-      ),
-      h(
-        'label',
-        null,
-        'New password',
-        h('input', {
-          type: 'password',
-          autoComplete: 'new-password',
-          required: true,
-          minLength: 12,
-          maxLength: 128,
-          value: password,
-          onChange: (e) => setPassword(e.target.value),
-        }),
-      ),
-      h('button', { disabled: busy, type: 'submit' }, 'Reset password'),
+      h('button', { disabled: busy, type: 'submit' }, 'Send reset link'),
     ),
     message && h('p', { role: 'status' }, message),
   );
 }
+
+export function readPasswordLink(hash) {
+  const params = new URLSearchParams(hash.slice(1));
+  const type = params.get('type');
+  const tokenHash = params.get('token_hash');
+  return (type === 'invite' || type === 'recovery') && tokenHash ? { type, tokenHash } : null;
+}
+
+export function PasswordLink({ link }) {
+  const client = getAccessClient();
+  const [step, setStep] = useState('confirm'),
+    [password, setPassword] = useState(''),
+    [message, setMessage] = useState(''),
+    [busy, setBusy] = useState(false);
+  async function accept() {
+    setBusy(true);
+    setMessage('');
+    try {
+      const verified = await client.auth.verifyOtp({ type: link.type, token_hash: link.tokenHash });
+      if (verified.error || !verified.data.session) throw Error();
+      const security = await client.rpc('erp_account_security');
+      if (security.error || !security.data?.enabled) {
+        await client.auth.signOut({ scope: 'local' });
+        throw Error();
+      }
+      const factors = await client.auth.mfa.listFactors();
+      if (factors.error) throw Error();
+      setStep(factors.data.totp.length ? 'mfa' : 'password');
+    } catch {
+      setMessage(
+        'This link could not be accepted. Request a new password reset link or contact your Administrator.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      const updated = await client.auth.updateUser({ password });
+      if (updated.error) throw updated.error;
+      setPassword('');
+      const signedOut = await client.auth.signOut();
+      if (signedOut.error) throw signedOut.error;
+      location.replace('/access.html');
+    } catch {
+      setMessage('Could not complete the password update. Check your password and retry.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return h(
+    'section',
+    { className: 'access-login' },
+    h('h2', null, link.type === 'invite' ? 'Accept invitation' : 'Reset password'),
+    message && h('p', { className: 'form-error', role: 'alert' }, message),
+    step === 'confirm'
+      ? h('button', { className: 'primary', disabled: busy, onClick: accept }, 'Continue')
+      : step === 'mfa'
+        ? h(Authenticator, { onVerified: () => setStep('password') })
+        : h(
+            'form',
+            { onSubmit: save },
+            h(
+              'label',
+              null,
+              'New password',
+              h('input', {
+                type: 'password',
+                required: true,
+                minLength: 12,
+                maxLength: 128,
+                autoComplete: 'new-password',
+                value: password,
+                onChange: (e) => setPassword(e.target.value),
+              }),
+            ),
+            h('button', { className: 'primary', disabled: busy, type: 'submit' }, 'Save password'),
+          ),
+    h('a', { className: 'password-link-back', href: '/access.html' }, 'Back to sign in'),
+  );
+}
+
 export function Authenticator({ onVerified }) {
   const [factors, setFactors] = useState(null),
     [factor, setFactor] = useState(''),

@@ -334,3 +334,66 @@
 .employee-select__single-value small {
   margin: 0;
 }
+
+.admin-toolbar {
+  margin-top: 16px;
+}
+
+.admin-records {
+  overflow-x: auto;
+}
+
+.admin-records td small,
+.erp-record-grid td > strong + small {
+  display: block;
+  color: #63829b;
+}
+
+.admin-row-actions {
+  white-space: nowrap;
+}
+
+.admin-row-actions button {
+  margin: 2px 4px 2px 0;
+}
+
+.admin-dialog {
+  width: min(700px, 94vw);
+}
+
+.admin-dialog .admin-operation-fields {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+
+.admin-dialog .admin-role-options {
+  margin-top: 16px;
+  border: 0;
+}
+
+.admin-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+}
+
+.admin-details dd {
+  margin: 0;
+}
+
+.admin-personal-settings {
+  margin-top: 24px;
+}
+
+.admin-user-access .access-table th,
+.admin-user-access .access-table td {
+  padding: 11px 12px;
+  border-bottom-color: #e4edf5;
+}
+
+.admin-user-access .access-table th {
+  background: #edf5fc;
+  color: #63829b;
+}

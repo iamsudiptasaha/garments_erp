@@ -9,16 +9,6 @@ export function getAccessClient() {
   return client;
 }
 
-export async function getLoginMethods() {
-  const env = readEnvironment({ ...import.meta.env, VITE_DATA_MODE: 'supabase' });
-  const response = await fetch(new URL('/auth/v1/settings', env.url), {
-    headers: { apikey: env.publishableKey },
-  });
-  if (!response.ok) throw Error('Login settings could not be loaded.');
-  const settings = await response.json();
-  return { phone: settings.external?.phone === true, email: settings.external?.email === true };
-}
-
 export function createVerificationClient() {
   const env = readEnvironment({ ...import.meta.env, VITE_DATA_MODE: 'supabase' });
   return createClient(env.url, env.publishableKey, {
