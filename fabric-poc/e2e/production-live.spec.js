@@ -191,7 +191,7 @@ test('failed live handover keeps entered numbers and reports the server error', 
 test('live Items selects shared variants and persists batch number through the setup command', async ({
   page,
 }) => {
-  const { calls, snapshot } = await liveWorkspace(page);
+  const { calls } = await liveWorkspace(page);
   await page.goto('/fabric.html?live=1#productionItems');
   await page.getByRole('button', { name: 'Edit →', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Edit item', exact: true })).toBeVisible();
