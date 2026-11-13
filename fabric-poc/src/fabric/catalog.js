@@ -26,7 +26,7 @@ export const pages = {
   billingBuyerPO: {
     section: 'billing',
     title: 'Buyer PO',
-    permissionActions: ['view', 'create', 'format', 'export', 'print'],
+    permissionActions: ['view', 'create', 'edit', 'format', 'export', 'print'],
     workspace: true,
     readonly: true,
     header: [],
@@ -71,7 +71,7 @@ export const pages = {
   billingReturns: {
     section: 'billing',
     title: 'Returns',
-    permissionActions: ['view', 'create', 'format', 'export', 'print'],
+    permissionActions: ['view', 'create', 'edit', 'format', 'export', 'print'],
     workspace: true,
     readonly: true,
     header: [],
