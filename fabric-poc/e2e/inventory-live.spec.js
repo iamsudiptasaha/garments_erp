@@ -76,7 +76,8 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
         body = { id: '22', ...args.p_values };
         stock.raw_material_check_out.push(body);
       }
-    } else throw Error(`Unexpected Inventory request: ${name}`);
+    } else if (['erp_file_registry', 'erp_file_routes', 'erp_file_list'].includes(name)) body = [];
+    else throw Error(`Unexpected Inventory request: ${name}`);
     await route.fulfill({ json: body });
   });
 

@@ -73,6 +73,10 @@ test('Buyer PO entry saves mixed modes with a protected recipe and opens the sav
         ],
       });
     }
+    if (['erp_file_registry', 'erp_file_routes', 'erp_file_list'].includes(method)) {
+      await route.fulfill({ json: [] });
+      return;
+    }
     if (!Object.hasOwn(responses, method)) throw Error(`Unexpected Buyer PO request: ${method}`);
     await route.fulfill({ json: responses[method] });
   });

@@ -90,7 +90,8 @@ async function liveWorkspace(page, { rejectMovement = false, authenticated = tru
         if (row) Object.assign(row, change.values);
       }
       body = snapshot;
-    } else throw Error(`Unexpected live request: ${name}`);
+    } else if (['erp_file_registry', 'erp_file_routes', 'erp_file_list'].includes(name)) body = [];
+    else throw Error(`Unexpected live request: ${name}`);
     await route.fulfill({ json: body });
   });
   return { snapshot, calls };

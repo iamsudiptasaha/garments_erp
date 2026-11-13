@@ -344,10 +344,9 @@ export function EmployeeEditor({
         ),
     canEdit &&
       !review &&
-      tab === 'status' &&
       h(
         'section',
-        { className: 'hr-verification fabric-line' },
+        { className: 'hr-verification' },
         h('h3', null, 'Verification'),
         h('label', null, 'Verified by', h('input', { value: operator, readOnly: true })),
         h(
