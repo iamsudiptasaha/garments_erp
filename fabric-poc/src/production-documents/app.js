@@ -771,19 +771,6 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
     editing && String(before ?? '') !== String(after ?? '')
       ? (before || '—') + ' → ' + (after || '—')
       : after;
-  function matchingRecords() {
-    return records.filter((r) =>
-      [
-        r.id,
-        r.employeeName,
-        workerName(r.worker),
-        ...r.lines.flatMap((l) => [l.job, l.part, jobs[l.job]?.[2], l.description, l.variant]),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-    );
-  }
   function editBill(bill) {
     const items = (bill?.items || []).map((item) => ({ ...item }));
     const dialog = showDialog(`${dialogHeader(bill ? 'Edit worker bill' : 'New worker bill')}
@@ -938,7 +925,9 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
           } catch (failure) {
             await load();
             bill = bills.find((row) => row.key === savedKey) ?? bill;
-            throw Error('Bill saved. Attachment upload failed: ' + failure.message);
+            throw Error('Bill saved. Attachment upload failed: ' + failure.message, {
+              cause: failure,
+            });
           }
         }
         await load();

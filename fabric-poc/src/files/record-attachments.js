@@ -102,6 +102,7 @@ export function prepareRecordAttachments(files, changes) {
               entry.label +
               ' was not updated. Confirm again to retry, or close and reopen the saved record to change the file. ' +
               failure.message,
+            { cause: failure },
           );
         }
       }
