@@ -107,8 +107,12 @@ export function HRPanel({
     ? snapshot?.verifiers?.[0]?.name || 'Logged-in operator'
     : access.users.find((u) => u.id === actor)?.name || 'Preview operator';
   async function save(payload) {
-    if (live) updated(await commands.save(payload));
-    else {
+    let receipt;
+    if (live) {
+      const { _saved_id, ...next } = await commands.save(payload);
+      receipt = _saved_id ?? payload.id;
+      updated(next);
+    } else {
       const old = snapshot.records.find((r) => r.employee.id === payload.id);
       const row = {
         ...old,
@@ -141,7 +145,7 @@ export function HRPanel({
       });
     }
     setNotice(live ? 'Employee saved.' : 'Employee saved in this browser preview only.');
-    setEditor(null);
+    return receipt;
   }
   async function saveStatus(record, active, revision) {
     setBusy(true);
@@ -432,7 +436,8 @@ export function HRPanel({
                 onSave: save,
                 onStatus: saveStatus,
                 onClose: () => setEditor(null),
-                onReload: reload,
+                canEditFiles: can('edit'),
+                onFilesSaved: reload,
               }),
           ),
   );

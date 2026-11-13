@@ -128,6 +128,10 @@ jobs:
             sleep 1
           done
           TEST_ACCOUNTS_SERVICE=1 TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55422/postgres node fabric-poc/integration/auth-storage-http.mjs
+      - name: Install Chromium for attachment acceptance
+        run: npm --prefix fabric-poc exec playwright install --with-deps chromium
+      - name: Verify attachment lifecycles in Chromium against local Supabase
+        run: bash scripts/ci/test-attachments-browser.sh
       - name: Lint database functions in the isolated instance
         run: npx --yes supabase@2.122.0 db lint --local --schema garments_erp,garments_access --fail-on error --workdir database/ci/project
       - name: Stop and discard local database

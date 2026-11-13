@@ -1,8 +1,20 @@
-import { fileRecordPath } from '../access/workspace-routes.js';
+import { getAccessClient } from '../access/client.js';
+import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { labLabels, versionsFor, saveLabDip, labClosed, latestStatusItem } from './domain.js';
 const h = React.createElement;
-export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
+export function LabEditor({
+  data,
+  id,
+  mode = 'update',
+  onSave,
+  onClose,
+  onFilesSaved,
+  canEditFiles,
+}) {
+  const fileClient = data._live ? getAccessClient() : null;
+  const attachments = useRecordAttachments(fileClient);
+  const attachmentPlan = useRef(null);
   const lab = data.lab_dip.find((l) => l.id === id),
     existing = lab && mode !== 'edition',
     latest = existing ? versionsFor(data, id).at(-1) : null,
@@ -97,14 +109,23 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
     try {
       saveLabDip(data, draft);
       setError('');
+      attachmentPlan.current = attachments.prepare();
       setReview(true);
     } catch (e) {
       setError(e.message);
     }
   }
+  const shadeRecord = data._live && mode === 'update' ? latest?.id : null;
   return h(
     'dialog',
-    { ref: dialog, className: 'fabric-dialog lab-editor', onCancel: onClose },
+    {
+      ref: dialog,
+      className: 'fabric-dialog lab-editor',
+      onCancel: (event) => {
+        if (busy) event.preventDefault();
+        else onClose();
+      },
+    },
     h(
       'div',
       { className: 'editor-heading' },
@@ -122,7 +143,7 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
               : 'Create lab-dip edition',
         ),
       ),
-      h('button', { onClick: onClose }, 'Close'),
+      h('button', { type: 'button', disabled: busy, onClick: onClose }, 'Close'),
     ),
     error && h('p', { className: 'form-error', role: 'alert' }, error),
     closed
@@ -185,10 +206,20 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
                 ? 'Saving completes and locks this edition. Further attempts need a new edition.'
                 : 'This edition remains in progress.',
             ),
+            attachmentPlan.current?.rows.map(([label, action]) =>
+              h('p', { key: label }, label + ' · ' + action),
+            ),
             h(
               'div',
               { className: 'editor-actions' },
-              h('button', { onClick: () => setReview(false) }, 'Back to edit'),
+              h(
+                'button',
+                {
+                  disabled: busy || attachmentPlan.current?.saved,
+                  onClick: () => setReview(false),
+                },
+                'Back to edit',
+              ),
               h(
                 'button',
                 {
@@ -197,7 +228,10 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
                   onClick: async () => {
                     setBusy(true);
                     try {
-                      await onSave(saveLabDip(data, draft));
+                      await attachmentPlan.current.confirm(async () => {
+                        return onSave(saveLabDip(data, draft));
+                      });
+                      if (attachmentPlan.current.rows.length) await onFilesSaved();
                       onClose();
                     } catch (e) {
                       setError(e.message);
@@ -262,21 +296,14 @@ export function LabEditor({ data, id, mode = 'update', onSave, onClose }) {
                 ),
               ),
               data._live &&
-                h(
-                  'p',
-                  { className: 'editor-note' },
-                  mode === 'update' && latest?.id
-                    ? h(
-                        'a',
-                        {
-                          href: fileRecordPath('labDipShade', { record: latest.id }),
-                          target: '_blank',
-                          rel: 'noopener noreferrer',
-                        },
-                        'Manage shade-card image',
-                      )
-                    : 'Save the Lab Dip version before attaching its shade-card image.',
-                ),
+                h(RecordAttachmentField, {
+                  attachments,
+                  client: fileClient,
+                  targetKey: 'labDipShade',
+                  recordId: shadeRecord,
+                  canWrite: canEditFiles,
+                  label: 'Shade Card Image',
+                }),
               !data._live &&
                 select(
                   'shade_card_image_attachment',

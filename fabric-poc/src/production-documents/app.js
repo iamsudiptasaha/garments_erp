@@ -733,6 +733,57 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
     refresh();
     search.focus();
   }
+  function reviewSave(form, title, rows, save) {
+    const section = document.createElement('section');
+    section.className = 'fabric-line';
+    section.setAttribute('aria-label', title);
+    section.innerHTML = `<h3 tabindex="-1">${e(title)}</h3><dl class="fabric-fields">${rows
+      .map(
+        ([label, value]) =>
+          `<div><dt>${e(label)}</dt><dd style="overflow-wrap:anywhere">${e(value === '' ? '—' : (value ?? '—'))}</dd></div>`,
+      )
+      .join('')}</dl><p class="form-error" role="alert"></p>
+      <div class="editor-actions"><button type="button">Back to edit</button><button type="button" class="primary">Confirm save</button></div>`;
+    const [back, confirm] = section.querySelectorAll('button');
+    const restore = () => {
+      section.remove();
+      form.hidden = false;
+      form.querySelector('button.primary')?.focus();
+    };
+    back.addEventListener('click', restore);
+    confirm.addEventListener('click', async () => {
+      if (busy) return;
+      busy = back.disabled = confirm.disabled = true;
+      section.querySelector('[role="alert"]').textContent = '';
+      try {
+        await save(restore);
+      } catch (failure) {
+        section.querySelector('[role="alert"]').textContent = failure.message;
+      } finally {
+        busy = back.disabled = confirm.disabled = false;
+      }
+    });
+    form.hidden = true;
+    form.after(section);
+    section.querySelector('h3').focus();
+  }
+  const changed = (before, after, editing) =>
+    editing && String(before ?? '') !== String(after ?? '')
+      ? (before || '—') + ' → ' + (after || '—')
+      : after;
+  function matchingRecords() {
+    return records.filter((r) =>
+      [
+        r.id,
+        r.employeeName,
+        workerName(r.worker),
+        ...r.lines.flatMap((l) => [l.job, l.part, jobs[l.job]?.[2], l.description, l.variant]),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+    );
+  }
   function editBill(bill) {
     const items = (bill?.items || []).map((item) => ({ ...item }));
     const dialog = showDialog(`${dialogHeader(bill ? 'Edit worker bill' : 'New worker bill')}
@@ -741,11 +792,11 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
       <label><span>Invoice number</span><input name="invoiceNumber" value="${e(bill?.invoiceNumber)}"></label>
       <label><span>Bill date</span><input type="date" name="date" value="${e(bill?.date)}"></label>
       <label><span>Bill attachment</span><input type="file" name="attachment" ${permissions.edit ? '' : 'disabled'}></label>
-      ${bill?.attachment ? `<label><span>Current attachment · ${e(bill.attachment.name)}</span><span><input type="checkbox" name="removeAttachment" ${permissions.edit ? '' : 'disabled'}> Remove attachment</span></label>` : ''}
+      ${bill?.attachment ? `<div class="fabric-actions"><span>Current attachment · ${e(bill.attachment.name)}</span>${button('attachment', 'View bill attachment')}<label><input type="checkbox" name="removeAttachment" ${permissions.edit ? '' : 'disabled'}> Remove attachment</label></div>` : ''}
       </div><h3>Bill items</h3><div data-bill-items></div>
       <button type="button" data-add-bill-item>+ Select challan item</button>
       <p data-bill-error class="form-error" role="alert" hidden></p>
-      <div class="editor-actions"><button class="primary">Save worker bill</button></div></form>`);
+      <div class="editor-actions"><button class="primary">Review worker bill</button></div></form>`);
     const worker = dialog.querySelector('[name=worker]');
     const rows = dialog.querySelector('[data-bill-items]');
     const add = dialog.querySelector('[data-add-bill-item]');
@@ -813,6 +864,7 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
         bill,
       ),
     );
+    bindBillAttachment(dialog, bill);
     dialog.querySelector('[data-bill-form]').addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!items.length) {
@@ -826,35 +878,73 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
       const data = new FormData(event.target);
       const file = data.get('attachment');
       if (busy) return;
-      const submit = event.target.querySelector('button.primary');
-      busy = submit.disabled = true;
-      try {
-        const key = await api.save(true, bill?.key ? 'edit' : 'create', {
-          key: bill?.key,
-          revision: bill?.revision,
-          lines: items,
-          invoiceNumber: data.get('invoiceNumber'),
-          date: data.get('date') || null,
-          removeAttachment: !file.name && data.has('removeAttachment'),
-        });
-        if (listeners.signal.aborted) return;
-        invalidateDocuments();
-        if (file.name) {
+      if (event.target.hidden) return;
+      const payload = {
+        key: bill?.key,
+        revision: bill?.revision,
+        lines: structuredClone(items),
+        invoiceNumber: data.get('invoiceNumber'),
+        date: data.get('date') || null,
+        removeAttachment: !file.name && data.has('removeAttachment'),
+      };
+      const reviewRows = [
+        ['Job worker', workerName(worker.value)],
+        ['Invoice number', changed(bill?.invoiceNumber, payload.invoiceNumber, bill)],
+        ['Bill date', changed(bill?.date, payload.date, bill)],
+        [
+          'Attachment',
+          file.name
+            ? (bill?.attachment ? 'Replace with ' : 'Upload ') +
+              file.name +
+              ' (' +
+              file.size +
+              ' bytes)'
+            : payload.removeAttachment
+              ? 'Remove ' + bill?.attachment?.name
+              : bill?.attachment?.name,
+        ],
+        ...payload.lines.flatMap((item) => {
+          const info = billItem(item);
+          const before = bill?.items.find(
+            (row) => row.line === item.line && row.challan === item.challan,
+          );
+          return [
+            ['Challan / item', [info.number, info.style, info.part, info.variant].join(' · ')],
+            ['Issued quantities', info.quantities],
+            ['Description', info.description],
+            ['Billed rate', changed(before?.rate, item.rate, before)],
+          ];
+        }),
+        ...(bill?.items ?? [])
+          .filter(
+            (item) =>
+              !payload.lines.some((row) => row.line === item.line && row.challan === item.challan),
+          )
+          .map((item) => [
+            'Remove item',
+            [billItem(item).number, billItem(item).variant].join(' · '),
+          ]),
+      ];
+      const uploadRequest = file.name ? crypto.randomUUID() : null;
+      const previousAttachmentId = bill?.attachment?.id ?? null;
+      let savedKey;
+      let attachmentSaved = false;
+      reviewSave(event.target, 'Review worker bill', reviewRows, async () => {
+        savedKey ??= await api.save(true, payload.key ? 'edit' : 'create', payload);
+        if (file.name && !attachmentSaved) {
           try {
-            await api.attach(key, file);
-          } catch (error) {
+            await api.attach(savedKey, file, uploadRequest, previousAttachmentId);
+            attachmentSaved = true;
+          } catch (failure) {
             await load();
-            bill = bills.find((row) => row.key === key) || bill;
-            throw Error('Bill saved. Attachment upload failed: ' + error.message, { cause: error });
+            bill = bills.find((row) => row.key === savedKey) ?? bill;
+            throw Error('Bill saved. Attachment upload failed: ' + failure.message);
           }
         }
         await load();
         dialog.close();
-      } catch (error) {
-        showError(error.message);
-      } finally {
-        busy = submit.disabled = false;
-      }
+        invalidateDocuments();
+      });
     });
     refresh();
   }
@@ -910,6 +1000,24 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
     refresh();
     search.focus();
   }
+  function bindBillAttachment(dialog, bill) {
+    dialog.querySelector('[data-action="attachment"]')?.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      const tab = window.open('about:blank', '_blank');
+      if (!tab) {
+        window.alert('Allow pop-ups to view the private file.');
+        return;
+      }
+      tab.opener = null;
+      try {
+        const file = await api.openAttachment(bill.key, bill.attachment);
+        tab.location.replace(file.url);
+      } catch (error) {
+        tab.close();
+        window.alert(error.message);
+      }
+    });
+  }
   function viewBill(bill) {
     const dialog = showDialog(
       `${dialogHeader(bill.number)}
@@ -937,15 +1045,7 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
       )}<div class="editor-actions">${permissions.edit ? button('edit-bill:' + bill.key, 'Edit bill', true) : ''}${permissions.delete ? button('delete-bill:' + bill.key, 'Delete bill') : ''}</div></div>`,
       'fabric-dialog lab-progress-dialog',
     );
-    dialog.querySelector('[data-action="attachment"]')?.addEventListener('click', async (event) => {
-      event.stopPropagation();
-      try {
-        const file = await api.openAttachment(bill.attachment);
-        if (file.url) location.assign(file.url);
-      } catch (error) {
-        window.alert(error.message);
-      }
-    });
+    bindBillAttachment(dialog, bill);
     dialog
       .querySelector('[data-action^="edit-bill"]')
       ?.addEventListener('click', () => dialog.close());

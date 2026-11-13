@@ -1,4 +1,5 @@
-import { fileRecordPath } from '../access/workspace-routes.js';
+import { getAccessClient } from '../access/client.js';
+import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
 import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { pages } from '../fabric/catalog.js';
@@ -6,7 +7,7 @@ import { documentFor, saveDocument, optionsFor } from '../fabric/domain.js';
 import { checklistColumns } from './live.js';
 const h = React.createElement;
 // Item-owned children are edited here; shared variants and image files keep their own write boundaries.
-export function ProductionItemEditor({ data, id, onSave, onClose }) {
+export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, onFilesSaved }) {
   const dialog = useRef(null);
   const [header, setHeader] = useState(() => documentFor(data, 'productionItems', id).header);
   const [sizes, setSizes] = useState(() =>
@@ -30,6 +31,10 @@ export function ProductionItemEditor({ data, id, onSave, onClose }) {
   );
   const [error, setError] = useState('');
   const review = useSaveReview();
+  const reviewedFiles = useRef(null);
+  review.locked = reviewedFiles.current?.saved;
+  const fileClient = getAccessClient();
+  const attachments = useRecordAttachments(fileClient);
   const { busy } = review;
   useEffect(() => {
     dialog.current.showModal();
@@ -172,11 +177,14 @@ export function ProductionItemEditor({ data, id, onSave, onClose }) {
           ),
         ]),
       ];
+      const files = attachments.prepare();
+      reviewedFiles.current = files;
       review.prepare(
         next,
-        reviewRows,
+        [...reviewRows, ...files.rows],
         async (payload) => {
-          await onSave(payload);
+          await files.confirm(() => onSave(payload));
+          if (files.rows.length) await onFilesSaved();
           onClose();
         },
         'Review production item',
@@ -187,12 +195,19 @@ export function ProductionItemEditor({ data, id, onSave, onClose }) {
   }
   return h(
     'dialog',
-    { ref: dialog, className: 'fabric-dialog production-editor', onCancel: onClose },
+    {
+      ref: dialog,
+      className: 'fabric-dialog production-editor',
+      onCancel: (event) => {
+        if (busy) event.preventDefault();
+        else onClose();
+      },
+    },
     h(
       'header',
       { className: 'editor-heading' },
-      h('h2', null, id ? 'Edit item' : 'Create item'),
-      h('button', { onClick: onClose }, 'Close'),
+      h('h2', null, review.pending ? 'Review item' : id ? 'Edit item' : 'Create item'),
+      h('button', { type: 'button', disabled: busy, onClick: onClose }, 'Close'),
     ),
     h(
       ReviewForm,
@@ -235,21 +250,13 @@ export function ProductionItemEditor({ data, id, onSave, onClose }) {
                   ),
             ),
         ),
-        h(
-          'p',
-          { className: 'editor-note' },
-          id
-            ? h(
-                'a',
-                {
-                  href: fileRecordPath('itemImage', { record: id }),
-                  target: '_blank',
-                  rel: 'noopener noreferrer',
-                },
-                'Manage item image',
-              )
-            : 'Save the item, then reopen it to add its image.',
-        ),
+        h(RecordAttachmentField, {
+          attachments,
+          client: fileClient,
+          targetKey: 'itemImage',
+          recordId: id,
+          canWrite: canEditFiles,
+        }),
       ),
       h(
         'section',
@@ -375,9 +382,9 @@ export function ProductionItemEditor({ data, id, onSave, onClose }) {
       error && h('p', { role: 'alert', className: 'form-error' }, error),
       h(
         'footer',
-        null,
+        { className: 'editor-actions' },
         h('button', { type: 'button', onClick: onClose }, 'Cancel'),
-        h('button', { type: 'submit', disabled: busy }, 'Review item'),
+        h('button', { type: 'submit', className: 'primary', disabled: busy }, 'Review item'),
       ),
     ),
   );

@@ -1,6 +1,7 @@
-import { fileRecordPath } from '../access/workspace-routes.js';
+import { FilePanel } from '../files/panel.js';
+import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
 import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
-import { createElement as h, useEffect, useMemo, useState } from 'react';
+import { createElement as h, useEffect, useMemo, useRef, useState } from 'react';
 import { FabricSheet } from '../fabric/sheet.js';
 import { WorksheetToolbar, useGridSearch } from '../fabric/grid-toolbar.js';
 import { WorkspaceViewToggle } from '../fabric/view-toggle.js';
@@ -69,11 +70,14 @@ function select(label, name, options, attrs = {}) {
   );
 }
 
-function POEntry({ client, onSaved, onClose }) {
+function POEntry({ client, onSaved, onClose, canEdit }) {
   const [choices, setChoices] = useState(null);
   const [lines, setLines] = useState([{ id: 0, mode: 'standard', item: '' }]);
   const [error, setError] = useState('');
   const review = useSaveReview();
+  const reviewedFiles = useRef(null);
+  review.locked = reviewedFiles.current?.saved;
+  const attachments = useRecordAttachments(client);
   const { busy } = review;
   useEffect(() => {
     let current = true;
@@ -133,6 +137,14 @@ function POEntry({ client, onSaved, onClose }) {
       p_order: order,
     };
     setError('');
+    let files;
+    try {
+      files = attachments.prepare();
+      reviewedFiles.current = files;
+    } catch (failure) {
+      setError(failure.message);
+      return;
+    }
     review.prepare(
       payload,
       [
@@ -143,6 +155,7 @@ function POEntry({ client, onSaved, onClose }) {
         ['Season', order.season],
         ['Billing address', order.billing_address],
         ['Delivery address', order.delivery_address],
+        ...files.rows,
         ...order.lines.flatMap((entry, index) => {
           const line = lines[index];
           const label = event.currentTarget.elements.namedItem('item-' + line.id)
@@ -165,13 +178,16 @@ function POEntry({ client, onSaved, onClose }) {
         }),
       ],
       async (reviewed, requestId) => {
-        const response = await client.rpc('erp_portal_create_buyer_po', {
-          ...reviewed,
-          p_request_id: requestId,
+        const id = await files.confirm(async () => {
+          const response = await client.rpc('erp_portal_create_buyer_po', {
+            ...reviewed,
+            p_request_id: requestId,
+          });
+          if (response.error) throw response.error;
+          return response.data;
         });
-        if (response.error) throw response.error;
         onClose();
-        onSaved(response.data);
+        onSaved(id);
       },
       'Review buyer PO',
     );
@@ -281,6 +297,7 @@ function POEntry({ client, onSaved, onClose }) {
           ),
       );
     }),
+    h(RecordAttachmentField, { attachments, client, targetKey: 'buyerPO', canWrite: canEdit }),
     error && h('p', { role: 'alert' }, error),
     h(
       'div',
@@ -300,7 +317,8 @@ function POEntry({ client, onSaved, onClose }) {
   );
 }
 
-function PODetail({ client, id, onBack, createInvoice }) {
+function PODetail({ client, id, onBack, createInvoice, canEdit }) {
+  const { files, error: fileError } = useRecordAttachments(client);
   const [order, setOrder] = useState(null);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -331,8 +349,6 @@ function PODetail({ client, id, onBack, createInvoice }) {
         { className: 'fabric-actions' },
         h('button', { type: 'button', onClick: onBack }, 'Back to Buyer PO'),
         order &&
-          h('a', { href: fileRecordPath('buyerPO', { record: order.id }) }, 'PO attachments'),
-        order &&
           createInvoice &&
           h(
             'button',
@@ -343,6 +359,18 @@ function PODetail({ client, id, onBack, createInvoice }) {
     ),
     error && h('p', { role: 'alert' }, error),
     !order && !error && h('p', { role: 'status' }, 'Loading buyer PO…'),
+    order &&
+      (files
+        ? h(FilePanel, {
+            ...files,
+            targetKey: 'buyerPO',
+            recordId: order.id,
+            recordLabel: order.po_number,
+            heading: 'PO attachments',
+            targetDefinition: files.routes.find(({ key }) => key === 'buyerPO'),
+            canWrite: canEdit,
+          })
+        : fileError && h('p', { role: 'alert' }, fileError)),
     order &&
       h(
         'section',
@@ -438,7 +466,15 @@ function PODetail({ client, id, onBack, createInvoice }) {
   );
 }
 
-export function BuyerPO({ client, capabilities, canCreate, createInvoice, poToOpen, onPOOpened }) {
+export function BuyerPO({
+  client,
+  capabilities,
+  canCreate,
+  canEdit,
+  createInvoice,
+  poToOpen,
+  onPOOpened,
+}) {
   const [view, setView] = useState('overview');
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
@@ -468,12 +504,12 @@ export function BuyerPO({ client, capabilities, canCreate, createInvoice, poToOp
     };
   }, [client, query, offset, id]);
   const records = useMemo(() => (rows ?? []).slice(0, 50), [rows]);
-  if (id) return h(PODetail, { client, id, onBack: () => setId(null), createInvoice });
+  if (id) return h(PODetail, { client, id, onBack: () => setId(null), createInvoice, canEdit });
   const canOpen = search.trim() === query && records.some((row) => row.id === selected);
   const add =
     canCreate &&
     h(DocumentDialog, { title: 'New buyer PO', label: 'New buyer PO', defer: true }, (onClose) =>
-      h(POEntry, { client, onClose, onSaved: setId }),
+      h(POEntry, { client, onClose, onSaved: setId, canEdit }),
     );
   return h(
     'section',

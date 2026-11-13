@@ -116,7 +116,8 @@ test('authenticated Challan and Worker Bill CRUD with real Supabase', async ({ p
   }
   await page.getByLabel('Billed price for item 1').fill('3');
   await page.getByLabel('Billed price for item 2').fill('4');
-  await page.getByRole('button', { name: 'Save worker bill' }).click();
+  await page.getByRole('button', { name: 'Review worker bill' }).click();
+  await page.getByRole('button', { name: 'Confirm save', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'New worker bill' })).toBeHidden();
   await page.getByRole('button', { name: new RegExp(invoice) }).click();
   await expect(detail.getByRole('cell', { name: challanNumber, exact: true })).toBeVisible();
@@ -140,7 +141,8 @@ test('authenticated Challan and Worker Bill CRUD with real Supabase', async ({ p
   await detail.getByRole('button', { name: 'Edit bill' }).click();
   if (process.env.CHALLAN_TEST_FILES) await page.getByLabel('Remove attachment').check();
   await page.getByLabel('Invoice number').fill(editedInvoice);
-  await page.getByRole('button', { name: 'Save worker bill' }).click();
+  await page.getByRole('button', { name: 'Review worker bill' }).click();
+  await page.getByRole('button', { name: 'Confirm save', exact: true }).click();
   await page.reload();
   await page.getByRole('button', { name: new RegExp(editedInvoice) }).click();
   if (attachmentId) {

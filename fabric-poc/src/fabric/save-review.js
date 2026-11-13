@@ -101,7 +101,11 @@ function ReviewDetails({ review }) {
     h(
       'div',
       { className: 'editor-actions' },
-      h('button', { type: 'button', disabled: review.busy, onClick: review.back }, 'Back to edit'),
+      h(
+        'button',
+        { type: 'button', disabled: review.busy || review.locked, onClick: review.back },
+        'Back to edit',
+      ),
       h(
         'button',
         {

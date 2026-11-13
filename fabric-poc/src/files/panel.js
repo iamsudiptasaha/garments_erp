@@ -255,52 +255,50 @@ function RecordFilePanel({
           'div',
           { className: 'file-list' },
           rows.some(isCurrent)
-            ? rows
-                .filter((row) => row.current !== false)
-                .map((row) =>
+            ? rows.filter(isCurrent).map((row) =>
+                h(
+                  'article',
+                  { key: row.id },
                   h(
-                    'article',
-                    { key: row.id },
+                    'div',
+                    { className: 'file-symbol', 'aria-hidden': true },
+                    row.mime_type === 'application/pdf' ? 'PDF' : 'IMG',
+                  ),
+                  h(
+                    'div',
+                    null,
+                    h('strong', null, row.filename),
                     h(
-                      'div',
-                      { className: 'file-symbol', 'aria-hidden': true },
-                      row.mime_type === 'application/pdf' ? 'PDF' : 'IMG',
-                    ),
-                    h(
-                      'div',
+                      'small',
                       null,
-                      h('strong', null, row.filename),
-                      h(
-                        'small',
-                        null,
-                        `${prettyBytes(row.file_size)} · ${new Date(row.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
-                      ),
+                      `${prettyBytes(row.file_size)} · ${new Date(row.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
                     ),
+                  ),
+                  h(
+                    'button',
+                    { disabled: busy || review.busy, onClick: () => open(row) },
+                    store.mode === 'local' ? 'Download' : 'Open',
+                  ),
+                  store.mode === 'supabase' &&
                     h(
                       'button',
-                      { disabled: busy || review.busy, onClick: () => open(row) },
-                      store.mode === 'local' ? 'Download' : 'Open',
+                      {
+                        type: 'button',
+                        disabled: busy || review.busy,
+                        onClick: () => open(row, true),
+                      },
+                      'Download',
                     ),
-                    store.mode === 'supabase' &&
-                      h(
-                        'button',
-                        {
-                          type: 'button',
-                          disabled: busy || review.busy,
-                          onClick: () => open(row, true),
-                        },
-                        'Download',
-                      ),
-                    canWrite &&
-                      store.remove &&
-                      !review.pending &&
-                      h(
-                        'button',
-                        { type: 'button', disabled: busy, onClick: () => remove(row) },
-                        'Remove',
-                      ),
-                  ),
-                )
+                  canWrite &&
+                    store.remove &&
+                    !review.pending &&
+                    h(
+                      'button',
+                      { type: 'button', disabled: busy, onClick: () => remove(row) },
+                      'Remove',
+                    ),
+                ),
+              )
             : h(
                 'div',
                 { className: 'file-empty' },

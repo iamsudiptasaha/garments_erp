@@ -87,13 +87,19 @@ export async function reviewContactBankFiles(client, files) {
   const targetKey = 'contactBankDocument';
   const [registry, routes] = await Promise.all([commands.registry(), commands.routes()]);
   const target = routes.find((route) => route.key === targetKey);
-  if (!target || target.enabled === false) throw Error('Bank document uploads are disabled.');
-  const group = resolveGroup(registry, target.group);
-  for (const { file } of files)
-    validateFile(file, target, {
-      ...group,
-      max_bytes: Math.min(group.max_bytes, target.max_bytes || 10485760),
-    });
+  const uploads = files.filter(({ file }) => file);
+  if (uploads.length) {
+    if (!target || target.enabled === false) throw Error('Bank document uploads are disabled.');
+    const group = resolveGroup(registry, target.group);
+    for (const { file } of uploads)
+      validateFile(file, target, {
+        ...group,
+        max_bytes: Math.min(group.max_bytes, target.max_bytes || 10485760),
+      });
+  }
   const store = commands.store(registry, routes);
-  return (entry) => store.attach({ ...entry, targetKey });
+  return (entry) =>
+    entry.file
+      ? store.attach({ ...entry, targetKey })
+      : store.remove(targetKey, entry.recordId, entry.previousAttachmentId);
 }
