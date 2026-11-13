@@ -48,7 +48,7 @@ export function PrivateImageButton({ targetKey, recordId, attachmentId, children
 
 // A prepared plan belongs to one reviewed payload. The record receipt and each
 // successful file operation survive a retry while that review remains open.
-export function prepareRecordAttachments(files, changes) {
+function prepareRecordAttachments(files, changes) {
   const entries = Object.entries(changes).map(([key, { file, previous }]) => {
     const route = files?.routes.find((entry) => entry.key === key);
     const label = targetFor(key).label;

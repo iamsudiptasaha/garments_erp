@@ -6,7 +6,7 @@ import { FILE_TARGETS } from '../src/files/model.js';
 import { fileRecordPath } from '../src/access/workspace-routes.js';
 import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
-import { chromium } from 'playwright';
+import { chromium } from '@playwright/test';
 const runtime = JSON.parse(
   readFileSync(process.env.TEST_RUNTIME_FILE || '/tmp/erp-test-runtime.json', 'utf8'),
 );
