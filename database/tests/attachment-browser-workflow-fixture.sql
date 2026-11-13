@@ -5,7 +5,7 @@ insert into garments_erp.transport_bill(invoice_number,invoice_date)
 values ('Existing attachment transport bill',current_date);
 
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
-select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","session_id":"10000000-0000-4000-8000-000000000001"}',false);
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000001"}',false);
 
 select public.erp_save_challan_document(false,'create',
  '{"lines":[{"assignment":"974001","rate":"12","quantities":{"Test S":"24","Test M":"8"}}]}');
