@@ -1,4 +1,5 @@
 import { fileRecordPath } from '../access/workspace-routes.js';
+import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
 import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import { createElement as h, useEffect, useMemo, useState } from 'react';
 import { FinishedGoodsEditor as DocumentDialog } from '../finished-goods/sheet-view.js';
@@ -25,7 +26,8 @@ const cartonColumns = [
   { key: 'packing', label: 'Invoice packing' },
 ];
 
-function TransportEntry({ client, data, onClose, onSaved }) {
+function TransportEntry({ client, data, onClose, onSaved, canEdit }) {
+  const attachments = useRecordAttachments(client);
   const review = useSaveReview();
   const { busy } = review;
   const [error, setError] = useState('');
@@ -41,22 +43,38 @@ function TransportEntry({ client, data, onClose, onSaved }) {
       p_cartons: fields.getAll('carton'),
     };
     setError('');
+    let files;
+    try {
+      files = attachments.prepare();
+    } catch (failure) {
+      setError(failure.message);
+      return;
+    }
     review.prepare(
       payload,
       [
         ['Carrier', data.carriers.find(({ id }) => id === payload.p_transporter_id)?.name],
         ['Docket number', payload.p_docket],
         ['Pickup date', payload.p_date],
+        ...files.rows,
         ...data.available_cartons
           .filter(({ id }) => payload.p_cartons.includes(id))
           .map((carton) => ['Carton', carton.number + ' · ' + carton.invoice]),
       ],
       async (reviewed, requestId) => {
-        const result = await client.rpc('erp_portal_create_transport', {
-          ...reviewed,
-          p_request_id: requestId,
+        await files.confirm(async () => {
+          const result = await client.rpc('erp_portal_create_transport', {
+            ...reviewed,
+            p_request_id: requestId,
+          });
+          if (result.error) throw result.error;
+          if (!files.rows.length) return null;
+          const workspace = await client.rpc('erp_portal_dispatch_workspace', {
+            p_transport_id: result.data,
+          });
+          if (workspace.error) throw workspace.error;
+          return workspace.data.transports[0]?.docket_id;
         });
-        if (result.error) throw result.error;
         onClose();
         onSaved();
       },
@@ -105,6 +123,12 @@ function TransportEntry({ client, data, onClose, onSaved }) {
           )
         : h('p', null, 'Add a carton to a packing list first.'),
     ),
+    h(RecordAttachmentField, {
+      attachments,
+      client,
+      targetKey: 'transportDocket',
+      canWrite: canEdit,
+    }),
     error && h('p', { role: 'alert' }, error),
     h(
       'div',
@@ -114,6 +138,69 @@ function TransportEntry({ client, data, onClose, onSaved }) {
         { type: 'submit', className: 'primary', disabled: busy || !data.available_cartons.length },
         'Review transport',
       ),
+    ),
+  );
+}
+
+function TransportBillEntry({ client, onClose, canEdit }) {
+  const review = useSaveReview();
+  const attachments = useRecordAttachments(client);
+  const [error, setError] = useState('');
+  function save(event) {
+    const fields = new FormData(event.currentTarget);
+    const payload = {
+      p_invoice_number: fields.get('invoice').trim(),
+      p_invoice_date: fields.get('date'),
+    };
+    let files;
+    try {
+      files = attachments.prepare();
+      setError('');
+    } catch (failure) {
+      setError(failure.message);
+      return;
+    }
+    review.prepare(
+      payload,
+      [
+        ['Invoice number', payload.p_invoice_number],
+        ['Invoice date', payload.p_invoice_date],
+        ...files.rows,
+      ],
+      async (reviewed, requestId) => {
+        await files.confirm(async () => {
+          const response = await client.rpc('erp_portal_create_transport_bill', {
+            ...reviewed,
+            p_request_id: requestId,
+          });
+          if (response.error) throw response.error;
+          return response.data;
+        });
+        onClose();
+      },
+      'Review transport bill',
+    );
+  }
+  return h(
+    ReviewForm,
+    { review, onSubmit: save },
+    h(
+      'div',
+      { className: 'fabric-fields' },
+      h('label', null, 'Invoice number', h('input', { name: 'invoice', required: true })),
+      h('label', null, 'Invoice date', h('input', { name: 'date', type: 'date', required: true })),
+    ),
+    h(RecordAttachmentField, {
+      attachments,
+      client,
+      targetKey: 'transportBill',
+      canWrite: canEdit,
+    }),
+    error && h('p', { role: 'alert' }, error),
+    h(
+      'div',
+      { className: 'editor-actions' },
+      h('button', { type: 'submit', className: 'primary' }, 'Review transport bill'),
     ),
   );
 }
@@ -219,10 +306,23 @@ export function BillingDispatch({
     );
   }
   const add =
-    canCreate &&
     data &&
-    h(DocumentDialog, { defer: true, label: 'New transport', title: 'New transport' }, (onClose) =>
-      h(TransportEntry, { client, data, onClose, onSaved: refresh }),
+    h(
+      'div',
+      { className: 'fabric-actions' },
+      canCreate &&
+        h(
+          DocumentDialog,
+          { defer: true, label: 'New transport', title: 'New transport' },
+          (onClose) => h(TransportEntry, { client, data, onClose, onSaved: refresh, canEdit }),
+        ),
+      canCreate &&
+        h(
+          DocumentDialog,
+          { defer: true, label: 'New transport bill', title: 'New transport bill' },
+          (onClose) => h(TransportBillEntry, { client, onClose, canEdit }),
+        ),
+      h('a', { href: fileRecordPath('transportBill') }, 'Transport bill attachments'),
     );
   const paged = offset > 0 || data?.transports.length > 50;
 
@@ -254,11 +354,13 @@ export function BillingDispatch({
             h(
               'a',
               {
-                href: fileRecordPath('transportDocket', { query: row.docket_number }),
+                href: fileRecordPath('transportDocket', {
+                  record: row.docket_id,
+                  query: row.docket_number,
+                }),
               },
               'Docket attachments',
             ),
-          h('a', { href: fileRecordPath('transportBill') }, 'Transport bill attachments'),
         ),
       footer: h(
         'div',

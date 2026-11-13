@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ContactSelect } from './contact-select.js';
-import { FilePanel } from '../files/panel.js';
-import { liveFileCommands } from '../files/live.js';
+import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
 import { getAccessClient } from '../access/client.js';
-import { employeeFields, employeeDraft, employeeLinks, validateEmployeeDraft } from './model.js';
+import { employeeFields, employeeLinks, validateEmployeeDraft } from './model.js';
 import '../files/styles.css';
 const h = React.createElement;
 export function EmployeeEditor({
@@ -16,7 +15,8 @@ export function EmployeeEditor({
   onSave,
   onStatus,
   onClose,
-  onReload,
+  canEditFiles,
+  onFilesSaved,
 }) {
   const dialog = useRef(null),
     [draft, setDraft] = useState(() => ({
@@ -33,11 +33,14 @@ export function EmployeeEditor({
     [review, setReview] = useState(false),
     [active, setActive] = useState(record?.employee.is_active !== false),
     [error, setError] = useState(''),
-    [busy, setBusy] = useState(false),
-    [files, setFiles] = useState(null);
-  const [revision, setRevision] = useState(record?.revision || null);
-  const [savedDraft, setSavedDraft] = useState(() => JSON.stringify(draft));
-  const dirty = JSON.stringify(draft) !== savedDraft;
+    [busy, setBusy] = useState(false);
+  const fileClient = live ? getAccessClient() : null;
+  const attachments = useRecordAttachments(fileClient);
+  const attachmentPlan = useRef(null);
+  const saving = useRef(false);
+  const revision = record?.revision || null;
+  const [savedDraft] = useState(() => JSON.stringify(draft));
+  const dirty = JSON.stringify(draft) !== savedDraft || Object.keys(attachments.changes).length > 0;
   const payload = { id: record?.employee.id || null, expected: revision, draft };
   const assignedContacts = new Set(
     snapshot.records
@@ -49,21 +52,6 @@ export function EmployeeEditor({
   );
   useEffect(() => {
     dialog.current.showModal();
-  }, []);
-  useEffect(() => {
-    if (!live || !record) return;
-    let active = true;
-    const c = liveFileCommands(getAccessClient());
-    Promise.all([c.registry(), c.routes()])
-      .then(([registry, routes]) => {
-        if (active) setFiles({ registry, routes, store: c.store(registry, routes) });
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      });
-    return () => {
-      active = false;
-    };
   }, []);
   function change(update) {
     if (busy) return;
@@ -106,14 +94,21 @@ export function EmployeeEditor({
     );
   }
   async function save() {
+    if (saving.current) return;
+    saving.current = true;
     setBusy(true);
     setError('');
     try {
       if (tab === 'status') await onStatus(record, active, revision);
-      else await onSave(payload);
+      else {
+        await attachmentPlan.current.confirm(() => onSave(payload));
+        if (attachmentPlan.current.rows.length) await onFilesSaved();
+        onClose();
+      }
     } catch (e) {
       setError(e.message);
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
@@ -143,7 +138,7 @@ export function EmployeeEditor({
     !review &&
       h(
         'div',
-        { className: 'fabric-view-toggle' },
+        { className: 'fabric-view-toggle', 'aria-label': 'Employee editor sections' },
         ['profile', 'contacts', 'documents', 'status'].map((key) =>
           h(
             'button',
@@ -177,6 +172,15 @@ export function EmployeeEditor({
                 snapshot.contact_choices.find((c) => c.id === draft.employee.contacts_emergency_id)
                   ?.company_name || 'Not set',
               ],
+              ...(tab !== 'status'
+                ? employeeFields.map(([key, label, type]) => [
+                    label,
+                    snapshot[type]?.find((option) => option.id === draft.employee[key])?.name ??
+                      snapshot[type]?.find((option) => option.id === draft.employee[key])?.type ??
+                      (draft.employee[key] || 'Not set'),
+                  ])
+                : []),
+              ...(attachmentPlan.current?.rows || []),
               ['Verification', 'Automatically verified by ' + operator],
               [
                 'Status',
@@ -324,52 +328,22 @@ export function EmployeeEditor({
                 employeeFields.filter(([k]) => k.startsWith('supporting_')),
                 (k, v) => change((d) => ({ ...d, employee: { ...d.employee, [k]: v } })),
               ),
-              !record
-                ? h('p', null, 'Save the employee first, then upload their private documents.')
-                : !live
-                  ? h('p', null, 'Private uploads are available in the live workspace.')
-                  : files
-                    ? h(
-                        React.Fragment,
-                        null,
-                        dirty &&
-                          h(
-                            'p',
-                            { className: 'editor-note' },
-                            'Save profile changes before uploading documents.',
-                          ),
-                        ['employeePhoto', 'employeeDocument1', 'employeeDocument2'].map((key) =>
-                          h(FilePanel, {
-                            key,
-                            targetKey: key,
-                            recordId: record.employee.id,
-                            recordLabel: record.employee.employee_code,
-                            registry: files.registry,
-                            store: files.store,
-                            targetDefinition: files.routes.find((r) => r.key === key),
-                            canWrite: canEdit && !dirty && !busy,
-                            onBusyChange: setBusy,
-                            onAttached: async () => {
-                              const next = await onReload();
-                              if (!next)
-                                throw Error(
-                                  'File saved. Close and reload this employee before further edits.',
-                                );
-                              const fresh = next.records.find(
-                                (r) => r.employee.id === record.employee.id,
-                              );
-                              const nextDraft = employeeDraft(fresh);
-                              setDraft(nextDraft);
-                              setSavedDraft(JSON.stringify(nextDraft));
-                              setRevision(fresh.revision);
-                            },
-                          }),
-                        ),
-                      )
-                    : h('p', null, 'Loading private document routes…'),
+              live
+                ? ['employeePhoto', 'employeeDocument1', 'employeeDocument2'].map((key) =>
+                    h(RecordAttachmentField, {
+                      key,
+                      attachments,
+                      client: fileClient,
+                      targetKey: key,
+                      recordId: record?.employee.id,
+                      canWrite: canEdit && canEditFiles && !busy,
+                    }),
+                  )
+                : h('p', null, 'Private uploads are available in the live workspace.'),
             ),
         ),
     canEdit &&
+      !review &&
       h(
         'section',
         { className: 'hr-verification' },
@@ -395,7 +369,14 @@ export function EmployeeEditor({
           ? h(
               React.Fragment,
               null,
-              h('button', { disabled: busy, onClick: () => setReview(false) }, 'Back to edit'),
+              h(
+                'button',
+                {
+                  disabled: busy || attachmentPlan.current?.saved,
+                  onClick: () => setReview(false),
+                },
+                'Back to edit',
+              ),
               h(
                 'button',
                 { className: 'primary', disabled: busy, onClick: save },
@@ -416,7 +397,11 @@ export function EmployeeEditor({
                     (!record || dirty || active === (record.employee.is_active !== false))),
                 onClick: () => {
                   try {
-                    if (tab !== 'status') validateEmployeeDraft(draft);
+                    attachmentPlan.current = null;
+                    if (tab !== 'status') {
+                      validateEmployeeDraft(draft);
+                      attachmentPlan.current = attachments.prepare();
+                    }
                     setError('');
                     setReview(true);
                   } catch (e) {

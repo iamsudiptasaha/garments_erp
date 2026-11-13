@@ -21,3 +21,9 @@
 - For shared UI changes, run the relevant browser visual and interaction checks documented in the design reference. Preserve existing screenshots, computed styles and behavior unless a change is approved.
 - Use the shared record-grid controls and preference store for configurable ERP grids. Use debounced, labelled search, interactive ascending and descending sort, content-fit widths with manual overrides, and stable grid and column keys. Persist presentation per authenticated account and verify reload, cross-device use, account isolation and responsive toolbar alignment.
 - Apply the mandatory [Sheet-view contract](docs/design-system.md#mandatory-sheet-view-contract) to every worksheet. Test selection by stable record identity, eligible Add/Open/Edit workflows, read-only source inspection, empty states, independent permissions and protected values. Keep Sheet-specific changes scoped to Sheet and verify existing Overview interactions and visuals.
+
+# Attachment acceptance
+
+- Inventory attachment slots from the ERP Files registry and map each to its owning record and actual create and edit controls.
+- Verify each slot in Chromium against disposable local Supabase with authenticated users. Exercise file selection before review, confirmation, upload, opening or downloading the exact saved bytes, replacement and removal. Use both new and existing records. Check the database reference, private Storage and allowed and denied access.
+- Record PASS, FAIL, NOT IMPLEMENTED or NOT TESTED separately for each operation and record state. A registered route, direct API call, mocked browser or existing file download cannot establish that uploading through the editor works. An attachment workflow is complete only when every applicable operation passes.

@@ -470,16 +470,15 @@ function App({ live, refreshWorkspaceAccess }) {
     if (live) {
       if (!liveReady) throw Error('Wait for live data to load.');
       if (liveProductionPage(editor.page)) {
-        await applyProduction(
-          await production.saveSetup({
-            resource: editor.page,
-            before: state.data,
-            after: next,
-            id: editor.id,
-          }),
-        );
+        const { _saved_id, ...snapshot } = await production.saveSetup({
+          resource: editor.page,
+          before: state.data,
+          after: next,
+          id: editor.id,
+        });
+        await applyProduction(snapshot);
         setSelected(null);
-        return;
+        return _saved_id ?? editor.id;
       }
       if (liveInventoryPage(editor.page)) {
         const table = pages[editor.page].entity;
@@ -511,12 +510,12 @@ function App({ live, refreshWorkspaceAccess }) {
         });
         setNotice('Inventory transaction saved to Supabase');
         setSelected(null);
-        return;
+        return row.id;
       }
       const resource = editor.page,
         root = fabricRoot(resource, state.data, next, editor),
         action = root.before ? 'edit' : 'create';
-      const snapshot = assertLiveIdentifiers(
+      const { _saved_id, ...snapshot } = assertLiveIdentifiers(
         await commands.save({
           resource,
           root,
@@ -534,6 +533,16 @@ function App({ live, refreshWorkspaceAccess }) {
         },
       }));
       setNotice('Saved to Supabase · linked records refreshed');
+      setSelected(null);
+      if (resource === 'labDips') {
+        const version = next.lab_dip_version
+          .filter((row) => row.lab_dip_id === root.id)
+          .reduce((latest, row) => (!latest || row.version > latest.version ? row : latest), null);
+        return snapshot.lab_dip_version.find(
+          (row) => row.lab_dip_id === (_saved_id ?? root.id) && row.version === version?.version,
+        )?.id;
+      }
+      return _saved_id ?? editor.id;
     } else if (save({ ...state, data: next }))
       setNotice(
         spec.master
@@ -1334,6 +1343,8 @@ function App({ live, refreshWorkspaceAccess }) {
           data: data,
           receiptId: editor.receiptId,
           reconciliation: editor.reconciliation,
+          canEditFiles: can('edit', editor.page),
+          onFilesSaved: refreshLive,
           onSave: live && editor.page === 'materialContacts' ? saveLiveContact : saveData,
           onReload: live && editor.page === 'materialContacts' ? reloadContacts : undefined,
           verifiers: live

@@ -1,4 +1,5 @@
 import { fileRecordPath } from '../access/workspace-routes.js';
+import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
 import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import { createElement as h, useMemo, useState } from 'react';
 import { FinishedGoodsEditor as DocumentDialog } from '../finished-goods/sheet-view.js';
@@ -33,7 +34,8 @@ const partColumns = [
 ];
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 
-export function ReturnEntry({ client, records, onClose, refresh, invoiceId }) {
+export function ReturnEntry({ client, records, onClose, refresh, invoiceId, canEditFiles }) {
+  const attachments = useRecordAttachments(client);
   const [invoice, setInvoice] = useState(invoiceId ?? records.invoices[0]?.id ?? '');
   const [error, setError] = useState('');
   const review = useSaveReview();
@@ -83,9 +85,17 @@ export function ReturnEntry({ client, records, onClose, refresh, invoiceId }) {
       p_lines: [...lines.values()],
     };
     setError('');
+    let files;
+    try {
+      files = attachments.prepare();
+    } catch (failure) {
+      setError(failure.message);
+      return;
+    }
     review.prepare(
       payload,
       [
+        ...files.rows,
         ['Invoice', records.invoices.find(({ id }) => id === invoice)?.label ?? invoice],
         [
           'Reason',
@@ -104,11 +114,14 @@ export function ReturnEntry({ client, records, onClose, refresh, invoiceId }) {
         ],
       ],
       async (reviewed, requestId) => {
-        const result = await client.rpc('erp_portal_verify_return', {
-          ...reviewed,
-          p_request_id: requestId,
+        await files.confirm(async () => {
+          const result = await client.rpc('erp_portal_verify_return', {
+            ...reviewed,
+            p_request_id: requestId,
+          });
+          if (result.error) throw result.error;
+          return result.data;
         });
-        if (result.error) throw result.error;
         onClose();
         refresh();
       },
@@ -214,6 +227,12 @@ export function ReturnEntry({ client, records, onClose, refresh, invoiceId }) {
       h('p', null, 'This return · ' + money.format(credit)),
       h('p', null, 'Verified by · ' + records.employee),
     ),
+    h(RecordAttachmentField, {
+      attachments,
+      client,
+      targetKey: 'returnBill',
+      canWrite: canEditFiles,
+    }),
     error && h('p', { role: 'alert' }, error),
     h(
       'button',
@@ -223,7 +242,7 @@ export function ReturnEntry({ client, records, onClose, refresh, invoiceId }) {
   );
 }
 
-export function BillingReturns({ client, capabilities, canCreate, openInvoice }) {
+export function BillingReturns({ client, capabilities, canCreate, canEdit, openInvoice }) {
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
   const [revision, setRevision] = useState(0);
@@ -273,7 +292,8 @@ export function BillingReturns({ client, capabilities, canCreate, openInvoice })
         h(
           DocumentDialog,
           { defer: true, title: 'Record return', label: 'Record return' },
-          (onClose) => h(ReturnEntry, { client, records: data, onClose, refresh }),
+          (onClose) =>
+            h(ReturnEntry, { client, records: data, onClose, refresh, canEditFiles: canEdit }),
         ),
       selectedActions: (row) =>
         h(

@@ -76,15 +76,14 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
         body = { id: '22', ...args.p_values };
         stock.raw_material_check_out.push(body);
       }
-    } else throw Error(`Unexpected Inventory request: ${name}`);
+    } else if (['erp_file_registry', 'erp_file_routes', 'erp_file_list'].includes(name)) body = [];
+    else throw Error(`Unexpected Inventory request: ${name}`);
     await route.fulfill({ json: body });
   });
 
   await page.goto('/fabric.html?live=1#materialReceipts');
   await page.getByRole('button', { name: '+ Receive stock' }).click();
-  await expect(
-    page.getByText('Save the receipt, then reopen it to attach its bill.'),
-  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Upload stock receipt bill' })).toBeVisible();
   await page.getByLabel('Purchase order', { exact: true }).selectOption('4');
   await page.getByLabel('Purchase order line', { exact: true }).selectOption('12');
   await page.getByLabel('Billed quantity').fill('10');
@@ -97,10 +96,7 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
     material_category_id: '15',
   });
   await page.getByRole('button', { name: 'Edit →', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Manage bill attachments' })).toHaveAttribute(
-    'href',
-    '/files.html?target=rawMaterialBill&record=21',
-  );
+  await expect(page.getByRole('button', { name: 'Upload stock receipt bill' })).toBeVisible();
 
   await page.goto('/fabric.html?live=1#materialIssues');
   await page.getByRole('button', { name: '+ Record outward' }).click();

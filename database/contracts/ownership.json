@@ -65,6 +65,10 @@
       "permissionScreen": "billingSummary",
       "writableTables": []
     },
+    "public.erp_portal_create_transport_bill": {
+      "permissionScreen": "billingDispatch",
+      "writableTables": ["transport_bill", "app_activity_log"]
+    },
     "public.erp_portal_create_transport": {
       "permissionScreen": "billingDispatch",
       "writableTables": ["transport", "transport_docket", "transport_item", "app_activity_log"]

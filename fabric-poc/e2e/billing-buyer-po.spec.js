@@ -73,6 +73,10 @@ test('Buyer PO entry saves mixed modes with a protected recipe and opens the sav
         ],
       });
     }
+    if (['erp_file_registry', 'erp_file_routes', 'erp_file_list'].includes(method)) {
+      await route.fulfill({ json: [] });
+      return;
+    }
     if (!Object.hasOwn(responses, method)) throw Error(`Unexpected Buyer PO request: ${method}`);
     await route.fulfill({ json: responses[method] });
   });
@@ -90,7 +94,9 @@ test('Buyer PO entry saves mixed modes with a protected recipe and opens the sav
   await dialog.getByLabel('HSN code · Top · S').fill('06204');
   await expect(dialog.getByRole('cell', { name: '2', exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Add PO item' }).click();
-  const second = dialog.locator('.fabric-line').last();
+  const second = dialog.locator('section.fabric-line').filter({
+    has: page.getByRole('heading', { name: 'PO item 2', exact: true }),
+  });
   await second.getByLabel('Sale mode').selectOption('exception');
   await second.getByLabel('ERP item / sellable product').selectOption('2');
   await second.getByLabel('Ordered pieces').fill('1');

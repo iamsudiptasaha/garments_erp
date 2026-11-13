@@ -1,4 +1,5 @@
-import { fileRecordPath } from '../access/workspace-routes.js';
+import { getAccessClient } from '../access/client.js';
+import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
 import { CheckoutVariantPicker } from './checkout-variant-picker.js';
 import { RichCommentEditor, RichComment } from './rich-comment.js';
 import { LabRecordSelect } from './lab-record-select.js';
@@ -40,9 +41,17 @@ export function BillEditor({
   receiptId,
   reconciliation = false,
   onSave,
+  onDelete,
+  canEditFiles,
+  onFilesSaved,
   onClose,
   verifiers = [],
 }) {
+  const fileTarget = data._live && !reconciliation ? billAttachmentTargets[page] : null;
+  const fileClient = fileTarget ? getAccessClient() : null;
+  const attachments = useRecordAttachments(fileClient);
+  const attachmentPlan = useRef(null);
+  const [removing, setRemoving] = useState(false);
   const baseSpec = pages[page],
     entrySpec = reconciliation
       ? {
@@ -318,6 +327,7 @@ export function BillEditor({
         throw Error('Choose Purchase order or Fabric first.');
       reviewedSave.current =
         page === 'suppliers' ? saveSupplier(data, supplier) : saveDocument(data, page, draft);
+      attachmentPlan.current = attachments.prepare();
       setError('');
       setReview(true);
     } catch (e) {
@@ -325,16 +335,24 @@ export function BillEditor({
     }
   }
   async function commit() {
-    if (!reviewedSave.current || saving.current) return;
+    if ((!reviewedSave.current && !removing) || saving.current) return;
     saving.current = true;
     setBusy(true);
     try {
-      if (page === 'dyeBills' && (!verifier || !password))
+      if (removing) {
+        await onDelete();
+        onClose();
+        return;
+      }
+      if (page === 'dyeBills' && !attachmentPlan.current.saved && (!verifier || !password))
         throw Error('Select an employee and enter their password to verify this save.');
-      await onSave(
-        reviewedSave.current,
-        page === 'dyeBills' ? { employee: verifier, password } : undefined,
+      await attachmentPlan.current.confirm(() =>
+        onSave(
+          reviewedSave.current,
+          page === 'dyeBills' ? { employee: verifier, password } : undefined,
+        ),
       );
+      if (attachmentPlan.current.rows.length) await onFilesSaved();
       onClose();
     } catch (e) {
       setError(e.message);
@@ -427,31 +445,20 @@ export function BillEditor({
         h(
           'h2',
           null,
-          `${review ? 'Review' : id ? 'Edit' : 'New'} ${page === 'suppliers' ? 'supplier' : spec.singular || spec.title.toLowerCase().replace(/s$/, '')}`,
+          `${removing ? 'Review removal of' : review ? 'Review' : id ? 'Edit' : 'New'} ${page === 'suppliers' ? 'supplier' : spec.singular || spec.title.toLowerCase().replace(/s$/, '')}`,
         ),
       ),
       h('button', { type: 'button', disabled: busy, onClick: onClose }, 'Close'),
     ),
-    data._live &&
+    fileTarget &&
       !review &&
-      billAttachmentTargets[page] &&
-      h(
-        'p',
-        { className: 'editor-note' },
-        id
-          ? h(
-              'a',
-              {
-                href: fileRecordPath(billAttachmentTargets[page], { record: id }),
-                target: '_blank',
-                rel: 'noopener noreferrer',
-              },
-              'Manage bill attachments',
-            )
-          : page === 'materialReceipts'
-            ? 'Save the receipt, then reopen it to attach its bill.'
-            : 'Save the bill, then reopen it to add its attachment.',
-      ),
+      h(RecordAttachmentField, {
+        attachments,
+        client: fileClient,
+        targetKey: fileTarget,
+        recordId: id,
+        canWrite: canEditFiles && !busy,
+      }),
     reconciliation &&
       h(
         'p',
@@ -508,14 +515,25 @@ export function BillEditor({
       ? h(
           'section',
           null,
+          removing &&
+            h(
+              'p',
+              null,
+              'Remove this contact category? Categories linked to records cannot be removed.',
+            ),
+          attachmentPlan.current?.rows.map(([label, action]) =>
+            h('p', { key: label }, label + ' · ' + action),
+          ),
           h(
             'p',
             { className: 'editor-note' },
-            spec.inventory
-              ? 'Check every value before saving. Stock balances and movement history will update.'
-              : spec.master
-                ? 'Check the details before saving. Linked records use these references.'
-                : 'Check the complete document. Saving updates the header and all its lines together.',
+            removing
+              ? ''
+              : spec.inventory
+                ? 'Check every value before saving. Stock balances and movement history will update.'
+                : spec.master
+                  ? 'Check the details before saving. Linked records use these references.'
+                  : 'Check the complete document. Saving updates the header and all its lines together.',
           ),
           h(
             'div',
@@ -686,7 +704,9 @@ export function BillEditor({
             h(
               'button',
               {
+                disabled: busy || attachmentPlan.current?.saved,
                 onClick: () => {
+                  setRemoving(false);
                   setReview(false);
                   setPassword('');
                   setShowPassword(false);
@@ -698,10 +718,18 @@ export function BillEditor({
               'button',
               {
                 className: 'primary',
-                disabled: busy || (page === 'dyeBills' && (!verifier || !password)),
+                disabled:
+                  busy ||
+                  (page === 'dyeBills' &&
+                    !attachmentPlan.current?.saved &&
+                    (!verifier || !password)),
                 onClick: commit,
               },
-              spec.master ? 'Confirm & save' : 'Confirm & save document',
+              removing
+                ? 'Confirm removal'
+                : spec.master
+                  ? 'Confirm & save'
+                  : 'Confirm & save document',
             ),
           ),
         )
@@ -911,6 +939,19 @@ export function BillEditor({
             'div',
             { className: 'editor-actions' },
             h('button', { type: 'button', onClick: onClose }, 'Cancel'),
+            onDelete &&
+              h(
+                'button',
+                {
+                  type: 'button',
+                  onClick: () => {
+                    setRemoving(true);
+                    setReview(true);
+                    setError('');
+                  },
+                },
+                'Remove category',
+              ),
             h(
               'button',
               { type: 'submit', className: 'primary' },

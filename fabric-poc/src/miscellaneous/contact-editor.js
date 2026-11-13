@@ -1,6 +1,6 @@
 import { contactWrite, reviewContactBankFiles } from './live.js';
 import { getAccessClient } from '../access/client.js';
-import { fileRecordPath } from '../access/workspace-routes.js';
+import { PrivateImageButton } from '../files/record-attachments.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { miscellaneousPages } from './catalog.js';
 import { contactSections, contactDraft, saveContact } from './contact-model.js';
@@ -30,6 +30,17 @@ export function ContactEditor({ data, id, onSave, onReload, onClose, can = () =>
   function change(fn) {
     setDraft(fn);
     setReview(false);
+  }
+  function setBankFile(table, index, pendingFile) {
+    change((draft) => ({
+      ...draft,
+      sections: {
+        ...draft.sections,
+        [table]: draft.sections[table].map((row, i) =>
+          i === index ? { ...row, pendingFile } : row,
+        ),
+      },
+    }));
   }
   function input(field, row, set, prefix = '', disabled = false) {
     return h(
@@ -348,7 +359,12 @@ export function ContactEditor({ data, id, onSave, onReload, onClose, can = () =>
                     h(
                       'p',
                       { className: 'editor-note' },
-                      'Supporting document: ' + row.pendingFile.file.name,
+                      row.pendingFile.file
+                        ? 'Supporting document: ' + row.pendingFile.file.name
+                        : 'Remove supporting document: ' +
+                            (data.attachments?.find(
+                              ({ id }) => String(id) === String(row.supporting_documents),
+                            )?.filename || 'current file'),
                     ),
                   !review &&
                     bank &&
@@ -357,47 +373,78 @@ export function ContactEditor({ data, id, onSave, onReload, onClose, can = () =>
                       'div',
                       { className: 'editor-note' },
                       row.id &&
+                        row.supporting_documents &&
                         h(
-                          'a',
+                          PrivateImageButton,
                           {
-                            href: fileRecordPath('contactBankDocument', { record: row.id }),
-                            target: '_blank',
-                            rel: 'noopener noreferrer',
+                            targetKey: 'contactBankDocument',
+                            recordId: row.id,
+                            attachmentId: row.supporting_documents,
                           },
-                          row.supporting_documents
-                            ? 'View supporting document in Files'
-                            : 'Open supporting documents in Files',
+                          'View supporting document',
                         ),
                       canChange &&
                         can('edit', section.resource) &&
                         h(
-                          'label',
-                          { className: 'contact-bank-file' },
-                          h('span', null, 'Supporting document'),
-                          h('input', {
-                            type: 'file',
-                            accept: 'application/pdf,image/jpeg,image/png,image/webp',
-                            disabled: busy,
-                            onChange: (event) => {
-                              const file = event.target.files?.[0];
-                              change((d) => ({
-                                ...d,
-                                sections: {
-                                  ...d.sections,
-                                  [section.table]: d.sections[section.table].map((entry, i) =>
-                                    i === index
-                                      ? {
-                                          ...entry,
-                                          pendingFile: file
-                                            ? { file, requestId: crypto.randomUUID() }
-                                            : null,
-                                        }
-                                      : entry,
-                                  ),
+                          React.Fragment,
+                          null,
+                          row.supporting_documents &&
+                            !row.pendingFile &&
+                            h(
+                              'button',
+                              {
+                                type: 'button',
+                                disabled: busy,
+                                onClick: () => setBankFile(section.table, index, { file: null }),
+                              },
+                              'Remove supporting document',
+                            ),
+                          h(
+                            'label',
+                            { className: 'contact-bank-file' },
+                            h(
+                              'span',
+                              null,
+                              row.supporting_documents
+                                ? 'Replace supporting document'
+                                : 'Supporting document',
+                            ),
+                            h('input', {
+                              type: 'file',
+                              accept: 'application/pdf,image/jpeg,image/png,image/webp',
+                              disabled: busy,
+                              onChange: (event) => {
+                                const file = event.target.files?.[0];
+                                if (file)
+                                  setBankFile(section.table, index, {
+                                    file,
+                                    requestId: crypto.randomUUID(),
+                                  });
+                                event.target.value = '';
+                              },
+                            }),
+                          ),
+                          row.pendingFile &&
+                            h(
+                              'div',
+                              { className: 'fabric-actions' },
+                              h(
+                                'span',
+                                { role: 'status' },
+                                row.pendingFile.file
+                                  ? 'Selected: ' + row.pendingFile.file.name
+                                  : 'Marked for removal',
+                              ),
+                              h(
+                                'button',
+                                {
+                                  type: 'button',
+                                  disabled: busy,
+                                  onClick: () => setBankFile(section.table, index, null),
                                 },
-                              }));
-                            },
-                          }),
+                                'Undo attachment change',
+                              ),
+                            ),
                         ),
                     ),
                   !review &&

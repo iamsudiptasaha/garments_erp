@@ -76,10 +76,13 @@ export function challanDocuments(client = getAccessClient()) {
         p_document: document,
       });
     },
-    async attach(recordId, file) {
+    async attach(recordId, file, requestId, previousAttachmentId) {
       const [registry, routes] = await Promise.all([files.registry(), files.routes()]);
-      await files.store(registry, routes).attach({ targetKey: 'workerBill', recordId, file });
+      await files
+        .store(registry, routes)
+        .attach({ targetKey: 'workerBill', recordId, file, requestId, previousAttachmentId });
     },
-    openAttachment: (attachment) => files.store([]).open(attachment),
+    openAttachment: (recordId, attachment) =>
+      files.store([]).open(attachment, { targetKey: 'workerBill', recordId }),
   };
 }

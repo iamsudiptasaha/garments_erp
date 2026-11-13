@@ -1,4 +1,4 @@
-import { fileRecordPath } from '../access/workspace-routes.js';
+import { PrivateImageButton } from '../files/record-attachments.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { labLabels, versionsFor, statusFor, labClosed } from './domain.js';
 import './styles.css';
@@ -178,14 +178,15 @@ function Edition({ data, lab, onEdit, editable, creatable, index }) {
                   : 'Not attached',
               ),
               data._live &&
+                detail.shade_card_image_attachment &&
                 h(
-                  'a',
+                  PrivateImageButton,
                   {
-                    href: fileRecordPath('labDipShade', { record: detail.id }),
-                    target: '_blank',
-                    rel: 'noopener noreferrer',
+                    targetKey: 'labDipShade',
+                    recordId: detail.id,
+                    attachmentId: detail.shade_card_image_attachment,
                   },
-                  'Open shade-card attachment',
+                  'Open shade-card image',
                 ),
               h(
                 'small',
