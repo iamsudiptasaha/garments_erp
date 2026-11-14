@@ -27,6 +27,7 @@ export const miscellaneousPages = {
   },
   contactPeople: {
     ...base,
+    hiddenNavigation: true,
     title: 'Contact items',
     singular: 'contact item',
     newLabel: '+ Add contact item',
@@ -55,6 +56,7 @@ export const miscellaneousPages = {
   },
   contactDetails: {
     ...base,
+    hiddenNavigation: true,
     title: 'Contact details',
     singular: 'contact detail',
     newLabel: '+ Add detail',
@@ -73,6 +75,7 @@ export const miscellaneousPages = {
   },
   contactBankAccounts: {
     ...base,
+    hiddenNavigation: true,
     title: 'Contact bank accounts',
     singular: 'bank account',
     newLabel: '+ Add bank account',
@@ -111,7 +114,7 @@ export const miscellaneousPages = {
   },
   contactCategories: {
     ...base,
-    title: 'Contact categories',
+    title: 'Contact Purpose',
     singular: 'contact category',
     newLabel: '+ Add category',
     subtitle: 'Shared contact purposes used by supplier, employee and other roles',
@@ -125,6 +128,7 @@ export const miscellaneousPages = {
   },
   bankAccountTypes: {
     ...base,
+    hiddenNavigation: true,
     title: 'Bank account types',
     singular: 'bank account type',
     newLabel: '+ Add account type',

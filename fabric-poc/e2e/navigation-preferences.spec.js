@@ -87,6 +87,11 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
                 jobWorkerBills: { view: true },
                 employees: { view: true },
                 materialContacts: { view: true },
+                contactCategories: { view: true },
+                contactPeople: { view: true },
+                contactDetails: { view: true },
+                contactBankAccounts: { view: true },
+                bankAccountTypes: { view: true },
                 finishedProducts: { view: true },
                 adminRoles: { view: documentsAdministrator },
                 adminAudit: { view: documentsAdministrator },
@@ -241,6 +246,10 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
     const desktop = await open({ width: 1440, height: 900 });
     await signIn(desktop, 'first@example.invalid');
     await expect.poll(() => reads.includes(first)).toBe(true);
+    await expect(disclosure(desktop, 'miscellaneous').getByRole('button')).toHaveText([
+      'Contacts',
+      'Contact Purpose',
+    ]);
     await expect(disclosure(desktop, 'colours')).toHaveJSProperty('open', true);
     await disclosure(desktop, 'colours').locator('summary').press('Enter');
     await disclosure(desktop, 'production').locator('summary').click();
