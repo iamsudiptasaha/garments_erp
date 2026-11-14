@@ -30,6 +30,25 @@
     "linkFunction": "garments_access.save_account_access",
     "scope": "A verified Administrator reserves access for an active employee and active roles. Native Supabase Auth binds the reservation to the invited Auth identity. Employee and Contact records remain owned by their existing workflows."
   },
+  "accountLifecycle": {
+    "permissionScreen": "adminAccess",
+    "command": "public.erp_change_account_lifecycle",
+    "writableTables": [
+      "auth.users",
+      "auth.sessions",
+      "auth.refresh_tokens",
+      "auth.mfa_factors",
+      "auth.identities",
+      "auth.one_time_tokens",
+      "auth.flow_state",
+      "garments_access.app_user",
+      "garments_access.app_user_role",
+      "garments_access.employee_invitation",
+      "garments_access.cancelled_employee_invitation",
+      "garments_access.app_activity_log"
+    ],
+    "scope": "A verified Administrator changes another account. The original Auth UUID stays available for history and ownership references. Employee and Contact records remain owned by HR and Contacts."
+  },
   "readOnlyScreens": {
     "finishedProducts": {
       "readFunction": "public.erp_warehouse_stock",

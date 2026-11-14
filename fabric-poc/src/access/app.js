@@ -13,8 +13,13 @@ import '../colours/styles.css';
 import './styles.css';
 import { accountReturnPath, adminTabs, workspacePath } from './workspace-routes.js';
 import { RoleMembers } from '../admin/members.js';
+import {
+  PermissionMatrix,
+  permissionFlags,
+  updateScreenPermissions,
+} from '../admin/permission-matrix.js';
 const h = React.createElement;
-const flags = ['view', 'create', 'edit', 'format', 'export', 'print'];
+
 function accessConfiguration() {
   try {
     return { client: getAccessClient(), configurationError: '' };
@@ -339,7 +344,11 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
                         tab === 'roles'
                           ? h(RoleManager, { snapshot, onSaved: refresh })
                           : tab === 'accounts'
-                            ? h(AccountLifecycle, { snapshot, onSaved: refresh })
+                            ? h(AccountLifecycle, {
+                                snapshot,
+                                actorId: access?.actor ?? user?.id,
+                                onSaved: refresh,
+                              })
                             : h(ActivityLog, { snapshot }),
                       ),
   );
@@ -399,7 +408,10 @@ function RoleManager({ snapshot, onSaved }) {
     const permissions = {};
     for (const p of snapshot.permissions.filter((p) => p.app_role_id === role?.id)) {
       const key = snapshot.resources.find((r) => r.id === p.app_resource_id)?.key;
-      if (key) permissions[key] = Object.fromEntries(flags.map((a) => [a, p['can_' + a]]));
+      if (key)
+        permissions[key] = Object.fromEntries(
+          permissionFlags.filter((action) => action !== 'delete').map((a) => [a, p['can_' + a]]),
+        );
     }
     setEditing({
       id: role?.id,
@@ -558,62 +570,15 @@ function RoleManager({ snapshot, onSaved }) {
               }),
             ),
           ),
-          h(
-            'div',
-            { className: 'permission-scroll' },
-            h(
-              'table',
-              { className: 'permission-table' },
-              h(
-                'thead',
-                null,
-                h(
-                  'tr',
-                  null,
-                  h('th', null, 'Screen'),
-                  flags.map((a) => h('th', { key: a }, a)),
-                ),
-              ),
-              h(
-                'tbody',
-                null,
-                snapshot.resources
-                  .filter((r) => r.resource_type === 'screen' && !r.admin_only)
-                  .map((r) =>
-                    h(
-                      'tr',
-                      { key: r.id },
-                      h('th', null, r.name),
-                      flags.map((a) =>
-                        h(
-                          'td',
-                          { key: a },
-                          h('input', {
-                            type: 'checkbox',
-                            'aria-label': `${r.name}: ${a}`,
-                            disabled: a !== 'view' && !editing.permissions[r.key]?.view,
-                            checked: !!editing.permissions[r.key]?.[a],
-                            onChange: (e) => {
-                              const checked = e.target.checked;
-                              setEditing((d) => ({
-                                ...d,
-                                permissions: {
-                                  ...d.permissions,
-                                  [r.key]:
-                                    a === 'view' && !checked
-                                      ? {}
-                                      : { ...d.permissions[r.key], [a]: checked },
-                                },
-                              }));
-                            },
-                          }),
-                        ),
-                      ),
-                    ),
-                  ),
-              ),
-            ),
-          ),
+          h(PermissionMatrix, {
+            resources: snapshot.resources,
+            permissions: editing.permissions,
+            onChange: (screens, action, checked) =>
+              setEditing((draft) => ({
+                ...draft,
+                permissions: updateScreenPermissions(draft.permissions, screens, action, checked),
+              })),
+          }),
           h(
             'div',
             { className: 'editor-actions' },
@@ -706,7 +671,11 @@ function ActivityLog({ snapshot }) {
             ? entry.details?.name ||
               snapshot.roles.find((r) => String(r.id) === entry.target_id)?.name
             : accountName(entry.target_id);
-      return { ...entry, target: target || '—', actor: accountName(entry.actor_user_id) || '—' };
+      return {
+        ...entry,
+        target: target || entry.target_id || '—',
+        actor: accountName(entry.actor_user_id) || entry.actor_user_id || '—',
+      };
     })
     .filter((entry) =>
       [entry.action, entry.target, entry.actor].some((value) =>
