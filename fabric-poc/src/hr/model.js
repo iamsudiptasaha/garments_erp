@@ -74,8 +74,9 @@ export function employeeRows(records, query = '') {
         .filter(Boolean)
         .join(', '),
       joined: record.employee.date_of_joining || '',
-      status:
-        record.employee.is_active === false
+      status: record.employee.archived_at
+        ? 'Archived'
+        : record.employee.is_active === false
           ? 'Inactive'
           : record.employee.is_active === true
             ? 'Active'

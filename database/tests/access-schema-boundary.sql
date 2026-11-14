@@ -35,14 +35,20 @@ begin
     raise exception 'Anonymous account lifecycle actions must be denied';
   end if;
 
+  if has_function_privilege('anon', 'public.erp_archive_employee(bigint,text)', 'execute')
+    or has_function_privilege('anon', 'garments_erp.archive_employee(bigint,text)', 'execute')
+    or has_function_privilege('authenticated', 'garments_access.retire_auth_identity(uuid)', 'execute') then
+    raise exception 'Employee archival and internal Auth retirement must be protected';
+  end if;
+
   if exists (
     select 1 from pg_proc
     where pronamespace = 'garments_access'::regnamespace
       and proname not in (
         'access_snapshot', 'account_internal', 'account_security', 'admin_snapshot',
         'archive_role', 'authorize_employee_email_change', 'bind_employee_invitation', 'change_account_lifecycle', 'complete_native_password_setup', 'dyed_bill_user_allowed', 'employee_invitation_command',
-        'flag_invited_password_setup', 'profile_employee_id', 'guard_employee_invitation_link', 'has_eligible_administrator', 'has_screen_permission', 'production_user_allowed',
-        'require_administrator', 'resource_available', 'save_account_access',
+        'flag_invited_password_setup', 'profile_employee_id', 'guard_archived_employee_link', 'guard_employee_invitation_link', 'has_eligible_administrator', 'has_screen_permission', 'production_user_allowed',
+        'require_administrator', 'resource_available', 'retire_auth_identity', 'save_account_access',
         'save_role', 'session_ready', 'sync_verified_employee_email'
       )
   ) then

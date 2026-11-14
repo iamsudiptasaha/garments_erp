@@ -36,8 +36,8 @@ async function authenticate(user, email, factor) {
   );
   return { factor, session: ok(await user.auth.getSession()).session, previousSession: session };
 }
-async function createLinkedAccount(name, role, phone) {
-  const email = role + '-' + suffix + '@example.invalid';
+async function createLinkedAccount(name, role, phone, prefix = '') {
+  const email = prefix + role + '-' + suffix + '@example.invalid';
   const { user: identity } = ok(
     await service.auth.admin.createUser({
       email,
@@ -82,7 +82,7 @@ async function openPage(session, width, path) {
   );
   const page = await context.newPage();
   page.setDefaultTimeout(10000);
-  await page.goto(app + '/access.html#' + path);
+  await page.goto(app + (path === 'employees' ? '/fabric.html?live=1#' : '/access.html#') + path);
   return page;
 }
 const button = (scope, name) => scope.getByRole('button', { name, exact: true });
@@ -234,8 +234,159 @@ try {
   console.log(
     'PASS reviewed deactivation, reactivation and removal, Auth and session revocation, identifier reuse and historical identity',
   );
+  await verifyEmployeeRemoval(session, admin);
 } finally {
   await Promise.all(browser.contexts().map((context) => context.unrouteAll({ behavior: 'wait' })));
   await browser.close();
   await db.end();
+}
+
+async function verifyEmployeeRemoval(session, admin) {
+  const archivePhone = '+1' + randomInt(2000000000, 9000000000);
+  const name = 'Employee to archive ' + suffix;
+  const target = await createLinkedAccount(name, 'ci_viewer', archivePhone, 'archive-');
+  const { session: targetSession } = await authenticate(target.user, target.email);
+  const {
+    rows: [fixture],
+  } = await db.query(
+    `with attachment as (
+      insert into garments_erp.attachments(bucket_group_id, storage_path, mime_type, uploaded_by)
+      select id, $3, 'application/pdf', $1::bigint from garments_erp.bucket_group where "group"='employee'
+      returning id
+    ), linked as (
+      update garments_erp.employee set supporting_document_1_upload=(select id from attachment)
+      where id=$1 returning supporting_document_1_upload
+    )
+    insert into garments_access.app_activity_log(actor_user_id, action, target_type, target_id)
+    select $2, 'Employee archive history fixture', 'employee', $1::text from linked
+    returning (select id from attachment) as attachment`,
+    [target.employeeId, target.id, 'employee/' + target.employeeId + '/archive-fixture.pdf'],
+  );
+  const {
+    rows: [transaction],
+  } = await db.query(
+    `insert into garments_erp.challan(challan_number, issue_employee_id)
+     values($1,$2) returning id`,
+    ['Employee archive fixture ' + suffix, target.employeeId],
+  );
+  const snapshot = () => admin.user.rpc('erp_employee_snapshot').then(ok);
+  const employee = async (id) =>
+    (await snapshot()).records.find((record) => record.employee.id === String(id));
+  const current = await employee(target.employeeId);
+  const args = { p_id: target.employeeId, p_expected: current.revision };
+  assert.equal((await target.user.rpc('erp_archive_employee', args)).error.code, '42501');
+  assert.equal(
+    (await admin.user.rpc('erp_archive_employee', { ...args, p_expected: 'stale' })).error.code,
+    '40001',
+  );
+  assert.equal(
+    (
+      await admin.user.rpc('erp_archive_employee', {
+        p_id: admin.employeeId,
+        p_expected: (await employee(admin.employeeId)).revision,
+      })
+    ).error.code,
+    '42501',
+  );
+
+  const page = await openPage(session, 1440, 'employees');
+  const search = page.getByRole('searchbox', { name: 'Search employees' });
+  const trigger = page.getByLabel('Personal account', { exact: true });
+  const menu = page.locator('.sidebar-account-menu');
+  await trigger.click();
+  await expect(menu).toHaveJSProperty('open', true);
+  await trigger.click();
+  await expect(menu).toHaveJSProperty('open', false);
+  await trigger.click();
+  await search.click();
+  await expect(menu).toHaveJSProperty('open', false);
+  await expect(search).toBeFocused();
+  await trigger.click();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveJSProperty('open', false);
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await button(page, 'Employment types').click();
+  await expect(menu).toHaveJSProperty('open', false);
+  await expect(page.getByRole('heading', { name: 'Employment types' })).toBeVisible();
+  await button(page, 'Employees').click();
+
+  await search.fill(name);
+  const card = page.getByRole('article').filter({ hasText: name });
+  await button(card, 'Open profile →').click();
+  const dialog = page.getByRole('dialog');
+  await button(dialog, 'Remove Employee').click();
+  await expect(dialog.getByRole('heading', { name: 'Review employee removal' })).toBeVisible();
+  assert.equal((await employee(target.employeeId)).employee.archived_at, null);
+  await button(dialog, 'Back to employee').click();
+  await button(dialog, 'Remove Employee').click();
+  await button(dialog, 'Confirm Removal').click();
+  await expect(dialog).toBeHidden();
+  await expect(card).toHaveCount(0);
+  await page.getByLabel('Employee records').selectOption('archived');
+  await expect(card.getByText('Archived', { exact: true })).toBeVisible();
+  await button(card, 'Open profile →').click();
+  await expect(button(dialog, 'Remove Employee')).toHaveCount(0);
+  await expect(button(dialog, 'Review employee')).toHaveCount(0);
+
+  const archived = await employee(target.employeeId);
+  assert.equal(archived.employee.is_active, false);
+  assert.ok(archived.employee.archived_at);
+  assert.equal(archived.employee.supporting_document_1_upload, String(fixture.attachment));
+  assert.equal(archived.employee.verified_by_employee_id, current.employee.verified_by_employee_id);
+  assert.ok(
+    !ok(await admin.user.rpc('erp_admin_snapshot')).employees.some(
+      (record) => String(record.id) === String(target.employeeId),
+    ),
+  );
+  const production = ok(await admin.user.rpc('erp_production_snapshot'));
+  assert.ok(!production.employees.some((record) => record.id === String(target.employeeId)));
+  assert.ok((await client().auth.signInWithPassword({ email: target.email, password })).error);
+  assert.ok(
+    (await client().auth.refreshSession({ refresh_token: targetSession.refresh_token })).error,
+  );
+  assert.equal(ok(await target.user.rpc('erp_account_security')).ready, false);
+  ok(await admin.user.rpc('erp_archive_employee', args));
+  assert.ok(
+    (
+      await admin.user.rpc('erp_set_employee_active', {
+        p_id: target.employeeId,
+        p_active: true,
+        p_expected: archived.revision,
+      })
+    ).error,
+  );
+
+  const {
+    rows: [retained],
+  } = await db.query(
+    `select
+      exists(select 1 from garments_erp.challan where id=$3 and issue_employee_id=$1) as transaction,
+      exists(select 1 from garments_erp.attachments where id=$4 and uploaded_by=$1) as attachment,
+      exists(select 1 from garments_access.app_activity_log where actor_user_id=$2 and action='Employee archive history fixture') as history,
+      (select count(*)::int from garments_access.app_activity_log where action='Removed employee' and target_id=$1::text) as removals,
+      not exists(select 1 from garments_access.app_user_role where user_id=$2) as no_roles`,
+    [target.employeeId, target.id, transaction.id, fixture.attachment],
+  );
+  assert.deepEqual(retained, {
+    transaction: true,
+    attachment: true,
+    history: true,
+    removals: 1,
+    no_roles: true,
+  });
+  const { user: replacement } = ok(
+    await service.auth.admin.createUser({
+      email: target.email,
+      phone: archivePhone,
+      password,
+      email_confirm: true,
+      phone_confirm: true,
+    }),
+  );
+  assert.notEqual(replacement.id, target.id);
+  ok(await service.auth.admin.deleteUser(replacement.id));
+  console.log(
+    'PASS employee removal, archive filter, identity reuse, retained references and profile menu',
+  );
 }

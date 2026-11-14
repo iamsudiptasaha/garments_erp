@@ -1,7 +1,7 @@
 import { EmployeeAvatar } from './avatar.js';
 import { getAccessClient } from '../access/client.js';
 import React, { useEffect, useMemo, useState } from 'react';
-import { allowed } from '../admin/model.js';
+import { allowed, isAdministrator } from '../admin/model.js';
 import { FabricSheet } from '../fabric/sheet.js';
 import { employeeCommands } from './live.js';
 import { EmployeeEditor } from './editor.js';
@@ -63,6 +63,7 @@ export function HRPanel({
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
     [editor, setEditor] = useState(null),
+    [archived, setArchived] = useState(false),
     [query, setQuery] = useState(''),
     [view, setView] = useState('overview'),
     [reference, setReference] = useState(''),
@@ -220,7 +221,17 @@ export function HRPanel({
       h('h1', null, 'Access restricted'),
       h('p', null, 'Your role cannot open Employee / HR.'),
     );
-  const rows = employeeRows(snapshot?.records || [], query);
+  const rows = employeeRows(
+    (snapshot?.records || []).filter((row) => Boolean(row.employee.archived_at) === archived),
+    query,
+  );
+  async function removeEmployee(record) {
+    await commands.archive(record.employee.id, record.revision);
+    setEditor(null);
+    setSelection(null);
+    setNotice('Employee removed and archived.');
+    await reload();
+  }
   return h(
     'section',
     { className: 'hr-workspace' },
@@ -351,7 +362,26 @@ export function HRPanel({
                   ),
                 ),
               ),
-              can('create') &&
+              live &&
+                h(
+                  'label',
+                  null,
+                  'Employee records ',
+                  h(
+                    'select',
+                    {
+                      value: archived ? 'archived' : 'current',
+                      onChange: (event) => {
+                        setArchived(event.target.value === 'archived');
+                        setSelection(null);
+                      },
+                    },
+                    h('option', { value: 'current' }, 'Current'),
+                    h('option', { value: 'archived' }, 'Archived'),
+                  ),
+                ),
+              !archived &&
+                can('create') &&
                 h(
                   'button',
                   { className: 'primary', onClick: () => setEditor({ record: null }) },
@@ -432,11 +462,21 @@ export function HRPanel({
                 snapshot,
                 operator,
                 live,
-                canEdit: can(editor.record ? 'edit' : 'create'),
+                canEdit:
+                  !editor.record?.employee.archived_at && can(editor.record ? 'edit' : 'create'),
+                onRemove:
+                  live &&
+                  editor.record &&
+                  !editor.record.employee.archived_at &&
+                  editor.record.employee.id !== snapshot.verifiers?.[0]?.id &&
+                  can('edit') &&
+                  isAdministrator(access, actor)
+                    ? removeEmployee
+                    : null,
                 onSave: save,
                 onStatus: saveStatus,
                 onClose: () => setEditor(null),
-                canEditFiles: can('edit'),
+                canEditFiles: !editor.record?.employee.archived_at && can('edit'),
                 onFilesSaved: reload,
               }),
           ),

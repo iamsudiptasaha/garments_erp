@@ -1,8 +1,13 @@
 import { EmployeeAvatar } from '../hr/avatar.js';
 import { flushNavigationPreferences } from './navigation-preferences.js';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { getAccessClient } from './client.js';
 const h = React.createElement;
+function dismissAccountMenu(details) {
+  if (!details.open) return;
+  details.dataset.dismissed = 'true';
+  details.open = false;
+}
 export function AccountFooter({
   name = 'My account',
   role = 'Signed-in workspace',
@@ -10,7 +15,10 @@ export function AccountFooter({
   live = true,
   onCollapse,
   onSignOut,
+  destination,
 }) {
+  const menu = useRef(null);
+  const previousDestination = useRef(destination);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
   const [updatedProfile, setUpdatedProfile] = useState(null);
@@ -23,6 +31,33 @@ export function AccountFooter({
     window.addEventListener('erp-profile-updated', update);
     return () => window.removeEventListener('erp-profile-updated', update);
   }, []);
+  useEffect(() => {
+    const details = menu.current;
+    function dismissOutside(event) {
+      if (details.open && !event.composedPath().includes(details)) dismissAccountMenu(details);
+    }
+    function dismissOnEscape(event) {
+      if (event.key !== 'Escape' || !details.open || event.defaultPrevented) return;
+      const restoreFocus = details.contains(document.activeElement);
+      dismissAccountMenu(details);
+      if (restoreFocus && !document.querySelector('dialog[open]')) {
+        event.preventDefault();
+        details.querySelector('summary').focus();
+      }
+    }
+    document.addEventListener('click', dismissOutside, true);
+    document.addEventListener('keydown', dismissOnEscape, true);
+    return () => {
+      document.removeEventListener('click', dismissOutside, true);
+      document.removeEventListener('keydown', dismissOnEscape, true);
+    };
+  }, []);
+  useEffect(() => {
+    if (previousDestination.current !== destination) {
+      previousDestination.current = destination;
+      dismissAccountMenu(menu.current);
+    }
+  }, [destination]);
   async function signOut() {
     setBusy(true);
     setError('');
@@ -46,7 +81,7 @@ export function AccountFooter({
     { className: 'sidebar-account' },
     h(
       'details',
-      { className: 'sidebar-account-menu', 'data-nav-section': 'account' },
+      { ref: menu, className: 'sidebar-account-menu', 'data-nav-section': 'account' },
       h(
         'summary',
         { 'aria-label': 'Personal account' },

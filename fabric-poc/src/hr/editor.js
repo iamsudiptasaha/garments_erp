@@ -14,6 +14,7 @@ export function EmployeeEditor({
   operator,
   onSave,
   onStatus,
+  onRemove,
   onClose,
   canEditFiles,
   onFilesSaved,
@@ -31,6 +32,7 @@ export function EmployeeEditor({
     })),
     [tab, setTab] = useState('profile'),
     [review, setReview] = useState(false),
+    [removing, setRemoving] = useState(false),
     [active, setActive] = useState(record?.employee.is_active !== false),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
@@ -112,6 +114,20 @@ export function EmployeeEditor({
       setBusy(false);
     }
   }
+  async function confirmRemoval() {
+    if (saving.current) return;
+    saving.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      await onRemove(record);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
+  }
   return h(
     'dialog',
     {
@@ -136,6 +152,7 @@ export function EmployeeEditor({
     ),
     error && h('p', { className: 'form-error', role: 'alert' }, error),
     !review &&
+      !removing &&
       h(
         'div',
         { className: 'fabric-view-toggle', 'aria-label': 'Employee editor sections' },
@@ -152,10 +169,23 @@ export function EmployeeEditor({
           ),
         ),
       ),
+    removing &&
+      h(
+        'section',
+        { className: 'hr-review' },
+        h('h3', null, 'Review employee removal'),
+        h('p', null, record.contact.company_name + ' · ' + record.employee.employee_code),
+        h('p', null, 'This archives the employee profile and keeps its attachments and history.'),
+        h(
+          'p',
+          null,
+          'Any linked login or invitation will be removed and its login identifiers released.',
+        ),
+      ),
     review
       ? h(
           'section',
-          { className: 'hr-review' },
+          { className: 'hr-review', hidden: removing },
           h('h3', null, tab === 'status' ? 'Review employee status' : 'Review employee'),
           h(
             'dl',
@@ -197,7 +227,7 @@ export function EmployeeEditor({
         )
       : h(
           'div',
-          null,
+          { hidden: removing },
           tab === 'status' &&
             h(
               'section',
@@ -352,6 +382,7 @@ export function EmployeeEditor({
             ),
         ),
     canEdit &&
+      !removing &&
       !review &&
       h(
         'section',
@@ -373,7 +404,32 @@ export function EmployeeEditor({
       'div',
       { className: 'editor-actions' },
       h('button', { disabled: busy, onClick: onClose }, 'Cancel'),
-      canEdit &&
+      removing
+        ? h(
+            React.Fragment,
+            null,
+            h('button', { disabled: busy, onClick: () => setRemoving(false) }, 'Back to employee'),
+            h(
+              'button',
+              { className: 'primary', disabled: busy, onClick: confirmRemoval },
+              busy ? 'Removing…' : 'Confirm Removal',
+            ),
+          )
+        : onRemove &&
+            !review &&
+            h(
+              'button',
+              {
+                disabled: busy || dirty,
+                onClick: () => {
+                  setError('');
+                  setRemoving(true);
+                },
+              },
+              'Remove Employee',
+            ),
+      !removing &&
+        canEdit &&
         (review
           ? h(
               React.Fragment,

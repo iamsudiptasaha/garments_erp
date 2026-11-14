@@ -68,6 +68,7 @@ export function useWorkspaceMenu() {
     const closeOnEscape = (event) => {
       if (
         event.key === 'Escape' &&
+        !event.defaultPrevented &&
         sidebarOpen &&
         window.matchMedia('(max-width:700px)').matches &&
         !document.querySelector('dialog[open]')
@@ -272,6 +273,7 @@ export function WorkspaceSidebar({
     ),
     notice && h('p', { role: 'status' }, notice),
     h(AccountFooter, {
+      destination: finishedGoodsPage || page,
       name:
         live?.profileName || access.users.find((user) => user.id === actor)?.name || 'My account',
       photoId: live?.profilePhoto,
