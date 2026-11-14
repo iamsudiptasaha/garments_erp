@@ -235,6 +235,7 @@ try {
     'PASS reviewed deactivation, reactivation and removal, Auth and session revocation, identifier reuse and historical identity',
   );
 } finally {
+  await Promise.all(browser.contexts().map((context) => context.unrouteAll({ behavior: 'wait' })));
   await browser.close();
   await db.end();
 }
