@@ -153,14 +153,39 @@ export function RecordAttachmentField({
   recordId,
   canWrite = true,
   label = targetFor(targetKey).label,
+  previewImage = false,
 }) {
   const picker = useRef(null);
   const [current, setCurrent] = useState(null);
   const [loaded, setLoaded] = useState(!recordId);
   const [error, setError] = useState('');
+  const [preview, setPreview] = useState(null);
   const { files, changes } = attachments;
   const target = files?.routes.find((entry) => entry.key === targetKey);
   const change = changes[targetKey];
+  const selectedFile = change?.file;
+  const savedImageId = change ? null : current?.id;
+  useEffect(() => {
+    if (!previewImage) return;
+    if (selectedFile) {
+      const url = URL.createObjectURL(selectedFile);
+      setPreview({ source: selectedFile, url });
+      return () => URL.revokeObjectURL(url);
+    }
+    if (!savedImageId || !files) return;
+    let active = true;
+    files.store
+      .open({ id: savedImageId }, { targetKey, recordId })
+      .then(({ url }) => {
+        if (active) setPreview({ source: savedImageId, url });
+      })
+      .catch((failure) => {
+        if (active) setError(failure.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [previewImage, selectedFile, savedImageId, files, targetKey, recordId]);
   useEffect(() => {
     if (!recordId || !files) return;
     let active = true;
@@ -182,6 +207,14 @@ export function RecordAttachmentField({
     'div',
     { className: 'fabric-line record-attachment' },
     h('h3', null, label),
+    previewImage &&
+      preview &&
+      preview.source === (selectedFile || savedImageId) &&
+      h('img', {
+        className: 'record-attachment-preview',
+        src: preview.url,
+        alt: label + ' preview',
+      }),
     current &&
       h(
         'div',

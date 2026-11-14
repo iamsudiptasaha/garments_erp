@@ -98,6 +98,18 @@ page.on('response', async (r) => {
 const button = (scope, name) => scope.getByRole('button', { name, exact: true });
 const dialog = page.getByRole('dialog');
 const b = (name) => button(dialog, name);
+const photoPreview = dialog.getByRole('img', { name: 'Employee photo preview' });
+async function verifyPhotoPreview(screenshot) {
+  await photoPreview.waitFor();
+  await page.waitForFunction(() => {
+    const image = document.querySelector('dialog img[alt="Employee photo preview"]');
+    return image?.complete && image.naturalWidth > 0;
+  });
+  if (screenshot && process.env.EMPLOYEE_PHOTO_SCREENSHOTS)
+    await dialog.screenshot({
+      path: process.env.EMPLOYEE_PHOTO_SCREENSHOTS + '/' + screenshot + '.png',
+    });
+}
 const pic = readFileSync(new URL('./attachment-fixture.png', import.meta.url));
 const upload = async (scope, label, name) => {
   const [picker] = await Promise.all([
@@ -276,13 +288,34 @@ async function employee() {
   await route('employees');
   const add = button(page, '+ Add employee');
   await add.click();
+  if (process.env.EMPLOYEE_PHOTO_SCREENSHOTS) {
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll('dialog button')].some(
+        (button) => button.textContent === 'Upload employee photo' && !button.disabled,
+      ),
+    );
+    await dialog.screenshot({
+      path: process.env.EMPLOYEE_PHOTO_SCREENSHOTS + '/employee-profile-upload.png',
+    });
+  }
+  await upload(dialog, 'Upload employee photo', 'employee-photo.png');
+  await verifyPhotoPreview('employee-profile-selected');
   await b('Contact links').click();
   await pick(dialog, 'Employee contact', candidate);
   await b('Documents').click();
-  await upload(dialog, 'Upload employee photo', 'employee-photo.png');
+  assert.equal(await b('Replace employee photo').count(), 0);
   await dialog.getByLabel('Document 1 title', { exact: true }).fill('ID document');
   await upload(dialog, 'Upload employee document 1', 'employee-document.png');
   await upload(dialog, 'Upload employee document 2', 'employee-document-2.png');
+  await b('Review employee').click();
+  await dialog.getByText(/Upload employee-photo.png/).waitFor();
+  const { rowCount } = await db.query('select id from garments_erp.employee where contacts_id=$1', [
+    contact.id,
+  ]);
+  assert.equal(rowCount, 0, 'Employee saved before confirmation');
+  await b('Back to edit').click();
+  await b('Profile').click();
+  await verifyPhotoPreview();
   await b('Review employee').click();
   await dialog.getByText(/Upload employee-document.png/).waitFor();
   newResult('Review');
@@ -293,6 +326,13 @@ async function employee() {
   const {
     rows: [record],
   } = await db.query('select id from garments_erp.employee where contacts_id=$1', [contact.id]);
+  await page.getByRole('searchbox', { name: 'Search employees', exact: true }).fill(candidate);
+  await button(
+    page.locator('.hr-person-card').filter({ hasText: candidate }),
+    'Open profile →',
+  ).click();
+  await verifyPhotoPreview('employee-profile-saved');
+  await b('Close').click();
   return record.id;
 }
 async function item() {
@@ -699,7 +739,7 @@ const nativeEditors = {
   ],
 };
 
-async function nativeRecordModal(target) {
+async function nativeRecordModal(target, createdId) {
   const [key, title, labelColumn, pattern, action, review, confirm] = nativeEditors[target.key];
   const employee = key === 'employees';
   const {
@@ -707,8 +747,10 @@ async function nativeRecordModal(target) {
   } = await db.query(
     `select r.id, ${labelColumn} as name from garments_erp.${target.table} r
        ${employee ? 'join garments_erp.contacts c on c.id=r.contacts_id' : ''}
-       where ${labelColumn} like $1 and r.${target.slot} is null order by r.id desc limit 1`,
-    [pattern],
+       where ${labelColumn} like $1 and
+         ($2::bigint is null and r.${target.slot} is null or r.id = $2)
+       order by r.id desc limit 1`,
+    [pattern, createdId ?? null],
   );
   assert.ok(row, 'No previously created disposable fixture for ' + target.key);
   const open = async () => {
@@ -718,7 +760,7 @@ async function nativeRecordModal(target) {
       page.locator(employee ? '.hr-person-card' : '.overview-card').filter({ hasText: row.name }),
       action,
     ).click();
-    if (employee) await b('Documents').click();
+    if (employee && target.key !== 'employeePhoto') await b('Documents').click();
   };
   const save = async (description) => {
     const before = await readCurrent(target, row.id);
@@ -739,21 +781,38 @@ async function nativeRecordModal(target) {
   };
   const field = target.label.toLowerCase();
   await open();
+  if (createdId) {
+    const saved = await verifySaved(target, row.id, 'employee-photo.png');
+    await viewModalFile(b('View ' + field), saved);
+  }
   for (const [action, suffix] of [
     ['Upload', 'new'],
     ['Replace', 'replacement'],
   ]) {
+    if (createdId && action === 'Upload') continue;
     const name = target.key + '-modal-' + suffix + '.png';
     await upload(dialog, action + ' ' + field, name);
+    if (target.key === 'employeePhoto') await verifyPhotoPreview();
     await save(new RegExp(name.replace('.', '[.]')));
     const saved = await verifySaved(target, row.id, name);
     await open();
+    if (target.key === 'employeePhoto') await verifyPhotoPreview();
     await viewModalFile(b('View ' + field), saved);
   }
   const before = await readCurrent(target, row.id);
   await b('Remove ' + field).click();
   await save(new RegExp(before.filename.replace('.', '[.]')));
   assert.equal((await readCurrent(target, row.id)).attachment, null);
+  if (target.key === 'employeePhoto') {
+    await open();
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll('dialog button')].some(
+        (button) => button.textContent === 'Upload employee photo' && !button.disabled,
+      ),
+    );
+    assert.equal(await photoPreview.count(), 0);
+    await b('Close').click();
+  }
 }
 
 async function buyerPODetail(target) {
@@ -948,7 +1007,8 @@ async function contactBankModal(target) {
 }
 
 const modalOnly = process.argv.includes('--owning-modal');
-const selected = new Set(process.argv.slice(2).filter((arg) => arg !== '--owning-modal'));
+const photoOnly = process.argv.includes('--employee-profile');
+const selected = new Set(process.argv.slice(2).filter((arg) => !arg.startsWith('--')));
 const completed = new Map();
 for (const key of selected)
   assert.ok(
@@ -962,6 +1022,13 @@ try {
     configured.map(({ key }) => key).sort(),
     FILE_TARGETS.map(({ key }) => key).sort(),
   );
+  if (photoOnly) {
+    const target = FILE_TARGETS.find(({ key }) => key === 'employeePhoto');
+    await nativeRecordModal(target, await employee());
+    console.log(
+      'PASS employeePhoto Profile selection, review, save, preview, view, replace and remove',
+    );
+  }
   if (modalOnly) {
     for (const [key, run] of Object.entries({
       contactBankDocument: contactBankModal,
@@ -981,7 +1048,7 @@ try {
       }
     }
   }
-  for (const target of modalOnly ? [] : FILE_TARGETS) {
+  for (const target of modalOnly || photoOnly ? [] : FILE_TARGETS) {
     if (selected.size && !selected.has(target.key)) continue;
     let id;
     const create = creation[target.key];
@@ -1025,6 +1092,7 @@ try {
     }
   }
 } finally {
+  await context.unrouteAll({ behavior: 'wait' });
   await browser.close();
   await db.end();
 }
