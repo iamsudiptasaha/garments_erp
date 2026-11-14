@@ -21,12 +21,22 @@ const title = {
   link: 'Link existing account',
   resend: 'Resend invitation',
   edit: 'Edit roles',
-  disable: 'Disable access',
-  restore: 'Restore access',
+  deactivate: 'Deactivate',
+  reactivate: 'Reactivate',
+  remove: 'Remove Access',
   retry: 'Retry provisioning',
   cancel: 'Cancel invitation',
   correct: 'Correct email',
   details: 'View details',
+};
+
+const lifecycleDescription = {
+  deactivate:
+    'End active sessions and block sign-in. The employee profile and role assignments are retained.',
+  reactivate:
+    'Allow sign-in with existing credentials and restore effective access for assigned roles.',
+  remove:
+    'End active sessions, remove all roles and release the email and phone for reuse. The employee profile, historical records and audit trail are retained.',
 };
 
 function userRows(snapshot) {
@@ -66,7 +76,7 @@ function userRows(snapshot) {
   });
 }
 
-export function AccountLifecycle({ snapshot, onSaved }) {
+export function AccountLifecycle({ snapshot, actorId, onSaved }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
   const [sort, setSort] = useState({ key: 'employee', direction: 'asc' });
@@ -191,6 +201,7 @@ export function AccountLifecycle({ snapshot, onSaved }) {
       h(UserOperation, {
         key: operation.action,
         ...operation,
+        actorId,
         available,
         unlinked,
         roles: snapshot.roles.filter((r) => r.is_active),
@@ -209,6 +220,7 @@ export function AccountLifecycle({ snapshot, onSaved }) {
 function UserOperation({
   action,
   row,
+  actorId,
   available,
   unlinked,
   roles,
@@ -223,14 +235,36 @@ function UserOperation({
   const [user, setUser] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [review, setReview] = useState(false);
+  const lifecycle = Object.hasOwn(lifecycleDescription, action);
   const create = action === 'invite' || action === 'link';
   const showRoles = create || action === 'edit';
   async function submit(event) {
     event.preventDefault();
+    if (busy) return;
+    if (lifecycle && !review) {
+      setReview(true);
+      return;
+    }
     setBusy(true);
     setError('');
     try {
-      if (['invite', 'resend', 'retry', 'cancel', 'correct'].includes(action)) {
+      if (lifecycle) {
+        const { error } = await getAccessClient().rpc('erp_change_account_lifecycle', {
+          p_action: action,
+          p_user_id: row.account.user_id,
+          p_employee_id: employee,
+          p_expected_version: row.account.version,
+        });
+        if (error) throw error;
+        await onDone(
+          {
+            deactivate: 'Access deactivated. Active sessions ended.',
+            reactivate: 'Access reactivated.',
+            remove: 'Access removed. Login identifiers are available for reuse.',
+          }[action],
+        );
+      } else if (['invite', 'resend', 'retry', 'cancel', 'correct'].includes(action)) {
         const result = await accountCommand({
           action,
           employeeId: employee,
@@ -244,7 +278,7 @@ function UserOperation({
           p_user_id: row?.account?.user_id || user,
           p_employee_id: employee,
           p_role_ids: roleIds,
-          p_enabled: action === 'edit' ? row.account.is_active : action === 'restore',
+          p_enabled: action === 'edit' && row.account.is_active,
           p_expected_version: row?.account?.version ?? null,
         });
         if (error) throw error;
@@ -252,8 +286,6 @@ function UserOperation({
           {
             edit: 'Roles updated.',
             link: 'Account linked. Restore access when ready.',
-            disable: 'Access disabled. Existing sessions were ended.',
-            restore: 'Access restored.',
           }[action],
         );
       }
@@ -270,7 +302,10 @@ function UserOperation({
   }
   return h(
     AdminDialog,
-    { title: title[action], onClose: () => !busy && onClose() },
+    {
+      title: review ? `Review: ${title[action]}` : title[action],
+      onClose: () => !busy && onClose(),
+    },
     row && h('p', null, [row.employee, row.email].filter(Boolean).join(' · ')),
     action === 'details'
       ? h(
@@ -289,12 +324,17 @@ function UserOperation({
             'div',
             { className: 'editor-actions' },
             row.account && h('button', { onClick: () => onAction('edit') }, title.edit),
-            row.account?.is_active &&
-              h('button', { onClick: () => onAction('disable') }, title.disable),
             row.account &&
-              !row.account.is_active &&
-              row.active &&
-              h('button', { onClick: () => onAction('restore') }, title.restore),
+              row.account.user_id !== actorId &&
+              h(
+                React.Fragment,
+                null,
+                row.account.is_active
+                  ? h('button', { onClick: () => onAction('deactivate') }, title.deactivate)
+                  : row.active &&
+                      h('button', { onClick: () => onAction('reactivate') }, title.reactivate),
+                h('button', { onClick: () => onAction('remove') }, title.remove),
+              ),
             row.pending &&
               row.active &&
               h('button', { onClick: () => onAction('retry') }, title.retry),
@@ -387,14 +427,14 @@ function UserOperation({
               h(
                 'p',
                 null,
-                {
-                  resend: 'Send a new invitation link to this email address.',
-                  retry: 'Complete the original invitation using its saved email and roles.',
-                  cancel: 'The existing invitation will no longer grant ERP access.',
-                  correct: 'Cancel the original invitation and send a new one with the same roles.',
-                  disable: 'End existing sessions and prevent ERP sign-in.',
-                  restore: 'Allow this employee to sign in again with their existing credentials.',
-                }[action],
+                lifecycleDescription[action] ||
+                  {
+                    resend: 'Send a new invitation link to this email address.',
+                    retry: 'Complete the original invitation using its saved email and roles.',
+                    cancel: 'The existing invitation will no longer grant ERP access.',
+                    correct:
+                      'Cancel the original invitation and send a new one with the same roles.',
+                  }[action],
               ),
           ),
           h(
@@ -402,8 +442,12 @@ function UserOperation({
             { className: 'editor-actions' },
             h(
               'button',
-              { type: 'button', disabled: busy, onClick: onClose },
-              action === 'cancel' ? 'Go back' : 'Cancel',
+              {
+                type: 'button',
+                disabled: busy,
+                onClick: review ? () => setReview(false) : onClose,
+              },
+              review ? 'Back' : action === 'cancel' ? 'Go back' : 'Cancel',
             ),
             h(
               'button',
@@ -414,11 +458,15 @@ function UserOperation({
               },
               busy
                 ? 'Working…'
-                : {
-                    invite: 'Send invitation',
-                    edit: 'Save roles',
-                    correct: 'Send corrected invitation',
-                  }[action] || title[action],
+                : lifecycle
+                  ? review
+                    ? `Confirm ${title[action]}`
+                    : 'Review'
+                  : {
+                      invite: 'Send invitation',
+                      edit: 'Save roles',
+                      correct: 'Send corrected invitation',
+                    }[action] || title[action],
             ),
           ),
         ),

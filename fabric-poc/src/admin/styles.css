@@ -397,3 +397,10 @@
   background: #edf5fc;
   color: #63829b;
 }
+
+.permission-table .permission-section {
+  background: var(--surface-soft, #e5eff7);
+}
+.permission-table .permission-section button {
+  text-align: left;
+}

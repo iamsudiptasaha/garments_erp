@@ -369,6 +369,7 @@ test('Administration invites an active employee with selected roles and no mobil
 }, testInfo) => {
   test.skip(hosted, 'Uses synthetic Administration responses');
   const actor = '00000000-0000-4000-8000-000000000001';
+  const readyUser = '00000000-0000-4000-8000-000000000009';
   const exp = Math.floor(Date.now() / 1000) + 3600;
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
   const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: actor, exp })}.synthetic`;
@@ -387,6 +388,7 @@ test('Administration invites an active employee with selected roles and no mobil
   );
   const commands = [];
   const saves = [];
+  const lifecycle = [];
   let pending = true;
   let pendingEmail = 'pending@example.invalid';
   const originalRevision = '00000000-0000-4000-8000-000000000010';
@@ -422,6 +424,12 @@ test('Administration invites an active employee with selected roles and no mobil
       enabled = input.p_enabled;
       return route.fulfill({ json: null });
     }
+    if (name === 'erp_change_account_lifecycle') {
+      const input = route.request().postDataJSON();
+      lifecycle.push(input);
+      enabled = input.p_action === 'reactivate';
+      return route.fulfill({ json: null });
+    }
     const responses = {
       erp_account_security: { enabled: true, ready: true },
       erp_access_snapshot: { actor, enabled: true, administrator: true },
@@ -429,14 +437,14 @@ test('Administration invites an active employee with selected roles and no mobil
         accounts: [
           {
             employee_id: '9',
-            user_id: actor,
+            user_id: readyUser,
             name: 'Ready employee',
             is_active: enabled,
             version: 1,
             role_ids: ['2'],
           },
         ],
-        auth_accounts: [{ id: actor, email: 'ready@example.invalid', mfa_enrolled: true }],
+        auth_accounts: [{ id: readyUser, email: 'ready@example.invalid', mfa_enrolled: true }],
         pending_invitations: pending
           ? [{ employee_id: '10', email: pendingEmail, role_ids: ['2'], revision }]
           : [],
@@ -444,8 +452,8 @@ test('Administration invites an active employee with selected roles and no mobil
           {
             id: 1,
             action: 'Updated account access',
-            actor_user_id: actor,
-            target_id: actor,
+            actor_user_id: readyUser,
+            target_id: readyUser,
             target_type: 'app_user',
             created_at: '2026-11-12T05:30:00Z',
           },
@@ -559,14 +567,21 @@ test('Administration invites an active employee with selected roles and no mobil
   await expect(page.getByText('Roles updated.', { exact: true })).toBeVisible();
   expect(saves[0].p_role_ids).toEqual(['2', '3']);
   await ready.getByRole('button', { name: 'View details' }).click();
-  await page.getByRole('button', { name: 'Disable access' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Disable access' }).click();
+  await page.getByRole('button', { name: 'Deactivate', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Review', exact: true }).click();
+  expect(lifecycle).toHaveLength(0);
+  await dialog.getByRole('button', { name: 'Confirm Deactivate' }).click();
   await expect(ready).toContainText('Disabled');
   await ready.getByRole('button', { name: 'View details' }).click();
-  await page.getByRole('button', { name: 'Restore access' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Restore access' }).click();
+  await page.getByRole('button', { name: 'Reactivate', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Review', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Confirm Reactivate' }).click();
   await expect(ready).toContainText('Enabled');
-  expect(saves.map((save) => save.p_enabled)).toEqual([true, false, true]);
+  expect(lifecycle.map((command) => [command.p_user_id, command.p_action])).toEqual([
+    [readyUser, 'deactivate'],
+    [readyUser, 'reactivate'],
+  ]);
   const main = page.getByRole('main');
   await main.getByRole('button', { name: 'Roles & Permissions' }).click();
   await expect(main.getByRole('heading', { name: 'Roles', exact: true })).toBeVisible();
