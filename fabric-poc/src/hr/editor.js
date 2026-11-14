@@ -252,6 +252,15 @@ export function EmployeeEditor({
                 employeeFields.filter(([k]) => !k.startsWith('supporting_')),
                 (k, v) => change((d) => ({ ...d, employee: { ...d.employee, [k]: v } })),
               ),
+              live &&
+                h(RecordAttachmentField, {
+                  attachments,
+                  client: fileClient,
+                  targetKey: 'employeePhoto',
+                  recordId: record?.employee.id,
+                  canWrite: canEdit && canEditFiles && !busy,
+                  previewImage: true,
+                }),
               h(
                 'p',
                 { className: 'editor-note' },
@@ -329,7 +338,7 @@ export function EmployeeEditor({
                 (k, v) => change((d) => ({ ...d, employee: { ...d.employee, [k]: v } })),
               ),
               live
-                ? ['employeePhoto', 'employeeDocument1', 'employeeDocument2'].map((key) =>
+                ? ['employeeDocument1', 'employeeDocument2'].map((key) =>
                     h(RecordAttachmentField, {
                       key,
                       attachments,

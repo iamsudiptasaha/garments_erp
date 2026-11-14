@@ -41,6 +41,16 @@
   margin: 10px 0;
   min-width: 0;
 }
+.hr-editor .record-attachment-preview {
+  display: block;
+  width: 128px;
+  height: 128px;
+  max-width: 100%;
+  margin-bottom: 12px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
 .hr-editor textarea {
   font: inherit;
   border: 1px solid #d9e4ee;
