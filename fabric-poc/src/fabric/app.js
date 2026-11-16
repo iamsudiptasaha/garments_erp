@@ -150,6 +150,12 @@ function workspaceRoute() {
   };
 }
 
+// Overview columns use the existing worksheet projections and record editor IDs.
+const productionOverviewColumns = {
+  productionStatuses: ['name'],
+  productionStageTypes: ['name'],
+};
+
 function isManagementPage(page, live) {
   return live && workspacePath(page);
 }
@@ -381,8 +387,8 @@ function App({ live, refreshWorkspaceAccess }) {
     preferences = state.preferences[page] || {},
     totals = useMemo(() => fabricTotals(data), [data]);
   const sheetQuery = useGridSearch(query);
-  const jobStatusesOverview = page === 'productionStatuses' && view === 'overview';
-  const recordQuery = view === 'sheet' ? sheetQuery : jobStatusesOverview ? '' : query;
+  const overviewColumns = view === 'overview' ? productionOverviewColumns[page] : undefined;
+  const recordQuery = view === 'sheet' ? sheetQuery : overviewColumns ? '' : query;
   const searchPlaceholder =
     page === 'productionJobs'
       ? 'Scan QR / enter item style code…'
@@ -639,20 +645,23 @@ function App({ live, refreshWorkspaceAccess }) {
     setEditor({ page: 'labDips', id: mode === 'edition' ? null : id, sourceId: id, mode });
   }
   function overview() {
-    if (jobStatusesOverview)
+    if (overviewColumns)
       return h(OverviewTable, {
         key: actor + ':' + page,
         client: live ? getAccessClient() : null,
-        grid: 'overview-production-statuses',
+        grid: page === 'productionStatuses' ? 'overview-production-statuses' : 'overview-' + page,
         title: spec.title,
-        records: groups.map(({ id, title }) => ({ id, name: title })),
-        columns: [
-          {
-            accessorKey: 'name',
-            header: 'Status',
-            cell: ({ getValue }) => h('span', { className: 'erp-overview-status' }, getValue()),
+        records: groups.map(({ id, rows }) => ({ ...rows[0], id })),
+        columns: overviewColumns.map((key) => ({
+          accessorKey: key,
+          header: spec.columns.find((column) => column.key === key).label,
+          cell: ({ getValue }) => {
+            const value = getValue() ?? '—';
+            return page === 'productionStatuses'
+              ? h('span', { className: 'erp-overview-status' }, value)
+              : value;
           },
-        ],
+        })),
         onOpen: can('edit') ? edit : undefined,
       });
 
@@ -1199,13 +1208,13 @@ function App({ live, refreshWorkspaceAccess }) {
                                   description: spec.subtitle,
                                   view,
                                   action:
-                                    jobStatusesOverview && can('create')
+                                    overviewColumns && can('create')
                                       ? h(
                                           'button',
                                           { className: 'primary', onClick: () => edit(null) },
                                           spec.newLabel,
                                         )
-                                      : jobStatusesOverview
+                                      : overviewColumns
                                         ? null
                                         : undefined,
                                   onView: (mode) => {
@@ -1213,7 +1222,7 @@ function App({ live, refreshWorkspaceAccess }) {
                                     setSelected(null);
                                   },
                                 }),
-                                !jobStatusesOverview &&
+                                !overviewColumns &&
                                   h(
                                     RecordPageActions,
                                     {
@@ -1274,7 +1283,7 @@ function App({ live, refreshWorkspaceAccess }) {
                                   onRefresh: live ? refreshLive : undefined,
                                 }),
                                 view === 'overview' &&
-                                  !jobStatusesOverview &&
+                                  !overviewColumns &&
                                   records.length === 0 &&
                                   h(RecordPageEmpty, {
                                     query,
