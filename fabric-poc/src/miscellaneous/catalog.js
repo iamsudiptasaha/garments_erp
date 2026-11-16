@@ -141,3 +141,23 @@ export const miscellaneousPages = {
     columns: [column('name', 'Account type', false, 260)],
   },
 };
+
+const overviewDefaults = {
+  materialContacts: ['name', 'is_company', 'gst'],
+  contactCategories: ['name', 'uses'],
+};
+
+export const miscellaneousOverview = Object.fromEntries(
+  Object.entries(overviewDefaults).map(([page, visible]) => {
+    const optional = miscellaneousPages[page].columns
+      .map(({ key }) => key)
+      .filter((key) => !visible.includes(key));
+    return [
+      page,
+      {
+        columns: [...visible, ...optional],
+        visibility: Object.fromEntries(optional.map((key) => [key, false])),
+      },
+    ];
+  }),
+);

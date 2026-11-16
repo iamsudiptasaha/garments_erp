@@ -43,6 +43,7 @@ import { ItemEditor } from '../production/item-editor.js';
 import { JobEditor } from '../production/editor.js';
 import { ProductionOverview } from '../production/cards.js';
 import { InventoryCard } from '../inventory/cards.js';
+import { miscellaneousOverview } from '../miscellaneous/catalog.js';
 import {
   inventoryOverview,
   inventoryDocument,
@@ -484,9 +485,13 @@ function App({ live, refreshWorkspaceAccess }) {
   const sheetQuery = useGridSearch(query);
   const documentOverviewColumns = fabricDocumentOverview[page];
   const inventoryColumns = inventoryOverview[page];
+  const miscellaneousColumns = miscellaneousOverview[page];
   const overviewColumns =
     view === 'overview'
-      ? (inventoryColumns?.columns ?? documentOverviewColumns ?? recordOverviewColumns[page])
+      ? (miscellaneousColumns?.columns ??
+        inventoryColumns?.columns ??
+        documentOverviewColumns ??
+        recordOverviewColumns[page])
       : undefined;
   const recordQuery = view === 'sheet' ? sheetQuery : overviewColumns ? '' : query;
   const searchPlaceholder =
@@ -809,7 +814,9 @@ function App({ live, refreshWorkspaceAccess }) {
         : null;
       const table = h(OverviewTable, {
         key: actor + ':' + page,
-        defaultVisibility: labOverview ? labOverviewVisibility : inventoryColumns?.visibility,
+        defaultVisibility: labOverview
+          ? labOverviewVisibility
+          : (miscellaneousColumns?.visibility ?? inventoryColumns?.visibility),
         client: live ? getAccessClient() : null,
         grid: page === 'productionStatuses' ? 'overview-production-statuses' : 'overview-' + page,
         title: spec.title,
@@ -897,6 +904,12 @@ function App({ live, refreshWorkspaceAccess }) {
                 }
                 return overviewLink(fmt(value) ?? '—', inventoryOverviewTarget(page, key, record));
               }
+              if (miscellaneousColumns && key === 'is_company')
+                return h(
+                  'span',
+                  { className: value === 'Yes' ? 'lab-status accepted' : 'lab-status' },
+                  value,
+                );
               if (key === 'lineCount') return lineDetails(row.original.rows, row.original.quantity);
               const target = fabricOverviewTargets[page]?.[key];
               if (target && documentOverviewColumns) {
@@ -934,7 +947,11 @@ function App({ live, refreshWorkspaceAccess }) {
           page === 'materialIssues'
             ? (record) => record.reconciliation !== 'Marked reconciled'
             : undefined,
-        onOpen: labOverview ? setLabProgressId : !spec.readonly && can('edit') ? edit : undefined,
+        onOpen: labOverview
+          ? setLabProgressId
+          : !spec.readonly && can(page === 'materialContacts' ? 'view' : 'edit')
+            ? edit
+            : undefined,
       });
       const openEdition = labOverview && sources.get(labProgressId);
       return h(
@@ -966,32 +983,6 @@ function App({ live, refreshWorkspaceAccess }) {
         editable: can('edit'),
         stageDefinitions: data.stage,
       });
-    if (page === 'materialContacts')
-      return h(
-        'section',
-        { className: 'overview-grid' },
-        groups.map((group, index) =>
-          h(
-            'article',
-            { key: group.id, className: `overview-card tone-${index % 4}` },
-            h('h2', null, group.title),
-            h(
-              'dl',
-              { className: 'inventory-details' },
-              spec.columns
-                .slice(1)
-                .map(({ key, label }) =>
-                  h('div', { key }, h('dt', null, label), h('dd', null, group.rows[0][key] ?? '—')),
-                ),
-            ),
-            h(
-              'button',
-              { className: 'open-document', onClick: () => edit(group.id) },
-              can('edit') ? 'View/Edit →' : 'View →',
-            ),
-          ),
-        ),
-      );
     if (spec.miscellaneous)
       return h(
         'section',
