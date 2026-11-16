@@ -712,7 +712,7 @@ const nativeEditors = {
     'Items',
     'style_code',
     'Browser item %',
-    'Edit →',
+    null,
     'Review item',
     'Confirm save',
   ],
@@ -762,13 +762,14 @@ async function nativeRecordModal(target, createdId) {
   const open = async () => {
     await route(key);
     await page.getByRole('searchbox', { name: 'Search ' + title, exact: true }).fill(row.name);
-    const openRecord = employee
-      ? page
-          .getByRole('table', { name: title })
-          .getByRole('row')
-          .filter({ hasText: row.name })
-          .getByRole('button')
-      : button(page.locator('.overview-card').filter({ hasText: row.name }), action);
+    const openRecord =
+      action === null
+        ? page
+            .getByRole('table', { name: title })
+            .getByRole('row')
+            .filter({ hasText: row.name })
+            .getByRole('button')
+        : button(page.locator('.overview-card').filter({ hasText: row.name }), action);
     await openRecord.click();
     if (employee && target.key !== 'employeePhoto') await b('Documents').click();
   };
@@ -927,7 +928,12 @@ async function workerBillModal(target) {
   const open = async (saved) => {
     await page.goto(app + '/production-challan.html#worker-bills');
     await page.getByRole('searchbox', { name: 'Search worker bills' }).fill(row.invoice_number);
-    await page.locator('.lab-card-open').filter({ hasText: row.invoice_number }).click();
+    await page
+      .getByRole('table', { name: 'Worker bills', exact: true })
+      .getByRole('row')
+      .filter({ has: page.getByRole('cell', { name: row.invoice_number, exact: true }) })
+      .getByRole('button')
+      .click();
     if (saved) await viewModalFile(b(saved.filename), saved);
     await b('Edit bill').click();
   };
