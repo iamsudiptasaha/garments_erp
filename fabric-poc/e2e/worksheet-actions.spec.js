@@ -220,6 +220,7 @@ for (const [route, title, open, edit, add, record] of [
       await expect(table.getByRole('row')).toHaveCount(3);
       await expect(overview).toBeVisible();
       const screenshot = { animations: 'disabled', caret: 'hide' };
+      await page.mouse.move(0, 0);
       const before = await overview.screenshot(screenshot);
       await page.getByRole('button', { name: 'Sheet', exact: true }).click();
       const editSelected = page.getByRole('button', { name: edit, exact: true });
@@ -275,7 +276,9 @@ for (const [route, title, open, edit, add, record] of [
         .getByRole('button', { name: 'Overview', exact: true })
         .click();
       await page.mouse.move(0, 0);
-      expect(await overview.screenshot(screenshot)).toEqual(before);
+      await expect
+        .poll(async () => (await overview.screenshot(screenshot)).equals(before))
+        .toBe(true);
       Object.assign(permissions, {
         view: true,
         create: false,
