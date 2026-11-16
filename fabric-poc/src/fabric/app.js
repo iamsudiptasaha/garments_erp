@@ -164,6 +164,7 @@ const productionOverviewColumns = {
   productionProductTypes: ['name', 'gender'],
   productionDesigns: ['name'],
   productionFlags: ['name'],
+  productionGenders: ['name'],
 };
 
 const productionOverviewLinks = {
