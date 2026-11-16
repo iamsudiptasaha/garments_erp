@@ -15,6 +15,12 @@
 - Coherence checks must cover relationships and ownership, not only matching table and column names. Passing syntactic checks does not establish workflow correctness.
 - Run `npm --prefix fabric-poc run check:coherence` for every UI/backend change. Vite validates startup, builds and source/backend changes automatically; the staged pre-commit hook and CI enforce the same checks. Extend the reviewed ownership contract before adding a new custom screen or save boundary. A new business interpretation requires user consultation, not merely a new allowlist.
 
+# Mandatory frontend skill
+
+- For every frontend or UI change, including ERP screens, mockups, shared components, styles, and client-side behavior, discover and read the installed **Modern Web Guidance** skill before planning or editing the affected UI. Look for `modern-web-guidance` in the active skill catalog and open its registered `SKILL.md`. If it is absent from the catalog, locate the active installation in the configured Codex skill roots or plugin cache. The Chrome plugin cache uses the directory pattern `googlechrome/modern-web-guidance/<version>/skills/modern-web-guidance/SKILL.md`. Resolve the installed version at runtime.
+- Follow the actual installed instructions. For work covered by the skill's search workflow, search first, retrieve the applicable guides before implementing, and verify the change against them. If the installed instructions cannot be located or read, report the blocker before editing frontend files.
+- Use Modern Web Guidance for web platform practices within the existing ERP design system. The canonical ERP design reference and the repository's UI contracts govern product design decisions. If guidance conflicts with a repository requirement, keep the repository requirement and report the conflict. Continue to follow the existing approval rules for themes, UI libraries, and styling conventions.
+
 # UI design system
 
 - Before adding or modifying any ERP UI screen or mockup, read and follow [the canonical ERP design reference](docs/design-system.md). Use Colours and the relevant established page as visual references. Reuse existing components and styles, preserve layout and density, and document exceptions. Get approval before introducing a theme, UI library or styling convention.
