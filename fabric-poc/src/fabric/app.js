@@ -163,6 +163,7 @@ const productionOverviewColumns = {
   productionSizes: ['name', 'order'],
   productionProductTypes: ['name', 'gender'],
   productionDesigns: ['name'],
+  productionFlags: ['name'],
 };
 
 const productionOverviewLinks = {

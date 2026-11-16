@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 const pages = [
+  ['productionFlags', 'Flags'],
+
   ['productionDesigns', 'Variants'],
 
   ['productionProductTypes', 'Product types'],
@@ -15,6 +17,13 @@ for (const [route, title] of pages) {
   test(`${title} uses the Overview table and existing record workflow`, async ({ page }) => {
     await page.goto('/fabric.html#' + route);
     const table = page.getByRole('table', { name: title, exact: true });
+    if (route === 'productionFlags') {
+      await expect(table.getByText('No matching records')).toBeVisible();
+      await page.getByRole('button', { name: '+ Add flag', exact: true }).click();
+      await page.getByLabel('Flag name').fill('Fixture flag');
+      await page.getByRole('button', { name: /Review/ }).click();
+      await page.getByRole('button', { name: /Confirm.*save|Save flag|Save record/i }).click();
+    }
     const identity = table.getByRole('row').nth(1).getByRole('button').first();
     await expect(identity).toBeVisible();
     const name = await identity.innerText();
