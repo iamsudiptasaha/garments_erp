@@ -78,6 +78,8 @@ Migrate one section per phase. Review record ownership and links, compare visibl
 
 Migrated Overview sections:
 
+- Fabric → Yarn types. The Overview uses the existing Yarn type, Yarn count and purchase order line count projections and opens the existing editor by yarn type ID.
+
 - Production → Job statuses (`productionStatuses`). The single Status field uses `item_status_list.status` and the original record editor keyed by `item_status_list.id`. The table has no outgoing foreign keys.
 - Production → Stage types, Part names, Sizes, Product types, Variants, Flags, Gender, Brands, Stages, Job workers and Items. Each page has a distinct Overview preference key and opens its existing editor by the worksheet's document ID with edit permission. Reference tables lead with the record name. Items leads with Style code and shows Brand, Product type, Season and Batch number. Foreign-key cells use the existing projected labels and link only when the related page is permitted. The hidden Item parts and Item sizes preview routes retain their existing rendering. Task Board, Update Tasks and Job History retain their dedicated views.
 - Production → Challans and Worker bills. Each document table opens the existing dialog by its document key. The overview search includes the existing job-line descriptions or bill assignments. Linked workers, issuers and challans navigate to the authorized ERP pages.

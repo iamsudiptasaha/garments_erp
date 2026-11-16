@@ -156,7 +156,8 @@ function workspaceRoute() {
 }
 
 // Overview columns use the existing worksheet projections and record editor IDs.
-const productionOverviewColumns = {
+const recordOverviewColumns = {
+  yarnTypes: ['name', 'count', 'uses'],
   productionStatuses: ['name'],
   productionStageTypes: ['name'],
   productionPartTypes: ['name'],
@@ -419,7 +420,7 @@ function App({ live, refreshWorkspaceAccess }) {
     preferences = state.preferences[page] || {},
     totals = useMemo(() => fabricTotals(data), [data]);
   const sheetQuery = useGridSearch(query);
-  const overviewColumns = view === 'overview' ? productionOverviewColumns[page] : undefined;
+  const overviewColumns = view === 'overview' ? recordOverviewColumns[page] : undefined;
   const recordQuery = view === 'sheet' ? sheetQuery : overviewColumns ? '' : query;
   const searchPlaceholder =
     page === 'productionJobs'
