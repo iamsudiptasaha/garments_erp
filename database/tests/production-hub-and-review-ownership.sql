@@ -101,15 +101,15 @@ do $$declare payload jsonb; r jsonb; employee_key bigint; doc jsonb; rev text;be
  payload:=jsonb_build_object('draft',jsonb_build_object('employee',jsonb_build_object('contacts_id','900006','contact_purpose_id','900001')));
  r:=public.erp_save_employee(payload,null);
  select id into employee_key from garments_erp.employee where id not in(900001,900002) order by id desc limit 1;
- perform pg_temp.assert_true((select is_active and is_verified and verified_by_employee_id=900001 and activated_by_employee_id=900001 from garments_erp.employee where id=employee_key),'new employee active and operator verified');
+ perform pg_temp.assert_true((select is_active and is_verified and verified_by_employee_id=900001 and activated_by_employee_id=900001 from garments_erp.employee_status where employee_id=employee_key),'new employee active and operator verified');
  perform public.erp_set_employee_active(employee_key,false,md5(garments_erp.employee_document(employee_key)::text));
  payload:=payload||jsonb_build_object('id',employee_key::text,'expected',md5(garments_erp.employee_document(employee_key)::text));
  perform public.erp_save_employee(payload,null);
- perform pg_temp.assert_true((select not is_active and is_verified and verified_by_employee_id=900001 from garments_erp.employee where id=employee_key),'ordinary edit preserves inactive state');
+ perform pg_temp.assert_true((select not is_active and is_verified and verified_by_employee_id=900001 from garments_erp.employee_status where employee_id=employee_key),'ordinary edit preserves inactive state');
  payload:=jsonb_build_object('id','900001','expected',md5(garments_erp.employee_document(900001)::text),
    'draft',jsonb_build_object('employee',jsonb_build_object('contacts_id','900001','contact_purpose_id','900001')));
  perform public.erp_save_employee(payload,null);
- perform pg_temp.assert_true((select verified_by_employee_id=900001 and is_verified from garments_erp.employee where id=900001),'self verification allowed');
+ perform pg_temp.assert_true((select verified_by_employee_id=900001 and is_verified from garments_erp.employee_status where employee_id=900001),'self verification allowed');
 end $$;
 -- Verify real browser-role denial and self-deactivation, rather than relying
 -- only on catalog grants or running the commands as the fixture owner.

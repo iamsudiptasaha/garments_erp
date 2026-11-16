@@ -7,7 +7,7 @@ do $$
 declare yarn bigint; supplier bigint; po bigint; poi bigint; ybi bigint; fabric bigint; knit bigint;
  brand bigint; colour bigint; mapping bigint; dyer bigint; lab bigint; version bigint; program bigint; program_item bigint;
 begin
- update garments_erp.employee set is_verified=true,verified_by_employee_id=900001 where id=900001;
+ update garments_erp.employee_status set is_verified=true,verified_by_employee_id=900001 where employee_id=900001;
  insert into garments_erp.yarn_type(name) values('Verification yarn') returning id into yarn;
  insert into garments_erp.yarn_supplier(contacts_id,contact_purpose_id) values(900001,900001) returning id into supplier;
  insert into garments_erp.yarn_purchase_order(yarn_supplier_id) values(supplier) returning id into po;

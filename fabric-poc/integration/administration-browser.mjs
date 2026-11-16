@@ -52,8 +52,8 @@ async function createLinkedAccount(name, role, phone, prefix = '') {
   } = await db.query(
     `with contact as (
       insert into garments_erp.contacts(company_name) values($1) returning id
-    ) insert into garments_erp.employee(employee_code,contacts_id,contact_purpose_id,is_verified,verified_by_employee_id)
-      select null,id,900001,true,900001 from contact returning id`,
+    ) insert into garments_erp.employee(employee_code,contacts_id,contact_purpose_id)
+      select null,id,900001 from contact returning id`,
     [name],
   );
   await db.query(
@@ -311,13 +311,57 @@ async function verifyEmployeeRemoval(session, admin) {
   await expect(page.getByRole('heading', { name: 'Employment types' })).toBeVisible();
   await button(page, 'Employees').click();
 
+  const newName = 'Reviewed Employee ' + suffix;
+  await db.query('insert into garments_erp.contacts(company_name) values ($1)', [newName]);
+  await page.reload();
+  const editor = page.getByRole('dialog');
+  await button(page, '+ Add employee').click();
+  await button(editor, 'Contact links').click();
+  const contact = editor.getByRole('combobox', { name: 'Employee contact', exact: true });
+  await contact.fill(newName);
+  await editor.getByRole('option', { name: newName, exact: true }).click();
+  await editor
+    .locator('label')
+    .filter({ has: page.getByText('Contact purpose', { exact: true }) })
+    .locator('select')
+    .selectOption('900001');
+  await button(editor, 'Review employee').click();
+  assert.ok(!(await snapshot()).records.some((row) => row.contact.company_name === newName));
+  await button(editor, 'Confirm & save employee').click();
+  await expect(editor).toBeHidden();
+  const created = (await snapshot()).records.find((row) => row.contact.company_name === newName);
+  assert.match(created.employee.employee_code, /^SCE-\d{5}$/);
+  assert.equal(created.status.verified_by_employee_id, String(admin.employeeId));
+  assert.equal(created.employee.employee_status_id, created.status.id);
+  const createdCard = page.getByRole('article').filter({ hasText: newName });
+  await search.fill(newName);
+  await button(createdCard, 'Open profile →').click();
+  await editor.getByLabel('Date of joining').fill('2026-11-01');
+  await button(editor, 'Review employee').click();
+  await button(editor, 'Confirm & save employee').click();
+  await expect(editor).toBeHidden();
+  assert.equal((await employee(created.employee.id)).employee.date_of_joining, '2026-11-01');
+  const filter = page.getByLabel('Employee records');
+  for (const state of ['inactive', 'active']) {
+    await button(createdCard, 'Open profile →').click();
+    await button(editor, 'Status').click();
+    await editor.locator('.hr-status-panel select').selectOption(state);
+    await button(editor, 'Review status').click();
+    await button(editor, 'Confirm & save status').click();
+    await expect(editor).toBeHidden();
+    await filter.selectOption(state);
+    await expect(createdCard).toBeVisible();
+    assert.equal((await employee(created.employee.id)).status.is_active, state === 'active');
+  }
+  await filter.selectOption('current');
+
   await search.fill(name);
   const card = page.getByRole('article').filter({ hasText: name });
   await button(card, 'Open profile →').click();
   const dialog = page.getByRole('dialog');
   await button(dialog, 'Remove Employee').click();
   await expect(dialog.getByRole('heading', { name: 'Review employee removal' })).toBeVisible();
-  assert.equal((await employee(target.employeeId)).employee.archived_at, null);
+  assert.equal((await employee(target.employeeId)).status.archived_at, null);
   await button(dialog, 'Back to employee').click();
   await button(dialog, 'Remove Employee').click();
   await button(dialog, 'Confirm Removal').click();
@@ -330,10 +374,11 @@ async function verifyEmployeeRemoval(session, admin) {
   await expect(button(dialog, 'Review employee')).toHaveCount(0);
 
   const archived = await employee(target.employeeId);
-  assert.equal(archived.employee.is_active, false);
-  assert.ok(archived.employee.archived_at);
+  assert.equal(archived.status.is_active, false);
+  assert.ok(archived.status.archived_at);
+  assert.equal(archived.status.archived_by_employee_id, String(admin.employeeId));
   assert.equal(archived.employee.supporting_document_1_upload, String(fixture.attachment));
-  assert.equal(archived.employee.verified_by_employee_id, current.employee.verified_by_employee_id);
+  assert.equal(archived.status.verified_by_employee_id, current.status.verified_by_employee_id);
   assert.ok(
     !ok(await admin.user.rpc('erp_admin_snapshot')).employees.some(
       (record) => String(record.id) === String(target.employeeId),

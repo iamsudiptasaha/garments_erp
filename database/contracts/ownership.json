@@ -54,7 +54,7 @@
     "command": "public.erp_archive_employee",
     "permissionScreen": "employees",
     "writableTables": [
-      "garments_erp.employee",
+      "garments_erp.employee_status",
       "garments_access.app_activity_log",
       "garments_access.employee_invitation",
       "garments_access.cancelled_employee_invitation"
@@ -177,8 +177,14 @@
     "employees": {
       "root": "employee",
       "writableTables": [
-        "employee"
+        "employee",
+        "employee_status"
       ],
+      "statusRelationship": {
+        "table": "employee_status",
+        "link": "employee_status_id",
+        "owner": "employee_id"
+      },
       "referenceTables": [
         "contacts",
         "contact_purpose",

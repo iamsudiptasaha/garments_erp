@@ -38,7 +38,7 @@ async function signIn(role) {
   const {
     rows: [employee],
   } = await db.query(
-    'insert into garments_erp.employee(employee_code,contacts_id,contact_purpose_id,is_verified,verified_by_employee_id) values($1,$2,900001,true,900001) returning id',
+    'insert into garments_erp.employee(employee_code,contacts_id,contact_purpose_id) values($1,$2,900001) returning id',
     ['SCE/8' + contact.id, contact.id],
   );
   await db.query(

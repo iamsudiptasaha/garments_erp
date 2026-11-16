@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ContactSelect } from './contact-select.js';
 import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
 import { getAccessClient } from '../access/client.js';
-import { employeeFields, employeeLinks, validateEmployeeDraft } from './model.js';
+import { employeeFields, employeeLinks, employeeStatus, validateEmployeeDraft } from './model.js';
 import '../files/styles.css';
 const h = React.createElement;
 export function EmployeeEditor({
@@ -33,7 +33,9 @@ export function EmployeeEditor({
     [tab, setTab] = useState('profile'),
     [review, setReview] = useState(false),
     [removing, setRemoving] = useState(false),
-    [active, setActive] = useState(record?.employee.is_active !== false),
+    [active, setActive] = useState(
+      employeeStatus(record) !== 'Inactive' && employeeStatus(record) !== 'Archived',
+    ),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   const fileClient = live ? getAccessClient() : null;
@@ -218,7 +220,7 @@ export function EmployeeEditor({
                   ? active
                     ? 'Active'
                     : 'Inactive'
-                  : record?.employee.is_active === false
+                  : employeeStatus(record) === 'Inactive'
                     ? 'Inactive · unchanged on save'
                     : 'Active',
               ],
@@ -233,45 +235,47 @@ export function EmployeeEditor({
               'section',
               { className: 'hr-status-panel' },
               h('h3', null, 'Employee status'),
-              record
-                ? h(
-                    React.Fragment,
-                    null,
-                    h(
-                      'label',
+              employeeStatus(record) === 'Archived'
+                ? h('p', null, 'Archived · This profile and its documents are read-only.')
+                : record
+                  ? h(
+                      React.Fragment,
                       null,
-                      'Status',
                       h(
-                        'select',
-                        {
-                          value: active ? 'active' : 'inactive',
-                          disabled: !canEdit || busy || dirty,
-                          onChange: (e) => {
-                            setActive(e.target.value === 'active');
-                            setReview(false);
+                        'label',
+                        null,
+                        'Status',
+                        h(
+                          'select',
+                          {
+                            value: active ? 'active' : 'inactive',
+                            disabled: !canEdit || busy || dirty,
+                            onChange: (e) => {
+                              setActive(e.target.value === 'active');
+                              setReview(false);
+                            },
                           },
-                        },
-                        h('option', { value: 'active' }, 'Active'),
-                        h('option', { value: 'inactive' }, 'Inactive'),
+                          h('option', { value: 'active' }, 'Active'),
+                          h('option', { value: 'inactive' }, 'Inactive'),
+                        ),
                       ),
-                    ),
-                    h(
-                      'p',
-                      { className: 'editor-note' },
-                      'Inactive employees cannot access their portal.',
-                    ),
-                    dirty &&
                       h(
                         'p',
                         { className: 'editor-note' },
-                        'Save profile changes before changing employee status.',
+                        'Inactive employees cannot access their portal.',
                       ),
-                  )
-                : h(
-                    'p',
-                    null,
-                    'New employees are active by default. Save the employee before changing their status.',
-                  ),
+                      dirty &&
+                        h(
+                          'p',
+                          { className: 'editor-note' },
+                          'Save profile changes before changing employee status.',
+                        ),
+                    )
+                  : h(
+                      'p',
+                      null,
+                      'New employees are active by default. Save the employee before changing their status.',
+                    ),
             ),
           tab === 'profile' &&
             h(
@@ -459,7 +463,7 @@ export function EmployeeEditor({
                 disabled:
                   busy ||
                   (tab === 'status' &&
-                    (!record || dirty || active === (record.employee.is_active !== false))),
+                    (!record || dirty || active === (employeeStatus(record) === 'Active'))),
                 onClick: () => {
                   try {
                     attachmentPlan.current = null;
