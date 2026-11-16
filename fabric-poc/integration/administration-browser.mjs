@@ -304,7 +304,7 @@ async function verifyEmployeeRemoval(session, admin) {
   );
 
   const page = await openPage(session, 1440, 'employees');
-  const search = page.getByRole('searchbox', { name: 'Search employees' });
+  const search = page.getByRole('searchbox', { name: 'Search Employees' });
   const trigger = page.getByLabel('Personal account', { exact: true });
   const menu = page.locator('.sidebar-account-menu');
   await trigger.click();
@@ -347,9 +347,14 @@ async function verifyEmployeeRemoval(session, admin) {
   assert.match(created.employee.employee_code, /^SCE-\d{5}$/);
   assert.equal(created.status.verified_by_employee_id, String(admin.employeeId));
   assert.equal(created.employee.employee_status_id, created.status.id);
-  const createdCard = page.getByRole('article').filter({ hasText: newName });
+  const createdRow = page
+    .getByRole('table', { name: 'Employees' })
+    .getByRole('row')
+    .filter({ hasText: newName });
   await search.fill(newName);
-  await button(createdCard, 'Open profile →').click();
+  await createdRow
+    .getByRole('button', { name: created.employee.employee_code, exact: true })
+    .click();
   await editor.getByLabel('Date of joining').fill('2026-11-01');
   await button(editor, 'Review employee').click();
   await button(editor, 'Confirm & save employee').click();
@@ -357,21 +362,26 @@ async function verifyEmployeeRemoval(session, admin) {
   assert.equal((await employee(created.employee.id)).employee.date_of_joining, '2026-11-01');
   const filter = page.getByLabel('Employee records');
   for (const state of ['inactive', 'active']) {
-    await button(createdCard, 'Open profile →').click();
+    await createdRow
+      .getByRole('button', { name: created.employee.employee_code, exact: true })
+      .click();
     await button(editor, 'Status').click();
     await editor.locator('.hr-status-panel select').selectOption(state);
     await button(editor, 'Review status').click();
     await button(editor, 'Confirm & save status').click();
     await expect(editor).toBeHidden();
     await filter.selectOption(state);
-    await expect(createdCard).toBeVisible();
+    await expect(createdRow).toBeVisible();
     assert.equal((await employee(created.employee.id)).status.is_active, state === 'active');
   }
   await filter.selectOption('current');
 
   await search.fill(name);
-  const card = page.getByRole('article').filter({ hasText: name });
-  await button(card, 'Open profile →').click();
+  const row = page
+    .getByRole('table', { name: 'Employees' })
+    .getByRole('row')
+    .filter({ hasText: name });
+  await row.getByRole('button').click();
   const dialog = page.getByRole('dialog');
   await button(dialog, 'Remove Employee').click();
   await expect(dialog.getByRole('heading', { name: 'Review employee removal' })).toBeVisible();
@@ -380,10 +390,10 @@ async function verifyEmployeeRemoval(session, admin) {
   await button(dialog, 'Remove Employee').click();
   await button(dialog, 'Confirm Removal').click();
   await expect(dialog).toBeHidden();
-  await expect(card).toHaveCount(0);
+  await expect(row).toHaveCount(0);
   await page.getByLabel('Employee records').selectOption('archived');
-  await expect(card.getByText('Archived', { exact: true })).toBeVisible();
-  await button(card, 'Open profile →').click();
+  await expect(row.getByText('Archived', { exact: true })).toBeVisible();
+  await row.getByRole('button').click();
   await expect(button(dialog, 'Remove Employee')).toHaveCount(0);
   await expect(button(dialog, 'Review employee')).toHaveCount(0);
 

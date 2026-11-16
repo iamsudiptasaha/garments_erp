@@ -76,7 +76,14 @@ Use the shared TanStack `OverviewTable` for Overview card migrations. The Overvi
 
 Migrate one section per phase. Review record ownership and links, compare visible records and existing permissions, then check modal identity, search, filter, sort, group, column preferences and the Sheet regression in Chromium. Verify preference reload, account isolation and use on another device for signed-in sessions. Record CI and stop for review before the next section.
 
-Pilot: Production → Job statuses (`productionStatuses`). The single Status field uses `item_status_list.status` and the original record editor keyed by `item_status_list.id`. The table has no outgoing foreign keys. Remaining Overview sections await phased migration.
+Migrated Overview sections:
+
+- Production → Job statuses (`productionStatuses`). The single Status field uses `item_status_list.status` and the original record editor keyed by `item_status_list.id`. The table has no outgoing foreign keys.
+- Employee / HR → Employees (`overview-employees`). Employee code opens the existing Employee profile using `employee.id`. The contact name and existing photo appear beside the code. The contact name links to Contacts when the viewer has access, and the verifier is shown using the readable name from the Employee snapshot. The existing Current, Active, Inactive and Archived scope applies before grid filters. Employee view permission allows opening the profile, and the editor applies its existing create, edit and archive rules. The directory cards and their styles were removed. The Employee worksheet retains its existing controls.
+
+- Employee / HR → Blood groups, Employment types and Gender. Each reference page uses its own Overview grid preferences and displays Name and Updated at. Opening a row requires Employee edit permission and populates the existing inline form using the reference ID. Employee create permission controls adding values. These pages have no Sheet view.
+
+During each migration, replace the card render path with the shared table and remove handlers, styles, helpers and imports used exclusively by those cards. Check references in other modules, worksheets, editors and browser acceptance tests before removing code. Keep the original modal and service boundaries.
 
 ### Mandatory Sheet-view contract
 

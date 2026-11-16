@@ -1017,6 +1017,9 @@ function App({ live, refreshWorkspaceAccess }) {
                 live,
                 contactChoices: data.contacts || [],
                 contactItems: data.contact_items || [],
+                onContacts: can('view', 'materialContacts')
+                  ? () => navigate('materialContacts')
+                  : undefined,
               })
             : page === 'finishedProducts' || Object.hasOwn(billingPages, page)
               ? page !== 'finishedProducts'

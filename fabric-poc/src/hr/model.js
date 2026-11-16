@@ -7,11 +7,6 @@ export const employeeFields = [
   ['supporting_document_1_title', 'Document 1 title', 'text'],
   ['supporting_document_2_title', 'Document 2 title', 'text'],
 ];
-export const employeeReferences = {
-  gender: 'Gender',
-  blood_group: 'Blood groups',
-  type_of_employment: 'Employment types',
-};
 export const hrPages = {
   employees: { title: 'Employees', table: 'employees' },
   employeeGender: { title: 'Gender', table: 'gender' },

@@ -232,10 +232,10 @@ test('employee status actions and automatic verification preserve inactivity on 
 }, testInfo) => {
   test.skip(hosted, 'Hosted smoke tests never change employees');
   await page.goto('/fabric.html#employees');
-  const card = page.locator('.hr-person-card').first();
-  await expect(card).toBeVisible();
-  await expect(card.getByRole('button', { name: /^Deactivate / })).toHaveCount(0);
-  await card.getByRole('button', { name: 'Open profile →' }).click();
+  const row = page.getByRole('table', { name: 'Employees' }).locator('tbody tr').first();
+  await expect(row).toBeVisible();
+  await expect(row.getByRole('button', { name: /^Deactivate / })).toHaveCount(0);
+  await row.getByRole('button').click();
   const statusDialog = page.getByRole('dialog');
   await expect(statusDialog.getByLabel('Primary contact email')).toHaveAttribute('readonly', '');
   await page.screenshot({ path: testInfo.outputPath('employee-contact-email.png') });
@@ -249,8 +249,8 @@ test('employee status actions and automatic verification preserve inactivity on 
     .selectOption('inactive');
   await statusDialog.getByRole('button', { name: 'Review status', exact: true }).click();
   await statusDialog.getByRole('button', { name: 'Confirm & save status', exact: true }).click();
-  await expect(card.locator('.hr-status')).toHaveText('Inactive');
-  await card.getByRole('button', { name: 'Open profile →' }).click();
+  await expect(row.locator('.erp-overview-status')).toHaveText('Inactive');
+  await row.getByRole('button').click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByLabel('Verified by', { exact: true })).toHaveAttribute('readonly', '');
   await expect(dialog.locator('input[type=password]')).toHaveCount(0);
@@ -261,12 +261,8 @@ test('employee status actions and automatic verification preserve inactivity on 
   await expect(dialog.getByText('Inactive · unchanged on save', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Confirm & save employee', exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.locator('.hr-person-card .hr-status').first()).toHaveText('Inactive');
-  await page
-    .locator('.hr-person-card')
-    .first()
-    .getByRole('button', { name: 'Open profile →' })
-    .click();
+  await expect(row.locator('.erp-overview-status')).toHaveText('Inactive');
+  await row.getByRole('button').click();
   await page.getByRole('dialog').getByRole('button', { name: 'Status', exact: true }).click();
   await page
     .getByRole('dialog')
@@ -280,7 +276,7 @@ test('employee status actions and automatic verification preserve inactivity on 
     .getByRole('dialog')
     .getByRole('button', { name: 'Confirm & save status', exact: true })
     .click();
-  await expect(page.locator('.hr-person-card .hr-status').first()).toHaveText('Active');
+  await expect(row.locator('.erp-overview-status')).toHaveText('Active');
 });
 
 test('native invitation requires a deliberate click before setting a password', async ({
