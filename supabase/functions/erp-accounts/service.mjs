@@ -37,7 +37,11 @@ export async function accountAction(input, io) {
   const request = await io.invitation(action, employee, email, roles, revision);
   if (request.state === 'cancelled') return { message: 'Invitation cancelled.' };
   if (request.state === 'linked') return { message: 'Employee access linked.' };
-  await io.invite(request.email, request.nonce);
+  if (action === 'resend') {
+    await io.sendSetupRecovery(request.email);
+  } else {
+    await io.invite(request.email, request.nonce);
+  }
   if (action !== 'resend') await io.invitation('finish', employee, null, null, request.revision);
   return {
     message:

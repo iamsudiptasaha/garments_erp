@@ -43,7 +43,9 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [email, setEmail] = useState(''),
-    [passwordLink] = useState(() => (embedded ? null : readPasswordLink(location.hash))),
+    [passwordLink, setPasswordLink] = useState(() =>
+      embedded ? null : readPasswordLink(location.hash, location.search),
+    ),
     [password, setPassword] = useState(''),
     [localPage, setLocalPage] = useState(() =>
       location.hash === '#profile' ? 'profile' : 'adminAccess',
@@ -67,7 +69,11 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
   }
   useEffect(() => {
     if (embedded) return;
-    const syncTab = () => setLocalPage(location.hash.slice(1) || 'adminAccess');
+    const syncTab = () => {
+      const incoming = readPasswordLink(location.hash, location.search);
+      if (incoming) setPasswordLink(incoming);
+      else setLocalPage(location.hash.slice(1) || 'adminAccess');
+    };
     window.addEventListener('popstate', syncTab);
     window.addEventListener('hashchange', syncTab);
     return () => {
@@ -133,7 +139,7 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
     if (signedInUser && !passwordLink) void refresh(false);
   }, [signedInUser, user, passwordLink, workspaceAccess?.administrator]);
   useEffect(() => {
-    if (passwordLink) history.replaceState(null, '', location.pathname + location.search);
+    if (passwordLink) history.replaceState(null, '', location.pathname);
   }, [passwordLink]);
   async function signIn(e) {
     e.preventDefault();
@@ -169,7 +175,14 @@ export function AccessApp({ workspaceAccess, page, navigate, refreshWorkspaceAcc
       h('p', { role: 'alert' }, configurationError),
     );
   if (passwordLink)
-    return h('main', { className: 'access-live-shell' }, h(PasswordLink, { link: passwordLink }));
+    return h(
+      'main',
+      { className: 'access-live-shell' },
+      h(PasswordLink, {
+        key: passwordLink.tokenHash || passwordLink.accessToken || 'invalid',
+        link: passwordLink,
+      }),
+    );
   const signedIn = signedInUser && access?.enabled;
   const content = h(
     React.Fragment,

@@ -10,6 +10,7 @@ import {
   productionProject,
 } from './migrate-production.mjs';
 import { accountFunctionChanged } from './deploy-accounts.mjs';
+import { accountAuthChanges } from './configure-account-auth.mjs';
 import { deploymentConfig } from './workers-deploy.mjs';
 const guard = resolve('scripts/ci/bundle-guard.mjs');
 function bundle(content, name = 'app.js') {
@@ -114,4 +115,31 @@ test('account release compares the deployed tree and deploys if that commit is u
   assert.equal(accountFunctionChanged(commit, commit), false);
   assert.equal(accountFunctionChanged('a'.repeat(40), commit), true);
   assert.equal(accountFunctionChanged(undefined, commit), true);
+});
+
+test('production invitation settings pin the ERP callback and preserve other redirects', () => {
+  const origin = 'https://garments-erp.sahacreationsllp0int.workers.dev';
+  const before = {
+    site_url: 'http://localhost:3000',
+    uri_allow_list: 'https://existing.invalid/access',
+  };
+  const templates = { invite: 'invite fixture', recovery: 'recovery fixture' };
+  const patch = accountAuthChanges(before, templates);
+  assert.deepEqual(patch, {
+    site_url: origin,
+    uri_allow_list: [
+      'https://existing.invalid/access',
+      origin + '/access',
+      origin + '/access.html',
+    ].join(','),
+    mailer_templates_invite_content: templates.invite,
+    mailer_templates_recovery_content: templates.recovery,
+  });
+  assert.deepEqual(accountAuthChanges({ ...before, ...patch }, templates), {});
+  const run = spawnSync(process.execPath, ['scripts/ci/configure-account-auth.mjs'], {
+    env: { ...process.env, GITHUB_REF: 'refs/heads/dev' },
+    encoding: 'utf8',
+  });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /main/);
 });

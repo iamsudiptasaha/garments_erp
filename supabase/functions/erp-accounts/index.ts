@@ -58,6 +58,10 @@ Deno.serve(async (req) => {
     async function access() {
       return await checked(user.rpc('erp_access_snapshot'));
     }
+    const redirectTo =
+      new URL(url).hostname === '127.0.0.1'
+        ? 'http://127.0.0.1:18687/access.html'
+        : 'https://garments-erp.sahacreationsllp0int.workers.dev/access';
     const io = {
       actor: async () => {
         const { data, error } = await user.auth.getUser();
@@ -93,9 +97,13 @@ Deno.serve(async (req) => {
       invite: async (email: string, nonce: string | null) => {
         await checked(
           service.auth.admin.inviteUserByEmail(email, {
+            redirectTo,
             data: nonce ? { erp_invitation: nonce } : undefined,
           }),
         );
+      },
+      sendSetupRecovery: async (email: string) => {
+        await checked(service.auth.resetPasswordForEmail(email, { redirectTo }));
       },
       verifyPassword: async (actor: any, password: string) => {
         const fresh = createClient(url, key, {

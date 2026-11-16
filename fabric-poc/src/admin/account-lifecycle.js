@@ -66,7 +66,9 @@ function userRows(snapshot) {
           : auth?.setup_pending
             ? 'Password setup pending'
             : account
-              ? 'Complete'
+              ? account.is_active
+                ? 'Active'
+                : 'Complete'
               : '—',
       mfa: auth?.mfa_enrolled ? 'Enrolled' : account ? 'Not enrolled' : '—',
       account,
@@ -154,7 +156,7 @@ export function AccountLifecycle({ snapshot, actorId, onSaved }) {
           const action =
             row.pending && row.active
               ? 'retry'
-              : row.auth?.invitation_pending && row.account?.is_active
+              : row.active && row.auth?.invitation_resend_available && row.account?.is_active
                 ? 'resend'
                 : !row.account && row.active && !row.pending
                   ? 'invite'
@@ -183,7 +185,7 @@ export function AccountLifecycle({ snapshot, actorId, onSaved }) {
                 h(
                   'button',
                   { onClick: () => open(action, row) },
-                  action === 'invite' ? 'Invite' : action === 'resend' ? 'Resend' : title[action],
+                  action === 'invite' ? 'Invite' : title[action],
                 ),
               h('button', { onClick: () => open('details', row) }, title.details),
             ),
@@ -429,7 +431,7 @@ function UserOperation({
                 null,
                 lifecycleDescription[action] ||
                   {
-                    resend: 'Send a new invitation link to this email address.',
+                    resend: 'Send a fresh password setup link to this email address.',
                     retry: 'Complete the original invitation using its saved email and roles.',
                     cancel: 'The existing invitation will no longer grant ERP access.',
                     correct:

@@ -374,7 +374,7 @@ try {
       (await anon.auth.verifyOtp({ token_hash: firstHash, type: 'invite' })).error,
       'Expired invitation denied',
     );
-    assert.equal((await command(resend)).status, 200, 'Native resend');
+    assert.equal((await command(resend)).status, 200, 'Resend to existing Auth identity');
     const employee = (
       await db.query(
         'select user_id,must_change_password from garments_access.app_user where employee_id=$1',
@@ -384,9 +384,9 @@ try {
     assert.equal(employee.user_id, createdEmployeeAuth, 'Retry and resend preserve Auth UUID');
     assert.equal(employee.must_change_password, true);
     const fresh = createClient(settings.API_URL, settings.ANON_KEY, options);
-    const inviteHash = await emailToken(createdEmployeeEmail, 'invite', firstHash);
+    const setupHash = await emailToken(createdEmployeeEmail, 'recovery');
     const accepted = ok(
-      await fresh.auth.verifyOtp({ token_hash: inviteHash, type: 'invite' }),
+      await fresh.auth.verifyOtp({ token_hash: setupHash, type: 'recovery' }),
       'Accept invitation',
     );
     assert.equal(accepted.user.id, createdEmployeeAuth);
@@ -398,7 +398,7 @@ try {
       false,
     );
     assert.ok(
-      (await anon.auth.verifyOtp({ token_hash: inviteHash, type: 'invite' })).error,
+      (await anon.auth.verifyOtp({ token_hash: setupHash, type: 'recovery' })).error,
       'Invite cannot replay',
     );
     ok(
@@ -605,7 +605,7 @@ try {
     );
     createdEmployeeEmail = updatedEmail;
     ok(await anon.auth.resetPasswordForEmail(createdEmployeeEmail), 'Request native recovery link');
-    const recoveryHash = await emailToken(createdEmployeeEmail, 'recovery');
+    const recoveryHash = await emailToken(createdEmployeeEmail, 'recovery', setupHash);
     const recovered = ok(
       await fresh.auth.verifyOtp({ token_hash: recoveryHash, type: 'recovery' }),
       'Accept native recovery',

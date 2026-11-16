@@ -96,7 +96,16 @@ test('only native invitation and recovery link types open the password screen', 
     type: 'recovery',
     tokenHash: 'xyz',
   });
-  assert.equal(readPasswordLink('#type=recovery'), null);
+  assert.deepEqual(readPasswordLink('#type=recovery'), { type: 'recovery', invalid: true });
+  assert.deepEqual(readPasswordLink('#error=access_denied&error_code=otp_expired'), {
+    type: null,
+    invalid: true,
+  });
+  assert.deepEqual(readPasswordLink('#type=invite&access_token=abc&refresh_token=xyz'), {
+    type: 'invite',
+    accessToken: 'abc',
+    refreshToken: 'xyz',
+  });
   assert.equal(readPasswordLink('#type=email_change&token_hash=abc'), null);
 });
 
@@ -124,4 +133,23 @@ test('cancel never sends mail and correction finishes only its replacement reser
     ['correct@example.invalid', 'new-nonce'],
     ['finish', '12', null, null, 'new'],
   ]);
+});
+
+test('resending sends recovery for the reserved email without provisioning', async () => {
+  const deliveries = [];
+  const result = await accountAction(
+    { action: 'resend', employeeId: 12, email: 'wrong@example.invalid' },
+    {
+      actor: async () => ({ id: 'admin' }),
+      requireAdmin: async () => {},
+      invitation: async (...args) => {
+        assert.deepEqual(args, ['resend', '12', null, null, null]);
+        return { state: 'send', email: 'reserved@example.invalid' };
+      },
+      invite: () => assert.fail('unexpected invite'),
+      sendSetupRecovery: async (email) => deliveries.push(email),
+    },
+  );
+  assert.equal(result.message, 'Invitation resent.');
+  assert.deepEqual(deliveries, ['reserved@example.invalid']);
 });

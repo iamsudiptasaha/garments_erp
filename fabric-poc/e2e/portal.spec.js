@@ -347,11 +347,18 @@ test('Forgot password sends a native email request and shows a generic response'
   page,
 }, testInfo) => {
   test.skip(hosted, 'Uses synthetic Auth responses');
-  let requestedEmail;
-  await page.route('https://example.invalid/auth/v1/recover', async (route) => {
-    requestedEmail = route.request().postDataJSON().email;
-    await route.fulfill({ status: 429, json: { message: 'rate limited' } });
-  });
+  let recovery;
+  await page.route(
+    (url) => url.origin === 'https://example.invalid' && url.pathname === '/auth/v1/recover',
+    async (route) => {
+      const request = route.request();
+      recovery = {
+        email: request.postDataJSON().email,
+        redirect: new URL(request.url()).searchParams.get('redirect_to'),
+      };
+      await route.fulfill({ status: 429, json: { message: 'rate limited' } });
+    },
+  );
   await page.goto('/access.html');
   await expect(page.getByRole('button', { name: /phone login/i })).toHaveCount(0);
   await page.getByText('Forgot password?', { exact: true }).click();
@@ -360,7 +367,10 @@ test('Forgot password sends a native email request and shows a generic response'
   await expect(page.getByRole('status')).toHaveText(
     'If this email is registered, you will receive a password reset link.',
   );
-  expect(requestedEmail).toBe('employee@example.invalid');
+  expect(recovery).toEqual({
+    email: 'employee@example.invalid',
+    redirect: new URL('/access.html', page.url()).href,
+  });
   await page.screenshot({ path: testInfo.outputPath('email-sign-in-and-recovery.png') });
 });
 
