@@ -407,8 +407,9 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
       await page.mouse.move(0, 0);
       await expect(page.getByRole('button', { name: 'Columns', exact: true })).toBeEnabled();
       await grid.scrollIntoViewIfNeeded();
+      // Linux Chromium can composite a few glyph-edge pixels differently after the view switch.
       await expect
-        .poll(async () => sameRendering(page, await grid.screenshot(screenshot), overview))
+        .poll(async () => sameRendering(page, await grid.screenshot(screenshot), overview, 4))
         .toBe(true);
       await views.getByRole('button', { name: 'Sheet' }).click();
       await expect(zoom).toHaveValue('1.5');
