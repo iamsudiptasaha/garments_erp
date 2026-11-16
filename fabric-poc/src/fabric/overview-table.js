@@ -1,4 +1,4 @@
-import { createElement as h, useEffect, useRef, useState } from 'react';
+import { createElement as h, useEffect, useId, useRef, useState } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -181,11 +181,22 @@ function ColumnSettings({ table }) {
   });
 }
 
-export function OverviewTable({ client, grid, title, records, columns, onOpen, toolbar }) {
+export function OverviewTable({
+  client,
+  grid,
+  title,
+  records,
+  columns,
+  onOpen,
+  toolbar,
+  searchLabel = 'Search ' + title,
+  getSearchText,
+}) {
   const { preferences, ready, save, error } = useGridPreferences(client, grid);
   const [panel, setPanel] = useState(null);
   const [draft, setDraft] = useState(null);
   const dialog = useRef(null);
+  const captionId = useId();
   const expanded = preferences.expanded ?? {};
   const query = useGridSearch(draft ?? preferences.search ?? '');
   useEffect(() => {
@@ -218,7 +229,13 @@ export function OverviewTable({ client, grid, title, records, columns, onOpen, t
     getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
     groupedColumnMode: false,
-    globalFilterFn: (row, id, value) => text(row.getValue(id)).includes(text(value)),
+    globalFilterFn: (row, id, value) => {
+      const searchValue =
+        getSearchText && id === identity.accessorKey ? getSearchText(row.original) : '';
+      return (
+        text(row.getValue(id)).includes(text(value)) || text(searchValue).includes(text(value))
+      );
+    },
     state: {
       globalFilter: query,
       columnFilters,
@@ -287,7 +304,7 @@ export function OverviewTable({ client, grid, title, records, columns, onOpen, t
         { className: 'erp-overview-search' },
         h(Search, { size: 16, 'aria-hidden': true }),
         h(GridSearch, {
-          label: 'Search ' + title,
+          label: searchLabel,
           value: draft ?? preferences.search ?? '',
           onChange: changeSearch,
           sheet: false,
@@ -359,13 +376,18 @@ export function OverviewTable({ client, grid, title, records, columns, onOpen, t
       ),
     h(
       'div',
-      { className: 'lab-record-table-wrap' },
+      {
+        className: 'lab-record-table-wrap',
+        role: 'region',
+        'aria-labelledby': captionId,
+        tabIndex: 0,
+      },
       h(
         'table',
         {
-          'aria-label': title,
           style: fixedWidth ? { width: fixedWidth, tableLayout: 'fixed' } : undefined,
         },
+        h('caption', { id: captionId, className: 'erp-overview-caption' }, title),
         h(
           'colgroup',
           null,
@@ -426,7 +448,11 @@ export function OverviewTable({ client, grid, title, records, columns, onOpen, t
                       onClick: header.column.getToggleSortingHandler(),
                     },
                     flexRender(header.column.columnDef.header, header.getContext()),
-                    sorted ? (sorted === 'asc' ? ' ↑' : ' ↓') : ' ↕',
+                    h(
+                      'span',
+                      { 'aria-hidden': true },
+                      sorted ? (sorted === 'asc' ? ' ↑' : ' ↓') : ' ↕',
+                    ),
                   ),
                   h('span', {
                     className: 'overview-resize',

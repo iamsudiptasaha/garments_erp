@@ -9,6 +9,9 @@ test('Job statuses Overview opens the existing editor and keeps Sheet separate',
   await page.goto(url);
   const table = page.getByRole('table', { name: 'Job statuses' });
   await expect(table.getByRole('row')).toHaveCount(7);
+  const scrollRegion = page.getByRole('region', { name: 'Job statuses', exact: true });
+  await scrollRegion.focus();
+  await expect(scrollRegion).toBeFocused();
   const add = page.getByRole('button', { name: '+ Add status' });
   await expect(add).toBeVisible();
   const sheet = page.getByRole('button', { name: 'Sheet', exact: true });
@@ -35,12 +38,12 @@ test('Job statuses Overview opens the existing editor and keeps Sheet separate',
   await expect(table.getByRole('row')).toHaveCount(2);
   await page.getByRole('button', { name: 'Clear search' }).click();
   await expect(table.getByRole('row')).toHaveCount(7);
-  await table
-    .getByRole('button', { name: /Status/ })
-    .first()
-    .click();
+  const sort = table.getByRole('button', { name: 'Status', exact: true });
+  await sort.focus();
+  await sort.press('Enter');
   await expect(table.getByRole('columnheader')).toHaveAttribute('aria-sort', 'ascending');
-  await table.getByRole('columnheader').getByRole('button').click();
+  await expect(sort).toBeFocused();
+  await sort.press('Space');
   await expect(table.getByRole('columnheader')).toHaveAttribute('aria-sort', 'descending');
 
   await page.getByRole('button', { name: 'Filter', exact: true }).click();

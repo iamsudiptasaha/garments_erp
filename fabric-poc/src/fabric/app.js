@@ -1,7 +1,12 @@
 import { contactsCommands } from '../miscellaneous/live.js';
 import { AccessApp } from '../access/app.js';
 import { FilesWorkspace } from '../files/app.js';
-import { adminTabs, workspacePath, workspacePathPage } from '../access/workspace-routes.js';
+import {
+  adminTabs,
+  followWorkspaceLink,
+  workspacePath,
+  workspacePathPage,
+} from '../access/workspace-routes.js';
 import { OverviewTable } from './overview-table.js';
 import { useGridSearch } from './grid-toolbar.js';
 import {
@@ -149,6 +154,39 @@ function workspaceRoute() {
     task: params.get('task'),
   };
 }
+
+// Overview columns use the existing worksheet projections and record editor IDs.
+const productionOverviewColumns = {
+  productionStatuses: ['name'],
+  productionStageTypes: ['name'],
+  productionPartTypes: ['name'],
+  productionSizes: ['name', 'order'],
+  productionProductTypes: ['name', 'gender'],
+  productionDesigns: ['name'],
+  productionFlags: ['name'],
+  productionGenders: ['name'],
+  brands: ['name', 'contact', 'purpose'],
+  productionStages: ['name', 'abbr', 'order', 'type', 'track'],
+  productionWorkers: ['name', 'contact', 'purpose', 'jobs'],
+  productionItems: ['name', 'brand', 'product', 'season', 'batch_number'],
+};
+
+const productionOverviewLinks = {
+  productionProductTypes: { gender: ['gender_id', 'productionGenders'] },
+  brands: {
+    contact: ['contacts_id', 'materialContacts'],
+    purpose: ['contact_purpose_id', 'contactCategories'],
+  },
+  productionStages: { type: ['stage_type_id', 'productionStageTypes'] },
+  productionWorkers: {
+    contact: ['contacts_id', 'materialContacts'],
+    purpose: ['contact_purpose_id', 'contactCategories'],
+  },
+  productionItems: {
+    brand: ['brand_id', 'brands'],
+    product: ['product_type_list_id', 'productionProductTypes'],
+  },
+};
 
 function isManagementPage(page, live) {
   return live && workspacePath(page);
@@ -381,8 +419,8 @@ function App({ live, refreshWorkspaceAccess }) {
     preferences = state.preferences[page] || {},
     totals = useMemo(() => fabricTotals(data), [data]);
   const sheetQuery = useGridSearch(query);
-  const jobStatusesOverview = page === 'productionStatuses' && view === 'overview';
-  const recordQuery = view === 'sheet' ? sheetQuery : jobStatusesOverview ? '' : query;
+  const overviewColumns = view === 'overview' ? productionOverviewColumns[page] : undefined;
+  const recordQuery = view === 'sheet' ? sheetQuery : overviewColumns ? '' : query;
   const searchPlaceholder =
     page === 'productionJobs'
       ? 'Scan QR / enter item style code…'
@@ -639,22 +677,52 @@ function App({ live, refreshWorkspaceAccess }) {
     setEditor({ page: 'labDips', id: mode === 'edition' ? null : id, sourceId: id, mode });
   }
   function overview() {
-    if (jobStatusesOverview)
+    if (overviewColumns) {
+      const links = productionOverviewLinks[page];
+      const sources = new Map(links ? data[spec.entity].map((record) => [record.id, record]) : []);
       return h(OverviewTable, {
         key: actor + ':' + page,
         client: live ? getAccessClient() : null,
-        grid: 'overview-production-statuses',
+        grid: page === 'productionStatuses' ? 'overview-production-statuses' : 'overview-' + page,
         title: spec.title,
-        records: groups.map(({ id, title }) => ({ id, name: title })),
-        columns: [
-          {
-            accessorKey: 'name',
-            header: 'Status',
-            cell: ({ getValue }) => h('span', { className: 'erp-overview-status' }, getValue()),
+        records: groups.map(({ id, rows: [record] }) =>
+          page === 'productionWorkers'
+            ? { ...record, id, contact: record.name }
+            : { ...record, id },
+        ),
+        getSearchText:
+          page === 'productionStatuses' ? undefined : (record) => Object.values(record).join(' '),
+        columns: overviewColumns.map((key) => ({
+          accessorKey: key,
+          header:
+            page === 'productionWorkers' && key === 'contact'
+              ? 'Company / contact'
+              : spec.columns.find((column) => column.key === key).label,
+          cell: ({ getValue, row }) => {
+            const value = getValue();
+            const relation = links?.[key];
+            if (value && value !== '—' && value !== 'Not selected' && relation) {
+              const [field, target] = relation;
+              const record = sources.get(row.original.id);
+              if (record?.[field] != null && can('view', target)) {
+                return h(
+                  'a',
+                  {
+                    href: '/fabric.html' + (live ? '?live=1' : '') + '#' + target,
+                    onClick: (event) => followWorkspaceLink(event, () => navigate(target)),
+                  },
+                  value,
+                );
+              }
+            }
+            return page === 'productionStatuses'
+              ? h('span', { className: 'erp-overview-status' }, value ?? '—')
+              : (value ?? '—');
           },
-        ],
+        })),
         onOpen: can('edit') ? edit : undefined,
       });
+    }
 
     if (page === 'labDips')
       return h(LabOverview, {
@@ -1199,13 +1267,13 @@ function App({ live, refreshWorkspaceAccess }) {
                                   description: spec.subtitle,
                                   view,
                                   action:
-                                    jobStatusesOverview && can('create')
+                                    overviewColumns && can('create')
                                       ? h(
                                           'button',
                                           { className: 'primary', onClick: () => edit(null) },
                                           spec.newLabel,
                                         )
-                                      : jobStatusesOverview
+                                      : overviewColumns
                                         ? null
                                         : undefined,
                                   onView: (mode) => {
@@ -1213,7 +1281,7 @@ function App({ live, refreshWorkspaceAccess }) {
                                     setSelected(null);
                                   },
                                 }),
-                                !jobStatusesOverview &&
+                                !overviewColumns &&
                                   h(
                                     RecordPageActions,
                                     {
@@ -1274,7 +1342,7 @@ function App({ live, refreshWorkspaceAccess }) {
                                   onRefresh: live ? refreshLive : undefined,
                                 }),
                                 view === 'overview' &&
-                                  !jobStatusesOverview &&
+                                  !overviewColumns &&
                                   records.length === 0 &&
                                   h(RecordPageEmpty, {
                                     query,
@@ -1352,6 +1420,7 @@ function App({ live, refreshWorkspaceAccess }) {
           page: documentPage ? page : null,
           can,
           changes: productionDocumentChanges,
+          navigate,
         }),
         renderWorkspace(),
       ),

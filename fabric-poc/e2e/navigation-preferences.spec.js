@@ -177,6 +177,12 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
           expect(args.p_owner).toBe(actor);
           expect([first, second]).toContain(actor);
           if (args.p_grid !== 'workspace-navigation') {
+            if (['overview-production-challans', 'overview-worker-bills'].includes(args.p_grid)) {
+              const key = actor + ':' + args.p_grid;
+              json = { ...saved.get(key), ...args.p_patch };
+              if (args.p_patch) saved.set(key, json);
+              break;
+            }
             expect([
               'finished-goods-valuation',
               'administration-accounts',
@@ -268,7 +274,7 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
 
     await disclosure(desktop, 'production').locator('summary').click();
     await desktop.getByRole('link', { name: 'Challans', exact: true }).click();
-    await expect(desktop.getByText('Nothing here yet')).toBeVisible();
+    await expect(desktop.getByText('No matching records', { exact: true })).toBeVisible();
     await desktop.getByRole('searchbox', { name: 'Search challans' }).fill('first account only');
     await disclosure(desktop, 'production').locator('summary').click();
     await expect.poll(() => saved.get(first)?.production).toBe(false);
@@ -283,7 +289,7 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
     await expect(disclosure(desktop, 'production')).toHaveJSProperty('open', true);
     await expect(disclosure(desktop, 'account')).toHaveJSProperty('open', false);
     await desktop.getByRole('link', { name: 'Challans', exact: true }).click();
-    await expect(desktop.getByText('Nothing here yet')).toBeVisible();
+    await expect(desktop.getByText('No matching records', { exact: true })).toBeVisible();
     await expect(desktop.getByRole('searchbox', { name: 'Search challans' })).toHaveValue('');
     expect(documentReads).toContainEqual({ actor: second, billing: false });
     await expect(desktop.getByRole('link', { name: 'Challans', exact: true })).toBeVisible();

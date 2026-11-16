@@ -1,10 +1,12 @@
 import { getAccessClient } from '../access/client.js';
+import { productionDocumentPath, productionDocumentRoutes } from '../access/navigation.js';
+import { followWorkspaceLink } from '../access/workspace-routes.js';
+import { OverviewTable } from '../fabric/overview-table.js';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FabricSheet } from '../fabric/sheet.js';
 import {
   liveRecordNotice,
   RecordPageActions,
-  RecordPageEmpty,
   RecordPageHeading,
   RecordPageStatus,
 } from '../fabric/record-page.js';
@@ -16,7 +18,7 @@ const h = React.createElement;
 const documentMaxAge = 60_000;
 const documentActions = ['view', 'create', 'edit', 'delete', 'format', 'print', 'export'];
 
-export function ProductionDocumentWorkspace({ page, can, changes }) {
+export function ProductionDocumentWorkspace({ page, can, changes, navigate }) {
   const [visited, setVisited] = useState({});
   useEffect(() => {
     if (!page || visited[page] || !can('view', page)) return;
@@ -29,12 +31,14 @@ export function ProductionDocumentWorkspace({ page, can, changes }) {
           billing: key === 'jobWorkerBills',
           visible: page === key,
           changes,
+          can,
+          navigate,
         })
       : null,
   );
 }
 
-function ProductionDocuments({ billing, visible, changes }) {
+function ProductionDocuments({ billing, visible, changes, can, navigate }) {
   const host = useRef(null);
   const editor = useRef(null);
   const controller = useRef(null);
@@ -58,6 +62,29 @@ function ProductionDocuments({ billing, visible, changes }) {
       lineCount: record.lines.length,
     }));
   }, [billing, screen.matches, screen.snapshot]);
+  const overviewRows = useMemo(() => {
+    const data = screen.snapshot;
+    if (!data) return [];
+    if (billing)
+      return screen.billRows.map((bill) => ({
+        ...bill,
+        id: bill.key,
+        number: bill.id,
+        searchText: billSearchText(bill),
+      }));
+    return data.records.map((record) => {
+      const worker = data.workers.find(([id]) => id === record.worker)?.[1];
+      return {
+        id: record.key,
+        number: record.id,
+        date: record.date,
+        employee: record.employeeName,
+        worker,
+        lineCount: record.lines.length,
+        searchText: challanSearchText(record, worker, data.jobs),
+      };
+    });
+  }, [billing, screen.billRows, screen.snapshot]);
   useLayoutEffect(() => {
     const instance = mountDocuments(
       host.current,
@@ -83,6 +110,33 @@ function ProductionDocuments({ billing, visible, changes }) {
     if (screen.focus) editor.current.querySelector(screen.focus)?.focus();
   }, [screen]);
   const permissions = screen.snapshot?.permissions || {};
+  const add = permissions.create
+    ? h(
+        'button',
+        { type: 'button', className: 'primary', 'data-action': billing ? 'new-bill' : 'new' },
+        billing ? '+ New worker bill' : '+ New challan',
+      )
+    : null;
+  const overviewColumns = (billing ? billOverviewColumns : challanOverviewColumns).map(
+    (column) => ({
+      ...column,
+      cell: ({ getValue }) => {
+        const value = getValue();
+        const target = column.target;
+        if (!value || !target || !can('view', target)) return value ?? '—';
+        return h(
+          'a',
+          {
+            href: productionDocumentRoutes[target]
+              ? productionDocumentPath + '#' + productionDocumentRoutes[target][1]
+              : '/fabric.html?live=1#' + target,
+            onClick: (event) => followWorkspaceLink(event, () => navigate(target)),
+          },
+          value,
+        );
+      },
+    }),
+  );
   return h(
     'section',
     {
@@ -102,24 +156,20 @@ function ProductionDocuments({ billing, visible, changes }) {
           : 'Review issued challans and their job-variant lines.',
         view: presentation,
         viewLabel: title + ' view',
+        action: sheet ? undefined : add,
         onView: (mode) => controller.current.changeView(mode),
       }),
-      h(
-        RecordPageActions,
-        {
-          view: presentation,
-          label: 'Search ' + title.toLowerCase(),
-          placeholder: 'Search ' + title.toLowerCase() + '…',
-          value: screen.search || '',
-          onSearch: (value) => controller.current.changeSearch(value),
-        },
-        permissions.create &&
-          h(
-            'button',
-            { type: 'button', className: 'primary', 'data-action': billing ? 'new-bill' : 'new' },
-            billing ? '+ New worker bill' : '+ New challan',
-          ),
-        sheet &&
+      sheet &&
+        h(
+          RecordPageActions,
+          {
+            view: presentation,
+            label: 'Search ' + title.toLowerCase(),
+            placeholder: 'Search ' + title.toLowerCase() + '…',
+            value: screen.search || '',
+            onSearch: (value) => controller.current.changeSearch(value),
+          },
+          add,
           h(
             React.Fragment,
             null,
@@ -135,7 +185,7 @@ function ProductionDocuments({ billing, visible, changes }) {
                 billing ? 'Edit selected bill' : 'Edit selected document',
               ),
           ),
-      ),
+        ),
       h(RecordPageStatus, {
         notice: notice || (screen.snapshot ? liveRecordNotice : ''),
         onRefresh: () => controller.current.refresh(),
@@ -154,18 +204,16 @@ function ProductionDocuments({ billing, visible, changes }) {
         h(
           'div',
           { hidden: sheet },
-          screen.matches.length
-            ? h(DocumentCards, {
-                billing,
-                matches: screen.matches,
-                workers: screen.snapshot.workers,
-              })
-            : h(RecordPageEmpty, {
-                query: screen.search,
-                prompt: permissions.create
-                  ? 'Add the first document to get started.'
-                  : 'No documents are available.',
-              }),
+          h(OverviewTable, {
+            client: getAccessClient(),
+            grid: billing ? 'overview-worker-bills' : 'overview-production-challans',
+            title,
+            records: overviewRows,
+            columns: overviewColumns,
+            searchLabel: 'Search ' + title.toLowerCase(),
+            getSearchText: (record) => record.searchText,
+            onOpen: (key) => controller.current.openRecord(key),
+          }),
         ),
       screen.snapshot &&
         screen.sheetVisited &&
@@ -191,57 +239,39 @@ function ProductionDocuments({ billing, visible, changes }) {
   );
 }
 
-function DocumentCards({ billing, matches, workers }) {
-  const subtitle = (text) => h('p', { className: 'card-subtitle' }, text);
-  return h(
-    'div',
-    { className: 'overview-grid lab-cards' },
-    matches.map((record, index) =>
-      h(
-        'article',
-        { key: record.key, className: 'overview-card lab-card tone-' + (index % 4) },
-        h(
-          'button',
-          {
-            className: 'lab-card-open',
-            type: 'button',
-            'aria-haspopup': 'dialog',
-            'data-action': (billing ? 'bill:' : 'open:') + record.key,
-          },
-          h('span', { className: 'card-kicker' }, billing ? 'Worker bill' : 'Challan'),
-          h('h2', null, record.id),
-          billing
-            ? subtitle(record.worker + ' · ' + record.challan)
-            : subtitle(
-                [
-                  record.date || 'Date unavailable',
-                  record.employeeName || 'Issuer unavailable',
-                  workers.find(([id]) => id === record.worker)?.[1] || '',
-                ].join(' · '),
-              ),
-          billing &&
-            subtitle(
-              (record.invoiceNumber || 'No invoice number') +
-                ' · ' +
-                (record.date || 'No bill date'),
-            ),
-          h(
-            'span',
-            { className: 'lab-status' },
-            billing ? '₹' + record.rate : record.lines.length + ' job lines',
-          ),
-          h(
-            'p',
-            { className: 'lab-card-hint' },
-            billing
-              ? record.assignment + ' · View bill →'
-              : record.lines.filter((line) => line.billed).length +
-                  ' billed lines · View challan →',
-          ),
-        ),
-      ),
-    ),
-  );
+const challanOverviewColumns = [
+  { accessorKey: 'number', header: 'Challan' },
+  { accessorKey: 'date', header: 'Issue date' },
+  { accessorKey: 'employee', header: 'Issued by', target: 'employees' },
+  { accessorKey: 'worker', header: 'Job worker', target: 'productionWorkers' },
+  { accessorKey: 'lineCount', header: 'Job lines' },
+];
+
+const billOverviewColumns = [
+  { accessorKey: 'number', header: 'Worker bill' },
+  { accessorKey: 'invoiceNumber', header: 'Invoice number' },
+  { accessorKey: 'date', header: 'Bill date' },
+  { accessorKey: 'worker', header: 'Job worker', target: 'productionWorkers' },
+  { accessorKey: 'challan', header: 'Challan', target: 'productionChallans' },
+];
+
+function billSearchText(bill) {
+  return [bill.id, bill.invoiceNumber, bill.worker, bill.challan, bill.assignment].join(' ');
+}
+
+function challanSearchText(record, worker, jobs) {
+  return [
+    record.id,
+    record.employeeName,
+    worker,
+    ...record.lines.flatMap((line) => [
+      line.job,
+      line.part,
+      jobs[line.job]?.[2],
+      line.description,
+      line.variant,
+    ]),
+  ].join(' ');
 }
 
 const columns = [
@@ -278,6 +308,7 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
     records = [],
     stockIn = {},
     bills = [],
+    billRows = [],
     permissions = {},
     busy = false;
   const line = () => ({ job: '', part: '', variant: '', cells: {}, description: '', rate: '' });
@@ -291,6 +322,7 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
         if (listeners.signal.aborted || ticket !== version) return false;
         snapshot = data;
         ({ jobs, workers, employees, records, stockIn, bills, permissions } = data);
+        if (billing) billRows = billRecords();
         freshUntil = Date.now() + documentMaxAge;
         error = '';
         renderResults();
@@ -353,6 +385,7 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
       sheetVisited,
       snapshot,
       matches,
+      billRows,
       error,
       search,
       focus,
@@ -375,14 +408,8 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
   const table = (head, body) =>
     `<div class="lab-record-table-wrap"><table><thead><tr>${head.map((h) => `<th scope="col">${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
   function matchingRecords() {
-    return records.filter((r) =>
-      [
-        r.id,
-        r.employeeName,
-        workerName(r.worker),
-        ...r.lines.flatMap((l) => [l.job, l.part, jobs[l.job]?.[2], l.description, l.variant]),
-      ]
-        .join(' ')
+    return records.filter((record) =>
+      challanSearchText(record, workerName(record.worker), jobs)
         .toLowerCase()
         .includes(search.toLowerCase()),
     );
@@ -406,39 +433,37 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
     };
   }
   function billRecords() {
-    return bills
-      .map((bill) => {
-        const items = bill.items.map(billItem);
-        return {
-          ...bill,
-          id: bill.number,
-          attachmentName: bill.attachment?.name || '',
-          worker: workerName(items[0]?.worker),
-          challan: [...new Set(items.map((item) => item.number))].join(', '),
-          assignment: items
-            .map((item) => `${item.style} · ${item.part} · ${item.variant}`)
-            .join(' / '),
-          rate: bill.items.map((item) => item.rate).join(' / '),
-          ...(items.length > 1
-            ? {
-                displayValues: {
-                  challan: items.map((item) => item.number),
-                  assignment: items.map((item) => `${item.style} · ${item.part} · ${item.variant}`),
-                  rate: bill.items.map((item) => item.rate),
-                },
-              }
-            : {}),
-        };
-      })
-      .filter((bill) =>
-        [bill.id, bill.invoiceNumber, bill.worker, bill.challan, bill.assignment]
-          .join(' ')
-          .toLowerCase()
-          .includes(search.toLowerCase()),
-      );
+    return bills.map((bill) => {
+      const items = bill.items.map(billItem);
+      return {
+        ...bill,
+        id: bill.number,
+        attachmentName: bill.attachment?.name || '',
+        worker: workerName(items[0]?.worker),
+        challan: [...new Set(items.map((item) => item.number))].join(', '),
+        assignment: items
+          .map((item) => `${item.style} · ${item.part} · ${item.variant}`)
+          .join(' / '),
+        rate: bill.items.map((item) => item.rate).join(' / '),
+        ...(items.length > 1
+          ? {
+              displayValues: {
+                challan: items.map((item) => item.number),
+                assignment: items.map((item) => `${item.style} · ${item.part} · ${item.variant}`),
+                rate: bill.items.map((item) => item.rate),
+              },
+            }
+          : {}),
+      };
+    });
   }
   function renderResults() {
-    if (snapshot) matches = billing ? billRecords() : matchingRecords();
+    if (snapshot)
+      matches = billing
+        ? billRows.filter((bill) =>
+            billSearchText(bill).toLowerCase().includes(search.toLowerCase()),
+          )
+        : matchingRecords();
     select(null);
     publish();
   }
@@ -1039,12 +1064,25 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
       .querySelector('[data-action^="edit-bill"]')
       ?.addEventListener('click', () => dialog.close());
   }
+  function openRecord(key) {
+    if (busy || !snapshot?.pages[billing ? 'billing' : 'challans']) return;
+    if (billing) {
+      const bill = bills.find((record) => record.key === key);
+      if (bill) viewBill(bill);
+      return;
+    }
+    const challan = records.find((record) => record.key === key);
+    if (!challan) return;
+    selected = challan;
+    view = 'detail';
+    publish();
+  }
   root.addEventListener(
     'click',
     async (event) => {
       const action = event.target.closest('[data-action]')?.dataset.action;
       if (!action) return;
-      let [cmd, arg] = action.split(':');
+      const [cmd, arg] = action.split(':');
       if (busy) return;
       if (cmd === 'edit-selected' && (!permissions.edit || !sheetSelection)) return;
       if (cmd === 'open-selected' && !sheetSelection) return;
@@ -1084,13 +1122,8 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
         if (cmd === 'new-bill' || bill) editBill(bill);
         return;
       }
-      if (view === 'billing' && cmd === 'open-selected') {
-        cmd = 'bill';
-        arg = sheetSelection;
-      }
-      if (cmd === 'bill') {
-        const bill = bills.find((b) => b.key === arg);
-        if (bill) viewBill(bill);
+      if (cmd === 'open-selected') {
+        openRecord(sheetSelection);
         return;
       }
       if (cmd === 'job') {
@@ -1108,7 +1141,7 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
         void load();
         return;
       }
-      if (cmd === 'open' || cmd === 'open-selected' || cmd === 'edit-selected') {
+      if (cmd === 'edit-selected') {
         selected = records.find((r) => r.key === (arg || sheetSelection));
         if (!selected) return;
         view = 'detail';
@@ -1215,6 +1248,7 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
   );
   return {
     select,
+    openRecord,
     refresh: load,
     changeView(mode) {
       presentation = mode;

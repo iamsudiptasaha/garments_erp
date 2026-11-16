@@ -77,7 +77,6 @@ async function documentFixtures(page, referencePages = {}) {
     { token, actor, exp },
   );
   const permissions = {
-    view: true,
     create: true,
     edit: true,
     delete: true,
@@ -207,11 +206,90 @@ for (const [route, title, open, edit, add, record] of [
       const { permissions } = await documentFixtures(page);
       await page.setViewportSize({ width: 1280, height: 720 });
       await page.goto('/production-challan.html#' + route);
-      const overview = page.locator('.overview-grid');
+      const overview = page.getByRole('region', { name: title + ' Overview', exact: true });
+      const table = overview.getByRole('table', { name: title, exact: true });
+      const selectView = (name) =>
+        page
+          .getByRole('region', { name: 'Production documents' })
+          .getByRole('button', { name, exact: true })
+          .click();
+      const captureOverview = async () => {
+        await page.mouse.move(0, 0);
+        await page.evaluate(async () => {
+          await document.fonts.ready;
+          document.activeElement?.blur();
+          window.scrollTo(0, 0);
+        });
+        return overview.screenshot({ animations: 'disabled', caret: 'hide' });
+      };
+      await selectView('Sheet');
+      await expect(page.getByLabel('Sheet zoom')).toBeVisible();
+      await selectView('Overview');
+      await expect(table.getByRole('row')).toHaveCount(3);
+      const before = await captureOverview();
+      await selectView('Sheet');
+      await expect(page.getByLabel('Sheet zoom')).toBeVisible();
+      await selectView('Overview');
+      await expect
+        .poll(async () => {
+          const after = await captureOverview();
+          if (after.equals(before)) return null;
+          return page.evaluate(
+            async ([before, after]) => {
+              const decode = async (png) => {
+                const image = await createImageBitmap(
+                  await (await fetch('data:image/png;base64,' + png)).blob(),
+                );
+                const canvas = new OffscreenCanvas(image.width, image.height);
+                const context = canvas.getContext('2d');
+                context.drawImage(image, 0, 0);
+                image.close();
+                return context.getImageData(0, 0, canvas.width, canvas.height);
+              };
+              const [first, second] = await Promise.all([decode(before), decode(after)]);
+              if (first.width !== second.width || first.height !== second.height)
+                return {
+                  before: [first.width, first.height],
+                  after: [second.width, second.height],
+                };
+              let left = first.width,
+                top = first.height,
+                right = -1,
+                bottom = -1,
+                changed = 0;
+              for (let i = 0; i < first.data.length; i += 4) {
+                if (
+                  first.data
+                    .subarray(i, i + 4)
+                    .every((value, channel) => value === second.data[i + channel])
+                )
+                  continue;
+                const pixel = i / 4;
+                const x = pixel % first.width;
+                const y = Math.floor(pixel / first.width);
+                left = Math.min(x, left);
+                right = Math.max(x, right);
+                top = Math.min(y, top);
+                bottom = Math.max(y, bottom);
+                changed++;
+              }
+              return changed ? { changed, left, top, right, bottom } : null;
+            },
+            [before.toString('base64'), after.toString('base64')],
+          );
+        })
+        .toBeNull();
+      await overview.getByRole('searchbox').fill(route === 'challans' ? 'Description 2' : 'INV-2');
+      await expect(table.getByRole('button', { name: record, exact: true })).toBeVisible();
+      await expect(table.getByRole('row')).toHaveCount(2);
+      await table.getByRole('button', { name: record, exact: true }).click();
+      const detail = page.getByRole('dialog');
+      await expect(detail.getByRole('heading', { name: record, exact: true })).toBeVisible();
+      await detail.getByRole('button', { name: 'Close' }).click();
+      await overview.getByRole('button', { name: 'Clear search' }).click();
+      await expect(table.getByRole('row')).toHaveCount(3);
       await expect(overview).toBeVisible();
-      const screenshot = { animations: 'disabled', caret: 'hide' };
-      const before = await overview.screenshot(screenshot);
-      await page.getByRole('button', { name: 'Sheet', exact: true }).click();
+      await selectView('Sheet');
       const editSelected = page.getByRole('button', { name: edit, exact: true });
       const openSelected = page.getByRole('button', { name: open, exact: true });
       await page.getByRole('button', { name: add }).click();
@@ -260,14 +338,7 @@ for (const [route, title, open, edit, add, record] of [
         expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
       }
       await page.setViewportSize({ width: 1280, height: 720 });
-      await page
-        .getByRole('region', { name: 'Production documents' })
-        .getByRole('button', { name: 'Overview', exact: true })
-        .click();
-      await page.mouse.move(0, 0);
-      expect(await overview.screenshot(screenshot)).toEqual(before);
       Object.assign(permissions, {
-        view: true,
         create: false,
         edit: false,
         format: false,
@@ -335,21 +406,21 @@ test('production document views retain their DOM and cache across workspace navi
   });
   const title = page.getByRole('heading', { name: 'Challans', exact: true });
   const search = page.getByRole('searchbox', { name: 'Search challans' });
-  const cards = page.getByRole('heading', { name: 'CH-1', exact: true });
+  const challanRow = page.getByRole('button', { name: 'CH-1', exact: true });
   const go = (name) => page.getByRole('link', { name, exact: true }).click();
   const activePanel = page.getByRole('region', { name: 'Production documents' });
   const toggle = (name) => activePanel.getByRole('button', { name, exact: true }).click();
-  await expect(cards).toBeVisible();
+  await expect(challanRow).toBeVisible();
   const titleNode = await title.elementHandle();
   const searchNode = await search.elementHandle();
-  const cardNode = await cards.elementHandle();
+  const challanNode = await challanRow.elementHandle();
   await search.fill('CH-1');
   await toggle('Sheet');
   await expect(activePanel.getByLabel('Sheet zoom')).toBeVisible();
   const zoomNode = await activePanel.getByLabel('Sheet zoom').elementHandle();
   await toggle('Overview');
   await go('Worker bills');
-  await expect(page.getByRole('heading', { name: 'WB-1' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'WB-1' })).toBeVisible();
   await toggle('Sheet');
   await expect(activePanel.getByLabel('Sheet zoom')).toBeVisible();
   await toggle('Overview');
@@ -358,12 +429,12 @@ test('production document views retain their DOM and cache across workspace navi
     .getByRole('button', { name: 'Overview', exact: true })
     .click();
   await go('Challans');
-  await expect(cards).toBeVisible();
+  await expect(challanRow).toBeVisible();
   await expect(search).toHaveValue('CH-1');
   await go('Worker bills');
-  await expect(page.getByRole('heading', { name: 'WB-1' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'WB-1' })).toBeVisible();
   await go('Challans');
-  await expect(cards).toBeVisible();
+  await expect(challanRow).toBeVisible();
   const instrumentation = await page.evaluate(() => window.documentViewStats);
   console.log(JSON.stringify({ ...instrumentation, reads, documentRequests }));
   expect(instrumentation).toEqual({ mounts: 2, loading: 2 });
@@ -373,7 +444,7 @@ test('production document views retain their DOM and cache across workspace navi
     locator.evaluate((node, before) => node === before, original);
   expect(await sameNode(title, titleNode)).toBe(true);
   expect(await sameNode(search, searchNode)).toBe(true);
-  expect(await sameNode(cards, cardNode)).toBe(true);
+  expect(await sameNode(challanRow, challanNode)).toBe(true);
   await toggle('Sheet');
   expect(await sameNode(activePanel.getByLabel('Sheet zoom'), zoomNode)).toBe(true);
   await activePanel.getByRole('button', { name: 'Print / PDF' }).click();
@@ -383,7 +454,7 @@ test('production document views retain their DOM and cache across workspace navi
   await toggle('Overview');
 
   await go('Worker bills');
-  const survivingBill = page.getByRole('heading', { name: 'WB-2', exact: true });
+  const survivingBill = page.getByRole('button', { name: 'WB-2', exact: true });
   const billNode = await survivingBill.elementHandle();
   let resume;
   const paused = new Promise((resolve) => {
@@ -398,11 +469,11 @@ test('production document views retain their DOM and cache across workspace navi
   expect(await billNode.evaluate((node) => node.isConnected)).toBe(true);
   await expect(page.getByText('Loading production documents…')).toHaveCount(0);
   resume();
-  await expect(page.getByRole('heading', { name: 'WB-1', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'WB-1', exact: true })).toHaveCount(0);
   expect(await sameNode(survivingBill, billNode)).toBe(true);
   await go('Challans');
   await expect.poll(() => reads).toEqual(['challans', 'bills', 'bills', 'challans']);
-  expect(await sameNode(cards, cardNode)).toBe(true);
+  expect(await sameNode(challanRow, challanNode)).toBe(true);
   await page.clock.setFixedTime(Date.now() + 61_000);
   await go('Worker bills');
   await expect.poll(() => reads).toEqual(['challans', 'bills', 'bills', 'challans', 'bills']);
@@ -459,6 +530,7 @@ test('production document page chrome matches approved record pages at desktop a
     let reference;
     for (const [route, title] of pages) {
       const documents = route === 'challans' || route === 'worker-bills';
+      const migrated = route === 'productionProductTypes' || documents;
       await page.goto(
         documents
           ? '/production-challan.html?visual=' + route + '#' + route
@@ -470,6 +542,7 @@ test('production document page chrome matches approved record pages at desktop a
       const banner = main.locator('.access-info');
       const refresh = main.getByRole('button', { name: 'Refresh records' });
       const search = actions.getByRole('searchbox');
+      const overviewSearch = migrated ? main.getByRole('searchbox') : search;
       const toggle = header.locator('.fabric-view-toggle');
       await expect(header.getByRole('heading', { name: title, exact: true })).toBeVisible();
       if (!captureBaseline || !documents) {
@@ -480,7 +553,7 @@ test('production document page chrome matches approved record pages at desktop a
           main.getByText('Live Supabase records · saved changes are shared', { exact: false }),
         ).toBeVisible();
       } else {
-        await expect(main.locator('.overview-card:visible').first()).toBeVisible();
+        await expect(main.getByRole('table', { name: title, exact: true })).toBeVisible();
       }
       if (captureDir)
         await main.screenshot({
@@ -497,15 +570,20 @@ test('production document page chrome matches approved record pages at desktop a
         banner: await style(banner, ['fontSize', 'padding', 'marginBottom']),
         refresh: await style(refresh, ['fontSize', 'padding', 'borderRadius']),
       });
-      const overviewChrome = captureBaseline ? null : await chrome();
+      const overviewChrome = captureBaseline || migrated ? null : await chrome();
       if (!captureBaseline) {
-        await search.fill('no-such-record-123456789');
-        await expect(main.locator('.empty-state:visible')).toHaveText(
-          'Nothing here yetTry a different search.',
-        );
-        await search.clear();
+        await overviewSearch.fill('no-such-record-123456789');
+        if (migrated) {
+          await expect(main.getByText('No matching records', { exact: true })).toBeVisible();
+          await main.getByRole('button', { name: 'Clear search' }).click();
+        } else {
+          await expect(main.locator('.empty-state:visible')).toHaveText(
+            'Nothing here yetTry a different search.',
+          );
+          await search.clear();
+        }
       }
-      const searchNode = await search.elementHandle();
+      const searchNode = migrated ? null : await search.elementHandle();
       await toggle.getByRole('button', { name: 'Sheet' }).click();
       await expect(main.getByRole('combobox', { name: 'Sheet zoom' })).toBeVisible();
       if (captureDir)
@@ -517,8 +595,12 @@ test('production document page chrome matches approved record pages at desktop a
 
       const sheetChrome = await chrome();
       reference ||= { overviewChrome, sheetChrome };
-      expect({ overviewChrome, sheetChrome }, title + ' at ' + width).toEqual(reference);
-      expect(await search.evaluate((node, original) => node === original, searchNode)).toBe(true);
+      expect(sheetChrome, title + ' Sheet at ' + width).toEqual(reference.sheetChrome);
+      if (!migrated) {
+        reference.overviewChrome ??= overviewChrome;
+        expect(overviewChrome, title + ' Overview at ' + width).toEqual(reference.overviewChrome);
+        expect(await search.evaluate((node, original) => node === original, searchNode)).toBe(true);
+      }
       const bounds = await actions.boundingBox();
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
     }

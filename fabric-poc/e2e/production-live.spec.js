@@ -64,6 +64,9 @@ async function liveWorkspace(
       expect(args.p_owner).toBe(actor);
       body = { ...overviewPreferences.get(actor), ...args.p_patch };
       if (args.p_patch) overviewPreferences.set(actor, body);
+    } else if (name === 'erp_grid_preferences' && args.p_grid === 'overview-productionItems') {
+      expect(args.p_owner).toBe(actor);
+      body = {};
     } else if (name === 'erp_grid_preferences') {
       expect(args).toMatchObject({ p_grid: 'production-studio', p_owner: actor });
       if (args.p_patch) studioPreferences = { ...studioPreferences, ...args.p_patch };
@@ -205,7 +208,13 @@ test('live Items selects shared variants and persists batch number through the s
 }) => {
   const { calls } = await liveWorkspace(page);
   await page.goto('/fabric.html?live=1#productionItems');
-  await page.getByRole('button', { name: 'Edit →', exact: true }).click();
+  await page
+    .getByRole('table', { name: 'Items', exact: true })
+    .getByRole('row')
+    .nth(1)
+    .getByRole('button')
+    .first()
+    .click();
   await expect(page.getByRole('heading', { name: 'Edit item', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Upload item image' })).toBeVisible();
   await expect(page.getByLabel('Variant 1', { exact: true })).toHaveValue('101');
