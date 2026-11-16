@@ -1,17 +1,24 @@
 import { EmployeeAvatar } from './avatar.js';
 import { getAccessClient } from '../access/client.js';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { allowed, isAdministrator } from '../admin/model.js';
 import { followWorkspaceLink } from '../access/workspace-routes.js';
 import { OverviewTable } from '../fabric/overview-table.js';
-import { RecordPageHeading } from '../fabric/record-page.js';
+import { useGridSearch } from '../fabric/grid-toolbar.js';
+import { RecordPageActions, RecordPageHeading } from '../fabric/record-page.js';
 import { WorkspaceViewToggle } from '../fabric/view-toggle.js';
 import { FabricSheet } from '../fabric/sheet.js';
 import { employeeCommands } from './live.js';
 import { EmployeeEditor } from './editor.js';
+import { ReferenceEditor } from './reference-editor.js';
 import { employeeRows, employeeDraft, employeeStatus, hrPages } from './model.js';
 import './styles.css';
 const h = React.createElement;
+const referenceColumns = [
+  { key: 'name', label: 'Name', width: 240 },
+  { key: 'updated_at', label: 'Updated at', width: 200 },
+];
+const emptyReferences = [];
 const spec = {
   title: 'Employees',
   columns: [
@@ -71,11 +78,19 @@ export function HRPanel({
     [statusFilter, setStatusFilter] = useState('current'),
     [query, setQuery] = useState(''),
     [view, setView] = useState('overview'),
-    [reference, setReference] = useState(''),
-    [referenceId, setReferenceId] = useState(null),
+    [reference, setReference] = useState(null),
     [busy, setBusy] = useState(false),
     [selection, setSelection] = useState(null);
-  const referenceInput = useRef(null);
+  const sheetQuery = useGridSearch(query);
+  const referenceRows = snapshot?.[tab] ?? emptyReferences;
+  const sheetRows = useMemo(
+    () =>
+      referenceRows
+        .filter((row) => row.name.toLowerCase().includes(sheetQuery.trim().toLowerCase()))
+        .map((row) => ({ ...row, updated_at: row.updated_at || '—' })),
+    [referenceRows, sheetQuery],
+  );
+  const referenceSpec = useMemo(() => ({ title, columns: referenceColumns }), [title]);
   const commands = useMemo(() => (live ? employeeCommands() : null), [!!live]);
   const can = (action) => allowed(access, actor, 'employees', action);
   async function reload() {
@@ -191,34 +206,21 @@ export function HRPanel({
       setBusy(false);
     }
   }
-  async function saveReference(e) {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      if (live)
-        updated(
-          await commands.reference(
-            tab,
-            referenceId,
-            reference,
-            snapshot[tab].find((r) => r.id === referenceId)?.updated_at,
-          ),
-        );
-      else
-        updated({
-          ...snapshot,
-          [tab]: referenceId
-            ? snapshot[tab].map((r) => (r.id === referenceId ? { ...r, name: reference } : r))
-            : [...snapshot[tab], { id: crypto.randomUUID(), name: reference }],
-        });
-      setReference('');
-      setReferenceId(null);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
+  async function saveReference(record, name) {
+    const id = record?.id ?? null;
+    if (!can(id === null ? 'create' : 'edit')) throw Error('Your role does not allow this action.');
+    if (live) {
+      updated(await commands.reference(tab, id, name, record?.updated_at));
+    } else {
+      updated({
+        ...snapshot,
+        [tab]:
+          id === null
+            ? [...snapshot[tab], { id: crypto.randomUUID(), name }]
+            : snapshot[tab].map((row) => (row.id === id ? { ...row, name } : row)),
+      });
     }
+    setSelection(null);
   }
   if (!can('view'))
     return h(
@@ -241,6 +243,23 @@ export function HRPanel({
     setSelection(null);
     setNotice('Employee removed and archived.');
     await reload();
+  }
+  const referencePage = tab !== 'employees';
+  const singular = hrPages[page].singular;
+  const selectedReference = sheetRows.some(({ id }) => id === selection)
+    ? referenceRows.find(({ id }) => id === selection)
+    : null;
+  const addReference =
+    referencePage && can('create')
+      ? h(
+          'button',
+          { className: 'primary', onClick: () => setReference({ record: null }) },
+          '+ Add ' + singular,
+        )
+      : null;
+  function changeView(mode) {
+    setView(mode);
+    setSelection(null);
   }
   const overview = tab === 'employees' && view === 'overview';
   const addEmployee =
@@ -281,8 +300,9 @@ export function HRPanel({
       description:
         'Employee profiles, contacts and documents. Login access stays in Administration.',
       view,
-      onView: overview && snapshot ? setView : undefined,
-      action: overview && snapshot ? addEmployee : undefined,
+      onView: snapshot ? (referencePage ? changeView : overview ? setView : undefined) : undefined,
+      action:
+        snapshot && view === 'overview' ? (referencePage ? addReference : addEmployee) : undefined,
     }),
     !live &&
       h(
@@ -300,58 +320,75 @@ export function HRPanel({
     notice && h('p', { role: 'status' }, notice),
     !snapshot
       ? h('p', { role: 'status' }, 'Loading employees…')
-      : tab !== 'employees'
+      : referencePage
         ? h(
             React.Fragment,
             null,
-            (can('create') || can('edit')) &&
-              h(
-                'form',
-                { className: 'fabric-actions', onSubmit: saveReference },
-                h(
-                  'label',
+            view === 'overview'
+              ? h(OverviewTable, {
+                  key: actor + ':' + page,
+                  client: live ? getAccessClient() : null,
+                  grid: 'overview-' + page,
+                  title,
+                  records: referenceRows,
+                  columns: referenceColumns.map(({ key, label }) => ({
+                    accessorKey: key,
+                    header: label,
+                  })),
+                  onOpen: can('edit')
+                    ? (id) => {
+                        const record = referenceRows.find((row) => row.id === id);
+                        if (record) setReference({ record });
+                      }
+                    : undefined,
+                })
+              : h(
+                  React.Fragment,
                   null,
-                  referenceId ? 'Edit value' : 'New value',
-                  h('input', {
-                    ref: referenceInput,
-                    value: reference,
-                    required: true,
-                    maxLength: 100,
-                    onChange: (e) => setReference(e.target.value),
+                  h(
+                    RecordPageActions,
+                    {
+                      view,
+                      label: 'Search ' + title,
+                      value: query,
+                      onSearch: (value) => {
+                        setQuery(value);
+                        setSelection(null);
+                      },
+                    },
+                    addReference,
+                    can('edit') &&
+                      h(
+                        'button',
+                        {
+                          disabled: !selectedReference || query !== sheetQuery,
+                          onClick: () => setReference({ record: selectedReference }),
+                        },
+                        'Edit selected record',
+                      ),
+                  ),
+                  h(FabricSheet, {
+                    key: actor + ':' + page,
+                    page,
+                    spec: referenceSpec,
+                    records: sheetRows,
+                    client: live ? getAccessClient() : null,
+                    capabilities: {
+                      format: can('format'),
+                      export: can('export'),
+                      print: can('print'),
+                    },
+                    onSelect: (row) => setSelection(row?.id ?? null),
+                    onNotice: setNotice,
                   }),
                 ),
-                h(
-                  'button',
-                  {
-                    className: 'primary',
-                    disabled: busy || !(referenceId ? can('edit') : can('create')),
-                  },
-                  referenceId ? 'Save value' : 'Add value',
-                ),
-              ),
-            h(OverviewTable, {
-              key: actor + ':' + page,
-              client: live ? getAccessClient() : null,
-              grid: 'overview-' + page,
-              title,
-              records: snapshot[tab],
-              opensDialog: false,
-              columns: [
-                { accessorKey: 'name', header: 'Name' },
-                { accessorKey: 'updated_at', header: 'Updated at' },
-              ],
-              onOpen:
-                can('edit') && !busy
-                  ? (id) => {
-                      const row = snapshot[tab].find((record) => record.id === id);
-                      if (row) {
-                        setReferenceId(row.id);
-                        setReference(row.name);
-                        referenceInput.current?.focus();
-                      }
-                    }
-                  : undefined,
-            }),
+            reference &&
+              h(ReferenceEditor, {
+                record: reference.record,
+                singular,
+                onSave: saveReference,
+                onClose: () => setReference(null),
+              }),
           )
         : h(
             React.Fragment,

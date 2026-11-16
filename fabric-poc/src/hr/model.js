@@ -9,9 +9,13 @@ export const employeeFields = [
 ];
 export const hrPages = {
   employees: { title: 'Employees', table: 'employees' },
-  employeeGender: { title: 'Gender', table: 'gender' },
-  employeeBloodGroups: { title: 'Blood groups', table: 'blood_group' },
-  employeeEmploymentTypes: { title: 'Employment types', table: 'type_of_employment' },
+  employeeGender: { title: 'Gender', singular: 'gender', table: 'gender' },
+  employeeBloodGroups: { title: 'Blood groups', singular: 'blood group', table: 'blood_group' },
+  employeeEmploymentTypes: {
+    title: 'Employment types',
+    singular: 'employment type',
+    table: 'type_of_employment',
+  },
 };
 export const employeeLinks = [
   { key: 'contacts_id', label: 'Employee contact', source: 'contacts', required: true },

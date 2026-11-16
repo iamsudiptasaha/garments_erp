@@ -181,16 +181,7 @@ function ColumnSettings({ table }) {
   });
 }
 
-export function OverviewTable({
-  client,
-  grid,
-  title,
-  records,
-  columns,
-  onOpen,
-  opensDialog = true,
-  toolbar,
-}) {
+export function OverviewTable({ client, grid, title, records, columns, onOpen, toolbar }) {
   const { preferences, ready, save, error } = useGridPreferences(client, grid);
   const [panel, setPanel] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -497,7 +488,7 @@ export function OverviewTable({
                         'button',
                         {
                           type: 'button',
-                          'aria-haspopup': opensDialog ? 'dialog' : undefined,
+                          'aria-haspopup': 'dialog',
                           onClick: () => onOpen(row.original.id),
                         },
                         value,
