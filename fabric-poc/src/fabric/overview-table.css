@@ -1,0 +1,151 @@
+.erp-overview-heading-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+.erp-overview-toolbar,
+.erp-overview-chips,
+.overview-rule,
+.overview-column-setting {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.erp-overview-toolbar,
+.erp-overview-chips {
+  padding-block: 9px;
+  border-bottom: 1px solid var(--erp-border);
+}
+
+.erp-overview-toolbar input {
+  min-width: 120px;
+  width: min(210px, 100%);
+}
+
+.erp-overview-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.erp-overview-toolbar .is-applied,
+.erp-overview-chips button {
+  background: #edf5fd;
+  color: #226b9b;
+}
+
+.erp-overview-count {
+  margin-inline-start: auto;
+  color: #597489;
+}
+
+.erp-overview-table .lab-record-table-wrap {
+  overflow-x: auto;
+}
+
+.erp-overview-table table {
+  width: 100%;
+}
+
+.erp-overview-table th {
+  position: relative;
+}
+
+.erp-overview-table :is(th, td) > button {
+  background: transparent;
+  border: 0;
+  padding: 3px 8px 3px 0;
+  text-align: left;
+}
+
+.erp-overview-table .overview-open-row:hover,
+.erp-overview-table .overview-group {
+  background: #f1f6fb;
+}
+
+.erp-overview-status {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: #dcedfc;
+  color: #226b9b;
+}
+
+.overview-resize {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.overview-resize:hover {
+  background: #7bbcf155;
+}
+
+.overview-controls-dialog {
+  width: min(580px, 94vw);
+}
+
+.overview-controls-dialog header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--erp-border);
+  margin-bottom: 14px;
+}
+
+.overview-rule,
+.overview-column-setting {
+  margin-block: 8px;
+}
+
+.overview-rule :is(input, select) {
+  flex: 1 1 110px;
+  min-width: 0;
+}
+
+.overview-column-setting label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.overview-column-setting input[type='number'] {
+  width: 85px;
+}
+
+@media (max-width: 560px) {
+  .erp-overview-toolbar input {
+    width: 100%;
+  }
+}
+
+.fabric-page-header.erp-overview-heading {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.erp-overview-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.erp-overview-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #597489;
+}
+
+@media (max-width: 560px) {
+  .erp-overview-search {
+    flex: 1 0 100%;
+  }
+}

@@ -34,7 +34,7 @@ The workspace shell has a 235px sidebar and 34px × 38px main padding. Page head
 | Buttons and tabs | Shared buttons have 8px radii and 10px × 14px padding. Disabled controls use 0.45 opacity. Use `.primary` for the main action and [WorkspaceViewToggle](../fabric-poc/src/fabric/view-toggle.js) for Overview and Sheet. `.fabric-view-toggle` uses 9px radius, 4px inset and white selected buttons with `0 1px 5px #25445b10` shadow. [Controls CSS](../fabric-poc/src/fabric/styles.css) |
 | Inputs and dropdowns | Label controls and use `.fabric-fields`. Native fields have 7px radius and 10px × 12px padding. Use the existing [RecordSelect](../fabric-poc/src/fabric/record-select.js) for richer relational options and [LabRecordSelect](../fabric-poc/src/fabric/lab-record-select.js) as the searchable picker example. |
 | Tables and sheets | Use a semantic table in `.lab-record-table-wrap` for compact record lists. Cells use 11px × 12px padding and `#e4edf5` horizontal dividers. Use [FabricSheet](../fabric-poc/src/fabric/sheet.js) for sheet workflows. Its 600px frame has a 1px border and 10px radius. |
-| Cards | Use `.overview-grid` and `.overview-card` for overviews, with 15px card radius, 25px padding and subtle `0 3px 12px #416d8a04` shadow. Lab cards use a full-width button with a translucent hover and a status pill. [LabOverview](../fabric-poc/src/colours/cards.js) · [OverviewPanel](../fabric-poc/src/overview/panel.js) |
+| Legacy Overview cards | Existing sections awaiting migration use `.overview-grid` and `.overview-card`, with 15px card radius, 25px padding and subtle `0 3px 12px #416d8a04` shadow. Lab cards use a full-width button with a translucent hover and a status pill. [LabOverview](../fabric-poc/src/colours/cards.js) · [OverviewPanel](../fabric-poc/src/overview/panel.js) |
 | Forms and dialogs | Group document lines with `.fabric-line` (22px padding, 10px radius) and align actions with `.editor-actions`. Native `.fabric-dialog` uses 15px radius, 28px padding, 90vh max height, width `min(1000px, 94vw)` and `#17344966` backdrop. Follow [LabEditor](../fabric-poc/src/colours/editor.js) and [BillEditor](../fabric-poc/src/fabric/editor.js) for heading, fields and actions. |
 | Print | Use the workspace print rules as the starting point. Keep the record and hide navigation and interactive controls. [Print CSS](../fabric-poc/src/fabric/styles.css) |
 
@@ -63,6 +63,20 @@ Measure column content against the available viewport. Keep stable column keys a
 Use the shared grid preference store with a stable screen-specific grid key. Persist presentation settings per authenticated account and keep sample settings in browser storage. Preserve record and formatting permissions. Use RecordGrid for the Administration account list and Files configuration tables. Keep their row actions available when users hide columns. The Production Studio portal uses the same preference store for its TanStack layout and named views. Compact detail tables and editor matrices follow the parent document’s layout.
 
 Verify reload, isolated browser sessions for the same account, account isolation, both sort directions, and toolbar wrapping on desktop, tablet and phone.
+
+### ERP Overview tables
+
+Use the shared TanStack `OverviewTable` for Overview card migrations. The Overview is a compact browse and open surface. Sheet is the existing worksheet for selection, formatting, export, print and its existing record actions. Keep the top-right Overview/Sheet toggle. Put the existing permission-controlled Add action directly below it in Overview. Use the ERP light palette for Table controls and dialogs.
+
+- Supply existing authorized records and stable record IDs. Choose a minimal set of default columns with the record name or number first. Use stable column keys, fit content and fill the available width by default. Offer optional visibility, reordering and width overrides. Keep the identity column available for opening the record.
+- Use the shared grid search and account preference store with distinct Overview and Sheet keys. Restore search, filter rules, grouping, sort, visibility, order and widths for each authenticated account. Use labelled debounced search, ordered sort rules and header sorting, AND filters across configured columns and collapsible grouping.
+- Render statuses with readable labels on subtle ERP chips. Display foreign keys by the linked record's readable label. Use the existing ERP navigation for permitted links. Activating a link or other cell control must leave the row action idle.
+- Route row clicks and the keyboard-accessible identity button through the original card's handler with its existing record ID and capability check. Reuse the existing modal and its CRUD, attachments, history and save flow. Keep view-only access consistent with the existing card.
+- Wrap toolbar controls on narrow layouts, retain the Add placement and allow horizontal scrolling inside the table when columns cannot fit. Keep filters and column controls usable with touch and keyboard.
+
+Migrate one section per phase. Review record ownership and links, compare visible records and existing permissions, then check modal identity, search, filter, sort, group, column preferences and the Sheet regression in Chromium. Verify preference reload, account isolation and use on another device for signed-in sessions. Record CI and stop for review before the next section.
+
+Pilot: Production → Job statuses (`productionStatuses`). The single Status field uses `item_status_list.status` and the original record editor keyed by `item_status_list.id`. The table has no outgoing foreign keys. Remaining Overview sections await phased migration.
 
 ### Mandatory Sheet-view contract
 
