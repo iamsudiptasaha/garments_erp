@@ -1,7 +1,12 @@
 import { contactsCommands } from '../miscellaneous/live.js';
 import { AccessApp } from '../access/app.js';
 import { FilesWorkspace } from '../files/app.js';
-import { adminTabs, workspacePath, workspacePathPage } from '../access/workspace-routes.js';
+import {
+  adminTabs,
+  followWorkspaceLink,
+  workspacePath,
+  workspacePathPage,
+} from '../access/workspace-routes.js';
 import { OverviewTable } from './overview-table.js';
 import { useGridSearch } from './grid-toolbar.js';
 import {
@@ -156,6 +161,11 @@ const productionOverviewColumns = {
   productionStageTypes: ['name'],
   productionPartTypes: ['name'],
   productionSizes: ['name', 'order'],
+  productionProductTypes: ['name', 'gender'],
+};
+
+const productionOverviewLinks = {
+  productionProductTypes: { gender: ['gender_id', 'productionGenders'] },
 };
 
 function isManagementPage(page, live) {
@@ -657,11 +667,26 @@ function App({ live, refreshWorkspaceAccess }) {
         columns: overviewColumns.map((key) => ({
           accessorKey: key,
           header: spec.columns.find((column) => column.key === key).label,
-          cell: ({ getValue }) => {
-            const value = getValue() ?? '—';
+          cell: ({ getValue, row }) => {
+            const value = getValue();
+            const relation = productionOverviewLinks[page]?.[key];
+            if (value != null && relation) {
+              const [field, target] = relation;
+              const record = data[spec.entity].find(({ id }) => id === row.original.id);
+              if (record?.[field] != null && can('view', target)) {
+                return h(
+                  'a',
+                  {
+                    href: '/fabric.html' + (live ? '?live=1' : '') + '#' + target,
+                    onClick: (event) => followWorkspaceLink(event, () => navigate(target)),
+                  },
+                  value,
+                );
+              }
+            }
             return page === 'productionStatuses'
-              ? h('span', { className: 'erp-overview-status' }, value)
-              : value;
+              ? h('span', { className: 'erp-overview-status' }, value ?? '—')
+              : (value ?? '—');
           },
         })),
         onOpen: can('edit') ? edit : undefined,
