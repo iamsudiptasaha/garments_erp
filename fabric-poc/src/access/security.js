@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getAccessClient } from './client.js';
+import { createVerificationClient, getAccessClient } from './client.js';
 const h = React.createElement;
 export async function accountCommand(input) {
   const { data, error } = await getAccessClient().functions.invoke('erp-accounts', { body: input });
@@ -22,7 +22,9 @@ export function RecoveryForm() {
           e.preventDefault();
           setBusy(true);
           try {
-            await getAccessClient().auth.resetPasswordForEmail(email.trim());
+            await getAccessClient().auth.resetPasswordForEmail(email.trim(), {
+              redirectTo: new URL('/access.html', location.origin).href,
+            });
           } catch {
             // Use the same response for every address.
           } finally {
@@ -49,37 +51,66 @@ export function RecoveryForm() {
   );
 }
 
-export function readPasswordLink(hash) {
-  const params = new URLSearchParams(hash.slice(1));
-  const type = params.get('type');
-  const tokenHash = params.get('token_hash');
-  return (type === 'invite' || type === 'recovery') && tokenHash ? { type, tokenHash } : null;
+export function readPasswordLink(hash, search = '') {
+  const fragment = new URLSearchParams(hash.slice(1));
+  const query = new URLSearchParams(search);
+  const type = fragment.get('type') ?? query.get('type');
+  if (fragment.has('error') || query.has('error')) return { type, invalid: true };
+  if (type !== 'invite' && type !== 'recovery') return null;
+
+  const tokenHash = fragment.get('token_hash');
+  if (tokenHash) return { type, tokenHash };
+  const accessToken = fragment.get('access_token');
+  const refreshToken = fragment.get('refresh_token');
+  if (accessToken && refreshToken) return { type, accessToken, refreshToken };
+  return { type, invalid: true };
 }
 
 export function PasswordLink({ link }) {
-  const client = getAccessClient();
-  const [step, setStep] = useState('confirm'),
+  const [client] = useState(createVerificationClient);
+  const linkError =
+    link.type === 'recovery'
+      ? 'This password link is invalid or expired. Request another from the sign-in screen.'
+      : 'This invitation is invalid or expired. Ask your Administrator to resend it.';
+  const [step, setStep] = useState(link.invalid ? 'invalid' : 'confirm'),
     [password, setPassword] = useState(''),
-    [message, setMessage] = useState(''),
+    [message, setMessage] = useState(link.invalid ? linkError : ''),
     [busy, setBusy] = useState(false);
   async function accept() {
     setBusy(true);
     setMessage('');
     try {
-      const verified = await client.auth.verifyOtp({ type: link.type, token_hash: link.tokenHash });
+      const verified = link.tokenHash
+        ? await client.auth.verifyOtp({ type: link.type, token_hash: link.tokenHash })
+        : await client.auth.setSession({
+            access_token: link.accessToken,
+            refresh_token: link.refreshToken,
+          });
       if (verified.error || !verified.data.session) throw Error();
-      const security = await client.rpc('erp_account_security');
-      if (security.error || !security.data?.enabled) {
-        await client.auth.signOut({ scope: 'local' });
-        throw Error();
+      if (!link.tokenHash) {
+        const assurance = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (
+          assurance.error ||
+          !assurance.data.currentAuthenticationMethods.some((entry) =>
+            typeof entry === 'string' ? entry === 'otp' : entry.method === 'otp',
+          )
+        )
+          throw Error();
       }
+      const security = await client.rpc('erp_account_security');
+      if (
+        security.error ||
+        !security.data?.enabled ||
+        (link.type === 'invite' && !security.data.mustChangePassword)
+      )
+        throw Error();
       const factors = await client.auth.mfa.listFactors();
       if (factors.error) throw Error();
       setStep(factors.data.totp.length ? 'mfa' : 'password');
     } catch {
-      setMessage(
-        'This link could not be accepted. Request a new password reset link or contact your Administrator.',
-      );
+      await client.auth.signOut({ scope: 'local' });
+      setStep('invalid');
+      setMessage(linkError);
     } finally {
       setBusy(false);
     }
@@ -104,43 +135,57 @@ export function PasswordLink({ link }) {
   return h(
     'section',
     { className: 'access-login' },
-    h('h2', null, link.type === 'invite' ? 'Accept invitation' : 'Reset password'),
+    h(
+      'h2',
+      null,
+      link.type === 'invite'
+        ? 'Accept invitation'
+        : link.type === 'recovery'
+          ? 'Reset password'
+          : 'Password setup',
+    ),
     message && h('p', { className: 'form-error', role: 'alert' }, message),
-    step === 'confirm'
-      ? h('button', { className: 'primary', disabled: busy, onClick: accept }, 'Continue')
-      : step === 'mfa'
-        ? h(Authenticator, { onVerified: () => setStep('password') })
-        : h(
-            'form',
-            { onSubmit: save },
-            h(
-              'label',
-              null,
-              'New password',
-              h('input', {
-                type: 'password',
-                required: true,
-                minLength: 12,
-                maxLength: 128,
-                autoComplete: 'new-password',
-                value: password,
-                onChange: (e) => setPassword(e.target.value),
-              }),
+    step === 'invalid'
+      ? null
+      : step === 'confirm'
+        ? h('button', { className: 'primary', disabled: busy, onClick: accept }, 'Continue')
+        : step === 'mfa'
+          ? h(Authenticator, { verificationClient: client, onVerified: () => setStep('password') })
+          : h(
+              'form',
+              { onSubmit: save },
+              h(
+                'label',
+                null,
+                'New password',
+                h('input', {
+                  type: 'password',
+                  required: true,
+                  minLength: 12,
+                  maxLength: 128,
+                  autoComplete: 'new-password',
+                  value: password,
+                  onChange: (e) => setPassword(e.target.value),
+                }),
+              ),
+              h(
+                'button',
+                { className: 'primary', disabled: busy, type: 'submit' },
+                'Save password',
+              ),
             ),
-            h('button', { className: 'primary', disabled: busy, type: 'submit' }, 'Save password'),
-          ),
     h('a', { className: 'password-link-back', href: '/access.html' }, 'Back to sign in'),
   );
 }
 
-export function Authenticator({ onVerified }) {
+export function Authenticator({ onVerified, verificationClient = null }) {
   const [factors, setFactors] = useState(null),
     [factor, setFactor] = useState(''),
     [enrolment, setEnrolment] = useState(null),
     [code, setCode] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
-  const client = getAccessClient();
+  const client = verificationClient || getAccessClient();
   useEffect(() => {
     let active = true;
     client.auth.mfa.listFactors().then(({ data, error }) => {

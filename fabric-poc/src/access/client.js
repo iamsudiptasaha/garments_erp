@@ -4,7 +4,7 @@ let client;
 export function getAccessClient() {
   if (!client) {
     const env = readEnvironment({ ...import.meta.env, VITE_DATA_MODE: 'supabase' });
-    client = createClient(env.url, env.publishableKey);
+    client = createClient(env.url, env.publishableKey, { auth: { detectSessionInUrl: false } });
   }
   return client;
 }

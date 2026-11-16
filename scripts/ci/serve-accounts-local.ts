@@ -1,6 +1,7 @@
 // Test adapter only. Never deploy this harness or use it with production credentials.
-const settings = JSON.parse(await Deno.readTextFile('/tmp/erp-test-runtime.json'));
-if (settings.API_URL !== 'http://127.0.0.1:55421') throw Error('Only the isolated API is allowed');
+const settings = JSON.parse(await Deno.readTextFile(Deno.args[0] ?? '/tmp/erp-test-runtime.json'));
+if (!/^http:\/\/127[.]0[.]0[.]1:(55421|58621)$/.test(settings.API_URL))
+  throw Error('Only the isolated API is allowed');
 Deno.env.set('SUPABASE_URL', settings.API_URL);
 Deno.env.set('SUPABASE_ANON_KEY', settings.ANON_KEY);
 Deno.env.set('SUPABASE_SERVICE_ROLE_KEY', settings.SERVICE_ROLE_KEY);

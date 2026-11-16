@@ -75,11 +75,7 @@ const browser = await chromium.launch();
 await db.connect();
 async function openPage(session, width, path) {
   const context = await browser.newContext({ viewport: { width, height: 900 } });
-  await context.route('https://erp-local.invalid/**', async (route) => {
-    const url = new URL(route.request().url());
-    const response = await route.fetch({ url: runtime.API_URL + url.pathname + url.search });
-    await route.fulfill({ response });
-  });
+  await routeLocalApi(context);
   await context.addInitScript(
     (value) => localStorage.setItem('sb-erp-local-auth-token', JSON.stringify(value)),
     session,
@@ -88,6 +84,18 @@ async function openPage(session, width, path) {
   page.setDefaultTimeout(10000);
   await page.goto(app + (path === 'employees' ? '/fabric.html?live=1#' : '/access.html#') + path);
   return page;
+}
+
+async function routeLocalApi(context) {
+  await context.route('https://erp-local.invalid/**', async (route) => {
+    const url = new URL(route.request().url());
+    const destination =
+      url.pathname === '/functions/v1/erp-accounts'
+        ? 'http://127.0.0.1:55425'
+        : runtime.API_URL + url.pathname + url.search;
+    const response = await route.fetch({ url: destination });
+    await route.fulfill({ response });
+  });
 }
 const button = (scope, name) => scope.getByRole('button', { name, exact: true });
 const checkbox = (scope, name) => scope.getByRole('checkbox', { name, exact: true });
@@ -99,6 +107,8 @@ try {
     authenticate(target.user, target.email),
   ]);
 
+  await verifyInvitation(session, false);
+  await verifyInvitation(session, true);
   const page = await openPage(session, 1440, 'adminRoles');
   const dialog = page.getByRole('dialog');
   await button(page, 'Create role').click();
@@ -437,5 +447,131 @@ async function verifyEmployeeRemoval(session, admin) {
   ok(await service.auth.admin.deleteUser(replacement.id));
   console.log(
     'PASS employee removal, archive filter, identity reuse, retained references and profile menu',
+  );
+}
+
+async function verifyInvitation(session, testResend) {
+  const fixture = testResend ? 'resend' : 'direct';
+  const email = 'invitation-' + fixture + '-' + suffix + '@example.invalid';
+  const name = 'Invited employee ' + fixture + ' ' + suffix;
+  const {
+    rows: [employee],
+  } = await db.query(
+    `with contact as (
+      insert into garments_erp.contacts(company_name) values($1) returning id
+    ) insert into garments_erp.employee(employee_code,contacts_id,contact_purpose_id)
+      select null,id,900001 from contact returning id`,
+    [name],
+  );
+  const adminPage = await openPage(session, 1440, 'adminAccess');
+  const row = adminPage.getByRole('row').filter({ hasText: name });
+  const dialog = adminPage.getByRole('dialog');
+  const employeePage = await (
+    await browser.newContext({ viewport: { width: 390, height: 900 } })
+  ).newPage();
+  employeePage.setDefaultTimeout(10000);
+  await routeLocalApi(employeePage.context());
+
+  async function deliveredLink(type, previous = null) {
+    const inboxUrl = runtime.MAILPIT_URL || 'http://127.0.0.1:55424';
+    async function findLink() {
+      const { messages } = await (await fetch(inboxUrl + '/api/v1/messages')).json();
+      for (const item of messages.filter((m) => m.To.some((to) => to.Address === email))) {
+        const { HTML } = await (await fetch(inboxUrl + '/api/v1/message/' + item.ID)).json();
+        const href = HTML.match(/href="([^"]+)"/)?.[1]?.replaceAll('&amp;', '&');
+        if (href && href !== previous && new URL(href).hash.startsWith('#type=' + type + '&'))
+          return href;
+      }
+      return null;
+    }
+    await expect.poll(async () => Boolean(await findLink())).toBe(true);
+    const link = await findLink();
+    assert.equal(new URL(link).origin, app);
+    assert.equal(new URL(link).pathname, '/access.html');
+    return link;
+  }
+
+  async function resend() {
+    await db.query(
+      `update garments_access.app_activity_log set created_at = now() - interval '2 minutes'
+       where target_type='employee' and target_id=$1 and action in ('Requested employee invitation','Requested invitation resend')`,
+      [employee.id],
+    );
+    await button(row, 'Resend invitation').click();
+    await button(dialog, 'Resend invitation').click();
+    await expect(adminPage.getByText('Invitation resent.', { exact: true })).toBeVisible();
+  }
+
+  await button(row, 'Invite').click();
+  await dialog.getByLabel('Employee login email').fill(email);
+  await checkbox(dialog, 'CI viewer').check();
+  await button(dialog, 'Send invitation').click();
+  await expect(row.getByText('Awaiting acceptance', { exact: true })).toBeVisible();
+
+  const first = await deliveredLink('invite');
+  const {
+    rows: [identity],
+  } = await db.query('select user_id from garments_access.app_user where employee_id=$1', [
+    employee.id,
+  ]);
+  let setupLink = first;
+  if (testResend) {
+    await db.query(
+      "update auth.users set confirmation_sent_at = now() - interval '1 day' where id=$1",
+      [identity.user_id],
+    );
+    await employeePage.goto(first);
+    await button(employeePage, 'Continue').click();
+    await expect(employeePage.getByRole('alert')).toHaveText(
+      'This invitation is invalid or expired. Ask your Administrator to resend it.',
+    );
+    await expect(employeePage.getByRole('link', { name: 'Back to sign in' })).toBeVisible();
+
+    await resend();
+    const replacement = await deliveredLink('recovery');
+    await employeePage.goto(replacement);
+    await button(employeePage, 'Continue').click();
+    await expect(employeePage.getByLabel('New password')).toBeVisible();
+
+    await button(adminPage, 'Refresh access').click();
+    await expect(row.getByText('Password setup pending', { exact: true })).toBeVisible();
+    await db.query(
+      "update auth.users set recovery_sent_at=now()-interval '2 minutes' where id=$1",
+      [identity.user_id],
+    );
+    await resend();
+    setupLink = await deliveredLink('recovery', replacement);
+  }
+
+  await employeePage.goto(setupLink);
+  await button(employeePage, 'Continue').click();
+  await employeePage.getByLabel('New password').fill(password);
+  await button(employeePage, 'Save password').click();
+
+  await employeePage.getByLabel('Email', { exact: true }).fill(email);
+  await employeePage.getByLabel('Password', { exact: true }).fill(password);
+  await button(employeePage, 'Sign in').click();
+  await button(employeePage, 'Set up Google Authenticator').click();
+  await employeePage.getByText('Enter setup key manually').click();
+  const secret = (await employeePage.locator('.access-login code').textContent()).trim();
+  await employeePage.getByLabel('Authenticator code').fill(totp(secret));
+  await button(employeePage, 'Verify authenticator').click();
+  await employeePage.waitForURL('**/fabric.html?live=1');
+
+  await button(adminPage, 'Refresh access').click();
+  await expect(row.getByText('Active', { exact: true })).toBeVisible();
+  await expect(button(row, 'Resend invitation')).toHaveCount(0);
+  const { rows } = await db.query(
+    `select u.id, a.employee_id, a.must_change_password from auth.users u
+     left join garments_access.app_user a on a.user_id=u.id where lower(u.email)=$1`,
+    [email],
+  );
+  assert.deepEqual(rows, [
+    { id: identity.user_id, employee_id: employee.id, must_change_password: false },
+  ]);
+  console.log(
+    testResend
+      ? 'PASS expired invitation, resend before and after confirmation, setup and mapping retained'
+      : 'PASS invitation email, first password, TOTP login and Active status on the same Employee/Auth mapping',
   );
 }
