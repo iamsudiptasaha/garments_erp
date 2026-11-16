@@ -35,7 +35,8 @@ import {
   assertLiveIdentifiers,
   fabricRoot,
 } from './live.js';
-import { LabOverview } from '../colours/cards.js';
+import { LabProgress } from '../colours/progress.js';
+import { statusFor, versionsFor } from '../colours/domain.js';
 import { LabEditor } from '../colours/editor.js';
 import { WorkspaceGate, sessionAccessModel } from '../access/workspace-gate.js';
 import { ItemEditor } from '../production/item-editor.js';
@@ -156,7 +157,11 @@ function workspaceRoute() {
 }
 
 // Overview columns use the existing worksheet projections and record editor IDs.
+const labOverviewVisibility = { brand: false, dyer: false };
 const recordOverviewColumns = {
+  colours: ['name', 'pantone', 'mappings'],
+  colourMappings: ['name', 'pantone', 'brand'],
+  labDips: ['name', 'pantone', 'edition', 'version', 'status', 'brand', 'dyer'],
   yarnTypes: ['name', 'count', 'uses'],
   fabricTypes: ['name', 'knitting', 'programs'],
   suppliers: ['name', 'kind', 'purpose', 'orders'],
@@ -200,6 +205,7 @@ const fabricOverviewTargets = {
 
 const fabricOverviewLabels = {
   color: 'Colour',
+  pantone: 'Pantone',
   lineCount: 'Line items',
 };
 
@@ -217,6 +223,8 @@ function fabricDocumentSummary({ id, rows }, columns) {
 }
 
 const recordOverviewLinks = {
+  colourMappings: { pantone: ['color_map_id', 'colours'], brand: ['brand_list_id', 'brands'] },
+  labDips: { pantone: ['color_map_by_brand_id', 'colourMappings'], dyer: ['dyer_id', 'suppliers'] },
   suppliers: { purpose: ['contact_purpose_id', 'contactCategories'] },
   productionProductTypes: { gender: ['gender_id', 'productionGenders'] },
   brands: {
@@ -285,6 +293,8 @@ function App({ live, refreshWorkspaceAccess }) {
     [view, setView] = useState('overview'),
     [query, setQuery] = useState(''),
     [selected, setSelected] = useState(null),
+    [labProgressId, setLabProgressId] = useState(null),
+    [labSelections, setLabSelections] = useState({}),
     [editor, setEditor] = useState(null),
     [notice, setNotice] = useState('Local workspace · sample data · no live database writes');
   function syncRoute() {
@@ -296,6 +306,8 @@ function App({ live, refreshWorkspaceAccess }) {
     setQuery('');
     setSelected(null);
     setView('overview');
+    setLabProgressId(null);
+    setLabSelections({});
     setEditor(null);
   }
   useEffect(() => {
@@ -775,8 +787,16 @@ function App({ live, refreshWorkspaceAccess }) {
         for (const table of ['yarn_supplier', 'knitter', 'dyer'])
           for (const record of data[table]) sources.set(table + ':' + record.id, record);
       }
-      return h(OverviewTable, {
+      const labOverview = page === 'labDips';
+      const mappings = labOverview
+        ? new Map(data.color_map_by_brand.map((mapping) => [mapping.id, mapping]))
+        : null;
+      const colours = labOverview
+        ? new Map(data.color_map.map((colour) => [colour.id, colour]))
+        : null;
+      const table = h(OverviewTable, {
         key: actor + ':' + page,
+        defaultVisibility: labOverview ? labOverviewVisibility : undefined,
         client: live ? getAccessClient() : null,
         grid: page === 'productionStatuses' ? 'overview-production-statuses' : 'overview-' + page,
         title: spec.title,
@@ -786,6 +806,18 @@ function App({ live, refreshWorkspaceAccess }) {
             id,
             rows: [record],
           } = group;
+          if (labOverview) {
+            const edition = sources.get(id);
+            const mapping = mappings.get(edition.color_map_by_brand_id);
+            const latest = versionsFor(data, id).at(-1);
+            return {
+              ...record,
+              id,
+              pantone: colours.get(mapping?.color_map_id)?.pantone_code || '—',
+              statusOrder: statusFor(data, latest)?.sort_order,
+              brandId: mapping?.brand_list_id,
+            };
+          }
           return page === 'productionWorkers'
             ? { ...record, id, contact: record.name }
             : { ...record, id };
@@ -793,7 +825,8 @@ function App({ live, refreshWorkspaceAccess }) {
         getSearchText:
           page === 'productionStatuses'
             ? undefined
-            : (record) => (record.rows ?? [record]).flatMap((row) => Object.values(row)).join(' '),
+            : ({ statusOrder: _statusOrder, brandId: _brandId, ...record }) =>
+                (record.rows ?? [record]).flatMap((row) => Object.values(row)).join(' '),
         columns: overviewColumns.map((key) => ({
           accessorKey: key,
           header:
@@ -818,6 +851,14 @@ function App({ live, refreshWorkspaceAccess }) {
             ) {
               return h(React.Fragment, null, fmt(value) ?? '—', reportDetails(row.original));
             }
+            if (labOverview && key === 'status') {
+              const order = row.original.statusOrder;
+              const tone = order >= 4 ? ' accepted' : order === 3 ? ' failed' : '';
+              return h('span', { className: 'lab-status' + tone }, value);
+            }
+            if (labOverview && key === 'version') return value || '—';
+            if (labOverview && key === 'brand' && row.original.brandId != null)
+              return overviewLink(value, 'brands');
             const relation = links?.[key];
             if (relation && sources.get(row.original.id)?.[relation[0]] != null)
               return overviewLink(value, relation[1]);
@@ -828,18 +869,29 @@ function App({ live, refreshWorkspaceAccess }) {
                 : (value ?? '—');
           },
         })),
-        onOpen: !spec.readonly && can('edit') ? edit : undefined,
+        onOpen: labOverview ? setLabProgressId : !spec.readonly && can('edit') ? edit : undefined,
       });
+      const openEdition = labOverview && sources.get(labProgressId);
+      return h(
+        React.Fragment,
+        null,
+        table,
+        openEdition &&
+          h(LabProgress, {
+            key: openEdition.id,
+            data,
+            lab: openEdition,
+            onClose: () => setLabProgressId(null),
+            selected: labSelections[openEdition.id],
+            setSelected: (version) =>
+              setLabSelections((selections) => ({ ...selections, [openEdition.id]: version })),
+            onEdit: labEdit,
+            editable: can('edit'),
+            creatable: can('create'),
+          }),
+      );
     }
 
-    if (page === 'labDips')
-      return h(LabOverview, {
-        data,
-        records,
-        onEdit: labEdit,
-        editable: can('edit'),
-        creatable: can('create'),
-      });
     if (spec.production)
       return h(ProductionOverview, {
         groups,
@@ -893,34 +945,7 @@ function App({ live, refreshWorkspaceAccess }) {
           }),
         ),
       );
-    return h(
-      'section',
-      { className: 'overview-grid' },
-      groups.map(({ id, title, supplier, rows: [first] }, index) =>
-        h(
-          'article',
-          { className: `overview-card tone-${index % 4}`, key: id },
-          h(
-            'div',
-            { className: 'card-top' },
-            h('span', { className: 'card-kicker' }, first.supplier || spec.title),
-            h('span', { className: 'card-dots' }, '•••'),
-          ),
-          h('h2', null, title),
-          h('p', { className: 'card-subtitle' }, supplier || first.name),
-          h(
-            'div',
-            { className: 'colour-card-details' },
-            h('p', null, first.pantone === '—' ? 'Pantone not set' : `Pantone ${first.pantone}`),
-            page === 'colours'
-              ? h('p', null, `${first.mappings} brand mappings`)
-              : h('p', null, `Brand: ${first.brand}`),
-          ),
-          can('edit') &&
-            h('button', { className: 'open-document', onClick: () => edit(id) }, 'Edit →'),
-        ),
-      ),
-    );
+    return null;
   }
   function fabricHome() {
     return h(
@@ -1307,6 +1332,8 @@ function App({ live, refreshWorkspaceAccess }) {
                                         : undefined,
                                   onView: (mode) => {
                                     setView(mode);
+                                    setLabProgressId(null);
+                                    setLabSelections({});
                                     setSelected(null);
                                   },
                                 }),

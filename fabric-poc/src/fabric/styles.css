@@ -951,12 +951,6 @@ select {
     display: none;
   }
 }
-.colour-card-details {
-  font-size: 12px;
-  line-height: 1.7;
-  color: #617e94;
-  margin: 22px 0;
-}
 .fabric-fields input[type='checkbox'] {
   width: 20px;
   height: 20px;

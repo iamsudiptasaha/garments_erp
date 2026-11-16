@@ -11,10 +11,7 @@ for (const [route, title, add, edit, form] of [
     await page.goto('/fabric.html#' + route);
     await page.setViewportSize({ width: 1280, height: 720 });
     const toggle = page.locator('.fabric-page-header .fabric-view-toggle');
-    const overview =
-      route === 'suppliers'
-        ? page.getByRole('table', { name: 'Suppliers', exact: true })
-        : page.locator('.overview-grid').first();
+    const overview = page.getByRole('table', { name: title, exact: true });
     await expect(overview).toBeVisible();
     const screenshot = { animations: 'disabled', caret: 'hide' };
     await page.mouse.move(0, 0);
@@ -535,7 +532,6 @@ test('production document page chrome matches approved record pages at desktop a
     let reference;
     for (const [route, title] of pages) {
       const documents = route === 'challans' || route === 'worker-bills';
-      const migrated = route === 'productionProductTypes' || route === 'suppliers' || documents;
       await page.goto(
         documents
           ? '/production-challan.html?visual=' + route + '#' + route
@@ -547,7 +543,7 @@ test('production document page chrome matches approved record pages at desktop a
       const banner = main.locator('.access-info');
       const refresh = main.getByRole('button', { name: 'Refresh records' });
       const search = actions.getByRole('searchbox');
-      const overviewSearch = migrated ? main.getByRole('searchbox') : search;
+      const overviewSearch = main.getByRole('searchbox');
       const toggle = header.locator('.fabric-view-toggle');
       await expect(header.getByRole('heading', { name: title, exact: true })).toBeVisible();
       if (!captureBaseline || !documents) {
@@ -575,20 +571,11 @@ test('production document page chrome matches approved record pages at desktop a
         banner: await style(banner, ['fontSize', 'padding', 'marginBottom']),
         refresh: await style(refresh, ['fontSize', 'padding', 'borderRadius']),
       });
-      const overviewChrome = captureBaseline || migrated ? null : await chrome();
       if (!captureBaseline) {
         await overviewSearch.fill('no-such-record-123456789');
-        if (migrated) {
-          await expect(main.getByText('No matching records', { exact: true })).toBeVisible();
-          await main.getByRole('button', { name: 'Clear search' }).click();
-        } else {
-          await expect(main.locator('.empty-state:visible')).toHaveText(
-            'Nothing here yetTry a different search.',
-          );
-          await search.clear();
-        }
+        await expect(main.getByText('No matching records', { exact: true })).toBeVisible();
+        await main.getByRole('button', { name: 'Clear search' }).click();
       }
-      const searchNode = migrated ? null : await search.elementHandle();
       await toggle.getByRole('button', { name: 'Sheet' }).click();
       await expect(main.getByRole('combobox', { name: 'Sheet zoom' })).toBeVisible();
       if (captureDir)
@@ -599,13 +586,8 @@ test('production document page chrome matches approved record pages at desktop a
       if (captureBaseline) continue;
 
       const sheetChrome = await chrome();
-      reference ||= { overviewChrome, sheetChrome };
-      expect(sheetChrome, title + ' Sheet at ' + width).toEqual(reference.sheetChrome);
-      if (!migrated) {
-        reference.overviewChrome ??= overviewChrome;
-        expect(overviewChrome, title + ' Overview at ' + width).toEqual(reference.overviewChrome);
-        expect(await search.evaluate((node, original) => node === original, searchNode)).toBe(true);
-      }
+      reference ??= sheetChrome;
+      expect(sheetChrome, title + ' Sheet at ' + width).toEqual(reference);
       const bounds = await actions.boundingBox();
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
     }

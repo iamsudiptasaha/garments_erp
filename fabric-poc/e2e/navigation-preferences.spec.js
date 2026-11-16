@@ -184,6 +184,7 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
               break;
             }
             expect([
+              'overview-colours',
               'finished-goods-valuation',
               'administration-accounts',
               'files-buckets',
