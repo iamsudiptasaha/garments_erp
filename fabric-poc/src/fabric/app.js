@@ -677,7 +677,9 @@ function App({ live, refreshWorkspaceAccess }) {
     setEditor({ page: 'labDips', id: mode === 'edition' ? null : id, sourceId: id, mode });
   }
   function overview() {
-    if (overviewColumns)
+    if (overviewColumns) {
+      const links = productionOverviewLinks[page];
+      const sources = new Map(links ? data[spec.entity].map((record) => [record.id, record]) : []);
       return h(OverviewTable, {
         key: actor + ':' + page,
         client: live ? getAccessClient() : null,
@@ -688,6 +690,8 @@ function App({ live, refreshWorkspaceAccess }) {
             ? { ...record, id, contact: record.name }
             : { ...record, id },
         ),
+        getSearchText:
+          page === 'productionStatuses' ? undefined : (record) => Object.values(record).join(' '),
         columns: overviewColumns.map((key) => ({
           accessorKey: key,
           header:
@@ -696,10 +700,10 @@ function App({ live, refreshWorkspaceAccess }) {
               : spec.columns.find((column) => column.key === key).label,
           cell: ({ getValue, row }) => {
             const value = getValue();
-            const relation = productionOverviewLinks[page]?.[key];
-            if (value != null && relation) {
+            const relation = links?.[key];
+            if (value && value !== '—' && value !== 'Not selected' && relation) {
               const [field, target] = relation;
-              const record = data[spec.entity].find(({ id }) => id === row.original.id);
+              const record = sources.get(row.original.id);
               if (record?.[field] != null && can('view', target)) {
                 return h(
                   'a',
@@ -718,6 +722,7 @@ function App({ live, refreshWorkspaceAccess }) {
         })),
         onOpen: can('edit') ? edit : undefined,
       });
+    }
 
     if (page === 'labDips')
       return h(LabOverview, {

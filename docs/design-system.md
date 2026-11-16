@@ -79,17 +79,7 @@ Migrate one section per phase. Review record ownership and links, compare visibl
 Migrated Overview sections:
 
 - Production → Job statuses (`productionStatuses`). The single Status field uses `item_status_list.status` and the original record editor keyed by `item_status_list.id`. The table has no outgoing foreign keys.
-- Production → Stage types (`productionStageTypes`). Uses the shared Overview table and the existing editor.
-- Production → Part names (`productionPartTypes`). Uses the shared Overview table and the existing editor.
-- Production → Sizes (`productionSizes`). Uses the shared Overview table and the existing editor.
-- Production → Product types (`productionProductTypes`). Uses the shared Overview table and the existing editor.
-- Production → Variants (`productionDesigns`). Uses the shared Overview table and the existing editor.
-- Production → Flags (`productionFlags`). Uses the shared Overview table and the existing editor.
-- Production → Gender (`productionGenders`). Uses the shared Overview table and the existing editor.
-- Production → Brands (`brands`). Uses the shared Overview table and the existing editor.
-- Production → Stages (`productionStages`). Uses the shared Overview table and the existing editor.
-- Production → Job workers (`productionWorkers`). Uses the shared Overview table and the existing editor.
-- Production → Items (`productionItems`). Uses the shared Overview table and the existing editor.
+- Production → Stage types, Part names, Sizes, Product types, Variants, Flags, Gender, Brands, Stages, Job workers and Items. Each page has a distinct Overview preference key and opens its existing editor by the worksheet's document ID with edit permission. Reference tables lead with the record name. Items leads with Style code and shows Brand, Product type, Season and Batch number. Foreign-key cells use the existing projected labels and link only when the related page is permitted. The hidden Item parts and Item sizes preview routes retain their existing rendering. Task Board, Update Tasks and Job History retain their dedicated views.
 - Production → Challans and Worker bills. Each document table opens the existing dialog by its document key. The overview search includes the existing job-line descriptions or bill assignments. Linked workers, issuers and challans navigate to the authorized ERP pages.
 - Employee / HR → Employees (`overview-employees`). Employee code opens the existing Employee profile using `employee.id`. The contact name and existing photo appear beside the code. The contact name links to Contacts when the viewer has access, and the verifier is shown using the readable name from the Employee snapshot. The existing Current, Active, Inactive and Archived scope applies before grid filters. Employee view permission allows opening the profile, and the editor applies its existing create, edit and archive rules. The directory cards and their styles were removed. The Employee worksheet retains its existing controls.
 
