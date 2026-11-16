@@ -95,13 +95,16 @@ test('local Supabase Billing workflow from Buyer PO through stock restoration', 
   await buyerPO.getByLabel('Ordered sets').fill('1');
   await buyerPO.getByLabel('PO unit price').fill('115');
   await buyerPO.getByRole('button', { name: 'Add PO item' }).click();
-  const exception = buyerPO.locator('.fabric-line').last();
+  const exception = buyerPO.locator('section.fabric-line').filter({
+    has: page.getByRole('heading', { name: 'PO item 2', exact: true }),
+  });
   await exception.getByLabel('Sale mode').selectOption('exception');
   await exception.getByLabel('ERP item / sellable product').selectOption('982001');
   await exception.getByLabel('Ordered pieces').fill('3');
   await exception.getByLabel('PO unit price').fill('40');
   await snapshot('buyer-po-editor');
-  await buyerPO.getByRole('button', { name: 'Save buyer PO' }).click();
+  await buyerPO.getByRole('button', { name: 'Review buyer PO' }).click();
+  await buyerPO.getByRole('button', { name: 'Confirm save' }).click();
   await expect(page.getByRole('heading', { name: 'BROWSER-MIXED-PO' })).toBeVisible();
   await snapshot('buyer-po-real');
 
@@ -141,7 +144,7 @@ test('local Supabase Billing workflow from Buyer PO through stock restoration', 
   }
 
   await getByButton('Back to invoices').click();
-  await expect(page.getByRole('columnheader', { name: 'Verified credits' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Original value' })).toBeVisible();
   await snapshot('invoices-overview');
   await getByButton('BROWSER-PARTIAL-1').click();
   await getByButton('Create packing list').click();
@@ -153,9 +156,9 @@ test('local Supabase Billing workflow from Buyer PO through stock restoration', 
 
   await nav.getByRole('button', { name: 'Packing Lists', exact: true }).click();
   const packingRow = page.getByRole('row').filter({ hasText: 'BROWSER-PARTIAL-1' });
-  await expect(page.locator('.billing-table-frame')).toHaveCSS('border-radius', '10px');
+  await expect(page.getByRole('table', { name: 'Packing Lists' })).toBeVisible();
   await snapshot('packing-overview');
-  await packingRow.getByRole('button', { name: /^PL-/ }).click();
+  await packingRow.getByRole('cell', { name: 'KOL', exact: true }).click();
   const packingDetails = page.getByRole('dialog', { name: 'Packing list details' });
   await expect(packingDetails.getByText('No cartons assigned.')).toBeVisible();
   await snapshot('packing-list');
@@ -188,7 +191,8 @@ test('local Supabase Billing workflow from Buyer PO through stock restoration', 
   await transport.getByLabel('Docket number').fill('BROWSER-DOCKET');
   await transport.getByLabel('Pickup date').fill('2026-11-12');
   await transport.getByRole('checkbox', { name: /BROWSER-PARTIAL-1/ }).check();
-  await transport.getByRole('button', { name: 'Save transport' }).click();
+  await transport.getByRole('button', { name: 'Review transport' }).click();
+  await transport.getByRole('button', { name: 'Confirm save' }).click();
   const dispatch = page.getByRole('row').filter({ hasText: 'BROWSER-DOCKET' });
   await dispatch.getByRole('button', { name: 'Confirm pickup' }).click();
   await page
@@ -206,6 +210,11 @@ test('local Supabase Billing workflow from Buyer PO through stock restoration', 
   await nav.getByRole('button', { name: 'Cartons', exact: true }).click();
   const dispatchedCarton = page.getByRole('row').filter({ hasText: 'BROWSER-PARTIAL-1' });
   await expect(dispatchedCarton.getByRole('button', { name: 'Delete' })).toHaveCount(0);
+  await dispatchedCarton.getByRole('cell', { name: 'Dispatched', exact: true }).click();
+  const readOnlyCarton = page.getByRole('dialog', { name: 'Carton details' });
+  await expect(readOnlyCarton).toBeVisible();
+  await expect(readOnlyCarton.getByRole('button', { name: 'Save carton' })).toHaveCount(0);
+  await readOnlyCarton.getByRole('button', { name: 'Close' }).click();
   await dispatchedCarton.getByRole('button', { name: /^TR-/ }).click();
   await expect(page.getByRole('heading', { name: 'Assigned cartons' })).toBeVisible();
 
@@ -221,7 +230,8 @@ test('local Supabase Billing workflow from Buyer PO through stock restoration', 
   await ret.getByLabel(/Pieces for/).fill('1');
   await ret.getByLabel(/Price for/).fill('20');
   await snapshot('piece-return');
-  await ret.getByRole('button', { name: 'Verify return' }).click();
+  await ret.getByRole('button', { name: 'Review return' }).click();
+  await ret.getByRole('button', { name: 'Confirm save' }).click();
   await expect(page.getByRole('row').filter({ hasText: 'BROWSER-PARTIAL-1' })).toBeVisible();
   await snapshot('returns-overview');
   await getByButton('BROWSER-PARTIAL-1').click();
@@ -236,14 +246,16 @@ test('local Supabase Billing workflow from Buyer PO through stock restoration', 
   await expect(stock.getByRole('cell').last()).toHaveText('6');
   await snapshot('billing-summary');
   const summaryView = page.getByRole('group', { name: 'Billing Summary view' });
-  const cards = page.locator('.overview-grid');
+  const totals = page
+    .getByRole('table')
+    .filter({ has: page.getByRole('columnheader', { name: 'Billing totals' }) });
   const visual = { animations: 'disabled', caret: 'hide' };
-  const before = await cards.screenshot(visual);
+  const before = await totals.screenshot(visual);
   await summaryView.getByRole('button', { name: 'Sheet', exact: true }).click();
   await expect(page.getByText('Sort complete rows by')).toBeVisible();
   await summaryView.getByRole('button', { name: 'Overview', exact: true }).click();
   await page.mouse.move(0, 0);
-  expect(await cards.screenshot(visual)).toEqual(before);
+  expect(await totals.screenshot(visual)).toEqual(before);
 
   await nav.getByRole('button', { name: 'Invoices', exact: true }).click();
   await getByButton('New invoice').click();
@@ -272,6 +284,9 @@ test('local Supabase Billing workflow from Buyer PO through stock restoration', 
     .getByRole('group', { name: 'Invoices view' })
     .getByRole('button', { name: 'Sheet' })
     .click();
+  await page
+    .getByRole('searchbox', { name: 'Search invoice number, buyer or PO' })
+    .fill('BROWSER-ADHOC-DRAFT');
   const editSelected = getByButton('Edit selected document');
   await expect(editSelected).toBeDisabled();
   await page.locator('.fortune-sheet-overlay').click({ position: { x: 85, y: 82 } });

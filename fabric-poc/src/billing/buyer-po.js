@@ -4,7 +4,7 @@ import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import { createElement as h, useEffect, useMemo, useRef, useState } from 'react';
 import { FabricSheet } from '../fabric/sheet.js';
 import { WorksheetToolbar, useGridSearch } from '../fabric/grid-toolbar.js';
-import { WorkspaceViewToggle } from '../fabric/view-toggle.js';
+import { BillingOverview, BillingViewActions, useBillingOverviewSearch } from './overview.js';
 import { FinishedGoodsEditor as DocumentDialog } from '../finished-goods/sheet-view.js';
 
 const columns = [
@@ -486,7 +486,9 @@ export function BuyerPO({
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const query = useGridSearch(search.trim());
+  const sheetQuery = useGridSearch(search.trim());
+  const [overviewQuery, onSearch] = useBillingOverviewSearch(setOffset);
+  const query = view === 'sheet' ? sheetQuery : overviewQuery;
   useEffect(() => {
     if (id) return;
     let current = true;
@@ -523,40 +525,42 @@ export function BuyerPO({
         h('h1', null, 'Buyer PO'),
         h('p', null, 'Select existing ERP items with recorded production stock-in.'),
       ),
-      h(WorkspaceViewToggle, {
-        label: 'Buyer PO view',
+      h(BillingViewActions, {
+        title: 'Buyer PO',
+        add,
         view,
         onChange: (next) => {
           setSelected(null);
+          if (overviewQuery !== sheetQuery) setOffset(0);
           setView(next);
         },
       }),
     ),
-    h(
-      WorksheetToolbar,
-      {
-        label: 'Search PO number or buyer',
-        value: search,
-        onChange: (value) => {
-          setSelected(null);
-          setSearch(value);
-          setOffset(0);
+    view === 'sheet' &&
+      h(
+        WorksheetToolbar,
+        {
+          label: 'Search PO number or buyer',
+          value: search,
+          onChange: (value) => {
+            setSelected(null);
+            setSearch(value);
+            setOffset(0);
+          },
         },
-      },
-      add,
-      view === 'sheet' &&
+        add,
         h(
           'button',
           { type: 'button', disabled: !canOpen, onClick: () => setId(selected) },
           'Open selected document',
         ),
-    ),
+      ),
     error && h('p', { role: 'alert' }, error),
     notice && h('p', { role: 'status' }, notice),
     !rows && !error && h('p', { role: 'status' }, 'Loading buyer POs…'),
-    rows &&
-      (view === 'sheet'
-        ? h(FabricSheet, {
+    view === 'sheet'
+      ? rows &&
+          h(FabricSheet, {
             client,
             page: 'billing-buyer-po',
             spec,
@@ -566,26 +570,18 @@ export function BuyerPO({
             onSelect: (row) => setSelected(row?.id ?? null),
             onNotice: setNotice,
           })
-        : table(
-            columns.map(([, label]) => label),
-            records.map((record) => ({
-              id: record.id,
-              cells: columns.map(([key]) =>
-                key === 'po_number'
-                  ? h(
-                      'button',
-                      {
-                        className: 'open-document',
-                        type: 'button',
-                        onClick: () => setId(record.id),
-                      },
-                      record[key],
-                    )
-                  : record[key],
-              ),
-            })),
-          )),
-    rows && records.length === 0 && h('p', null, 'No buyer POs found.'),
+      : h(BillingOverview, {
+          client,
+          page: 'billing-buyer-po',
+          title: 'Buyer PO',
+          columns: spec.columns,
+          rows: rows ? records : undefined,
+          onOpen: setId,
+          opensDialog: false,
+          onSearch,
+          searchLabel: 'Search PO number or buyer',
+        }),
+    view === 'sheet' && rows && records.length === 0 && h('p', null, 'No buyer POs found.'),
     (offset > 0 || rows?.length > 50) &&
       h(
         'div',

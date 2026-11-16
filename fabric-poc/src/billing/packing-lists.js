@@ -2,7 +2,12 @@ import { BillingStatus } from './record-workspace.js';
 import { createElement as h, useEffect, useMemo, useState } from 'react';
 import { FabricSheet } from '../fabric/sheet.js';
 import { WorksheetToolbar, useGridSearch } from '../fabric/grid-toolbar.js';
-import { WorkspaceViewToggle } from '../fabric/view-toggle.js';
+import {
+  BillingOverview,
+  BillingRelatedRecord,
+  BillingViewActions,
+  useBillingOverviewSearch,
+} from './overview.js';
 import { FinishedGoodsEditor as DocumentDialog } from '../finished-goods/sheet-view.js';
 
 const columns = [
@@ -134,7 +139,10 @@ export function PackingLists({ client, capabilities, openInvoice }) {
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const query = useGridSearch(search.trim());
+  const sheetQuery = useGridSearch(search.trim());
+  const [overviewQuery, onSearch] = useBillingOverviewSearch(setOffset);
+  const query = view === 'sheet' ? sheetQuery : overviewQuery;
+  const [opened, setOpened] = useState(null);
   useEffect(() => {
     let current = true;
     setRows(null);
@@ -164,27 +172,28 @@ export function PackingLists({ client, capabilities, openInvoice }) {
         h('h1', null, 'Packing Lists'),
         h('p', null, 'Review packing progress by invoice.'),
       ),
-      h(WorkspaceViewToggle, {
-        label: 'Packing Lists view',
+      h(BillingViewActions, {
+        title: 'Packing Lists',
         view,
         onChange: (next) => {
           setSelected(null);
+          if (overviewQuery !== sheetQuery) setOffset(0);
           setView(next);
         },
       }),
     ),
-    h(
-      WorksheetToolbar,
-      {
-        label: 'Search packing list, invoice or location',
-        value: search,
-        onChange: (value) => {
-          setSelected(null);
-          setSearch(value);
-          setOffset(0);
+    view === 'sheet' &&
+      h(
+        WorksheetToolbar,
+        {
+          label: 'Search packing list, invoice or location',
+          value: search,
+          onChange: (value) => {
+            setSelected(null);
+            setSearch(value);
+            setOffset(0);
+          },
         },
-      },
-      view === 'sheet' &&
         h(
           DocumentDialog,
           {
@@ -196,13 +205,13 @@ export function PackingLists({ client, capabilities, openInvoice }) {
           },
           () => h(PackingDetail, { key: selected, client, id: selected, openInvoice }),
         ),
-    ),
+      ),
     error && h('p', { role: 'alert' }, error),
     notice && h('p', { role: 'status' }, notice),
     !rows && !error && h('p', { role: 'status' }, 'Loading packing lists…'),
-    rows &&
-      (view === 'sheet'
-        ? h(FabricSheet, {
+    view === 'sheet'
+      ? rows &&
+          h(FabricSheet, {
             client,
             page: 'billing-packing-lists',
             spec,
@@ -212,40 +221,37 @@ export function PackingLists({ client, capabilities, openInvoice }) {
             onSelect: (row) => setSelected(row?.id ?? null),
             onNotice: setNotice,
           })
-        : table(
-            columns.map(([, label]) => label),
-            records.map((row) => ({
-              id: row.id,
-              values: [
-                h(
-                  DocumentDialog,
-                  {
-                    record: true,
-                    defer: true,
-                    label: row.packing_list_number,
-                    title: 'Packing list details',
-                  },
-                  () => h(PackingDetail, { client, id: row.id, openInvoice }),
-                ),
-                openInvoice
-                  ? h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'open-document',
-                        onClick: () => openInvoice(row.billing_id),
-                      },
-                      row.invoice_number,
-                    )
-                  : row.invoice_number,
-                row.date,
-                row.location_abbr,
-                h(BillingStatus, { value: row.status }),
-                row.carton_count,
-              ],
-            })),
-          )),
-    rows && !records.length && h('p', null, 'No packing lists found.'),
+      : h(BillingOverview, {
+          client,
+          page: 'billing-packing-lists',
+          title: 'Packing Lists',
+          columns: spec.columns,
+          rows: rows ? records : undefined,
+          onOpen: setOpened,
+          onSearch,
+          searchLabel: 'Search packing list, invoice or location',
+          render: (row, key) =>
+            key === 'status'
+              ? h(BillingStatus, { value: row.status })
+              : key === 'invoice_number'
+                ? h(BillingRelatedRecord, {
+                    value: row[key],
+                    id: row.billing_id,
+                    open: openInvoice,
+                  })
+                : row[key],
+        }),
+    opened &&
+      h(
+        DocumentDialog,
+        {
+          record: true,
+          title: 'Packing list details',
+          onDismiss: () => setOpened(null),
+        },
+        () => h(PackingDetail, { client, id: opened, openInvoice }),
+      ),
+    view === 'sheet' && rows && !records.length && h('p', null, 'No packing lists found.'),
     (offset > 0 || rows?.length > 50) &&
       h(
         'div',

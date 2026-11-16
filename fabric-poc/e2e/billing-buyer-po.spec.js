@@ -82,7 +82,7 @@ test('Buyer PO entry saves mixed modes with a protected recipe and opens the sav
   });
 
   await page.goto('/fabric.html?live=1#billingBuyerPO');
-  await expect(page.getByText('No buyer POs found.')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'No matching records' })).toBeVisible();
   await page.getByRole('button', { name: 'New buyer PO' }).click();
   const dialog = page.getByRole('dialog', { name: 'New buyer PO' });
   await dialog.getByLabel('PO number').fill('PO-MIXED');

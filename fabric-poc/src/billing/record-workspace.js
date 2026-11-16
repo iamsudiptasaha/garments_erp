@@ -2,7 +2,7 @@ import './styles.css';
 import { createElement as h, useEffect, useMemo, useState } from 'react';
 import { FabricSheet } from '../fabric/sheet.js';
 import { WorksheetToolbar } from '../fabric/grid-toolbar.js';
-import { WorkspaceViewToggle } from '../fabric/view-toggle.js';
+import { BillingViewActions } from './overview.js';
 
 export function BillingStatus({ value }) {
   const accepted = ['Verified', 'Dispatched', 'Packed'].includes(value);
@@ -50,6 +50,7 @@ export function BillingRecordWorkspace({
   client,
   capabilities,
   search,
+  onViewChange,
   setSearch,
   add,
   selectedActions,
@@ -70,28 +71,31 @@ export function BillingRecordWorkspace({
       'div',
       { className: 'editor-heading' },
       h('div', null, h('h1', null, title), h('p', null, subtitle)),
-      h(WorkspaceViewToggle, {
-        label: title + ' view',
+      h(BillingViewActions, {
+        title,
+        add,
         view,
         onChange: (next) => {
           setSelected(null);
           setView(next);
+          onViewChange?.(next);
         },
       }),
     ),
-    h(
-      WorksheetToolbar,
-      {
-        label: 'Search ' + title.toLowerCase(),
-        value: search,
-        onChange: (value) => {
-          setSelected(null);
-          setSearch(value);
+    view === 'sheet' &&
+      h(
+        WorksheetToolbar,
+        {
+          label: 'Search ' + title.toLowerCase(),
+          value: search,
+          onChange: (value) => {
+            setSelected(null);
+            setSearch(value);
+          },
         },
-      },
-      add,
-      view === 'sheet' && selectedActions?.(selectedRow),
-    ),
+        add,
+        selectedActions?.(selectedRow),
+      ),
     notice && h('p', { role: 'status' }, notice),
     view === 'overview'
       ? children
@@ -106,7 +110,7 @@ export function BillingRecordWorkspace({
             onSelect: (row) => setSelected(row?.id ?? null),
             onNotice: setNotice,
           }),
-    rows && !rows.length && h('p', null, 'No matching records.'),
+    view === 'sheet' && rows && !rows.length && h('p', null, 'No matching records.'),
     footer,
   );
 }

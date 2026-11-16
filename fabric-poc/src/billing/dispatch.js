@@ -1,3 +1,4 @@
+import { BillingOverview } from './overview.js';
 import { fileRecordPath } from '../access/workspace-routes.js';
 import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
 import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
@@ -249,6 +250,7 @@ export function BillingDispatch({
   onTransportOpened,
 }) {
   const [search, setSearch] = useState('');
+  const [view, setView] = useState('overview');
   const [status, setStatus] = useState('');
   const [offset, setOffset] = useState(0);
   const [version, setVersion] = useState(0);
@@ -283,16 +285,19 @@ export function BillingDispatch({
       data?.transports
         .slice(0, 50)
         .map((row) => ({ ...row, number: 'TR-' + row.id.padStart(4, '0') }))
-        .filter(
-          (row) =>
-            (!status || row.status === status) &&
-            [row.number, row.carrier, row.docket_number].some((value) =>
-              value?.toLowerCase().includes(query),
-            ),
-        ),
-    [data, status, query],
+        .filter((row) => !status || row.status === status),
+    [data, status],
   );
-  const current = rows?.find(({ id }) => id === selected);
+  const sheetRows = useMemo(
+    () =>
+      rows?.filter((row) =>
+        [row.number, row.carrier, row.docket_number].some((value) =>
+          value?.toLowerCase().includes(query),
+        ),
+      ),
+    [rows, query],
+  );
+  const current = (view === 'sheet' ? sheetRows : rows)?.find(({ id }) => id === selected);
   const refresh = () => setVersion((value) => value + 1);
   function pickup(row) {
     return (
@@ -333,7 +338,8 @@ export function BillingDispatch({
       subtitle: 'Assign cartons and confirm pickup when invoice packing is complete.',
       page: 'billing-dispatch',
       columns,
-      rows,
+      rows: sheetRows,
+      onViewChange: setView,
       client,
       capabilities,
       search,
@@ -420,38 +426,30 @@ export function BillingDispatch({
         : h(
             'div',
             null,
-            h(
-              'label',
-              null,
-              'Status ',
-              h(
-                'select',
-                { value: status, onChange: (event) => setStatus(event.target.value) },
-                h('option', { value: '' }, 'All statuses'),
-                h('option', null, 'Planned'),
-                h('option', null, 'Dispatched'),
-              ),
-            ),
             paged && h('p', null, 'Search and status filters apply to this page.'),
-            h(BillingTable, {
-              columns: [...columns, { key: 'action', label: 'Action' }],
+            h(BillingOverview, {
+              client,
+              page: 'billing-dispatch',
+              title: 'Dispatch / Transport',
+              columns,
               rows,
+              onOpen: setSelected,
+              opensDialog: false,
+              actions: canEdit ? pickup : undefined,
+              toolbar: h(
+                'label',
+                null,
+                'Status ',
+                h(
+                  'select',
+                  { value: status, onChange: (event) => setStatus(event.target.value) },
+                  h('option', { value: '' }, 'All statuses'),
+                  h('option', null, 'Planned'),
+                  h('option', null, 'Dispatched'),
+                ),
+              ),
               render: (row, key) =>
-                key === 'number'
-                  ? h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'open-document',
-                        onClick: () => setSelected(row.id),
-                      },
-                      row.number,
-                    )
-                  : key === 'action'
-                    ? pickup(row)
-                    : key === 'status'
-                      ? h(BillingStatus, { value: row.status })
-                      : row[key],
+                key === 'status' ? h(BillingStatus, { value: row.status }) : row[key],
             }),
           ),
   );
