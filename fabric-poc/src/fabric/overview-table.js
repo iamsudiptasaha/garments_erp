@@ -188,6 +188,7 @@ export function OverviewTable({
   records,
   columns,
   onOpen,
+  canOpen,
   toolbar,
   searchLabel = 'Search ' + title,
   getSearchText,
@@ -497,14 +498,19 @@ export function OverviewTable({
                   ),
                 ),
               );
+            const openable = onOpen && (canOpen?.(row.original) ?? true);
             return h(
               'tr',
               {
                 key: row.id,
-                className: onOpen ? 'overview-open-row' : undefined,
-                onClick: onOpen
+                className: openable ? 'overview-open-row' : undefined,
+                onClick: openable
                   ? (event) => {
-                      if (!event.target.closest('a,button,input,select,textarea,[role="button"]'))
+                      if (
+                        !event.target.closest(
+                          'a,button,input,select,textarea,summary,[role="button"]',
+                        )
+                      )
                         onOpen(row.original.id);
                     }
                   : undefined,
@@ -514,7 +520,7 @@ export function OverviewTable({
                 return h(
                   'td',
                   { key: cell.id },
-                  onOpen && cell.column.id === identity.accessorKey
+                  openable && cell.column.id === identity.accessorKey
                     ? h(
                         'button',
                         {

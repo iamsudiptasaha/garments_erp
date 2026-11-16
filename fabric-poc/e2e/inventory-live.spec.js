@@ -95,7 +95,7 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
     raw_material_purchase_order_item_id: '12',
     material_category_id: '15',
   });
-  await page.getByRole('button', { name: 'Edit →', exact: true }).click();
+  await page.getByRole('button', { name: 'RCV-21', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Upload stock receipt bill' })).toBeVisible();
 
   await page.goto('/fabric.html?live=1#materialIssues');

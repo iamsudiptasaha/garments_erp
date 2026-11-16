@@ -703,7 +703,7 @@ const nativeEditors = {
     'Stock receipts',
     'invoice_number',
     'Attachment receipt %',
-    'Edit →',
+    null,
     'Review details →',
     'Confirm & save',
   ],

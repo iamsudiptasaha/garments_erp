@@ -43,6 +43,11 @@ import { ItemEditor } from '../production/item-editor.js';
 import { JobEditor } from '../production/editor.js';
 import { ProductionOverview } from '../production/cards.js';
 import { InventoryCard } from '../inventory/cards.js';
+import {
+  inventoryOverview,
+  inventoryDocument,
+  inventoryOverviewTarget,
+} from './inventory-overview.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BillingCartons } from '../billing/cartons.js';
@@ -478,8 +483,11 @@ function App({ live, refreshWorkspaceAccess }) {
     totals = useMemo(() => fabricTotals(data), [data]);
   const sheetQuery = useGridSearch(query);
   const documentOverviewColumns = fabricDocumentOverview[page];
+  const inventoryColumns = inventoryOverview[page];
   const overviewColumns =
-    view === 'overview' ? (documentOverviewColumns ?? recordOverviewColumns[page]) : undefined;
+    view === 'overview'
+      ? (inventoryColumns?.columns ?? documentOverviewColumns ?? recordOverviewColumns[page])
+      : undefined;
   const recordQuery = view === 'sheet' ? sheetQuery : overviewColumns ? '' : query;
   const searchPlaceholder =
     page === 'productionJobs'
@@ -796,11 +804,12 @@ function App({ live, refreshWorkspaceAccess }) {
         : null;
       const table = h(OverviewTable, {
         key: actor + ':' + page,
-        defaultVisibility: labOverview ? labOverviewVisibility : undefined,
+        defaultVisibility: labOverview ? labOverviewVisibility : inventoryColumns?.visibility,
         client: live ? getAccessClient() : null,
         grid: page === 'productionStatuses' ? 'overview-production-statuses' : 'overview-' + page,
         title: spec.title,
         records: groups.map((group) => {
+          if (page === 'materialOrders') return inventoryDocument(group);
           if (documentOverviewColumns) return fabricDocumentSummary(group, overviewColumns);
           const {
             id,
@@ -818,6 +827,9 @@ function App({ live, refreshWorkspaceAccess }) {
               brandId: mapping?.brand_list_id,
             };
           }
+          if (page === 'materialSuppliers') return { ...record, id, contact: record.name };
+          if (page === 'materialStock')
+            return { ...record, id, status: record.left > 0 ? 'Available' : 'Closed' };
           return page === 'productionWorkers'
             ? { ...record, id, contact: record.name }
             : { ...record, id };
@@ -827,48 +839,96 @@ function App({ live, refreshWorkspaceAccess }) {
             ? undefined
             : ({ statusOrder: _statusOrder, brandId: _brandId, ...record }) =>
                 (record.rows ?? [record]).flatMap((row) => Object.values(row)).join(' '),
-        columns: overviewColumns.map((key) => ({
-          accessorKey: key,
-          header:
-            page === 'productionWorkers' && key === 'contact'
-              ? 'Company / contact'
-              : (spec.columns.find((column) => column.key === key)?.label ??
-                fabricOverviewLabels[key]),
-          cell: ({ getValue, row }) => {
-            const value = getValue();
-            if (key === 'lineCount') return lineDetails(row.original.rows, row.original.quantity);
-            const target = fabricOverviewTargets[page]?.[key];
-            if (target && documentOverviewColumns) {
-              const values = [...new Set(row.original.rows.map((line) => line[key] || '—'))];
-              return values.map((label, index) =>
-                h(React.Fragment, { key: label }, index > 0 && ', ', overviewLink(label, target)),
-              );
-            }
-            if (target) return overviewLink(value, target);
-            if (
-              (page === 'batches' && key === 'batch') ||
-              ((page === 'greige' || page === 'yarnLeft') && key === 'left')
-            ) {
-              return h(React.Fragment, null, fmt(value) ?? '—', reportDetails(row.original));
-            }
-            if (labOverview && key === 'status') {
-              const order = row.original.statusOrder;
-              const tone = order >= 4 ? ' accepted' : order === 3 ? ' failed' : '';
-              return h('span', { className: 'lab-status' + tone }, value);
-            }
-            if (labOverview && key === 'version') return value || '—';
-            if (labOverview && key === 'brand' && row.original.brandId != null)
-              return overviewLink(value, 'brands');
-            const relation = links?.[key];
-            if (relation && sources.get(row.original.id)?.[relation[0]] != null)
-              return overviewLink(value, relation[1]);
-            return page === 'productionStatuses'
-              ? h('span', { className: 'erp-overview-status' }, value ?? '—')
-              : documentOverviewColumns || spec.readonly
-                ? (fmt(value) ?? '—')
-                : (value ?? '—');
-          },
-        })),
+        columns: overviewColumns
+          .filter((key) => key !== 'reconcile' || can('create', 'materialIssues'))
+          .map((key) => ({
+            accessorKey: key,
+            header:
+              page === 'productionWorkers' && key === 'contact'
+                ? 'Company / contact'
+                : (inventoryColumns?.labels?.[key] ??
+                  spec.columns.find((column) => column.key === key)?.label ??
+                  fabricOverviewLabels[key]),
+            cell: ({ getValue, row }) => {
+              const value = getValue();
+              if (inventoryColumns) {
+                const record = row.original;
+                if (key === 'lineCount') {
+                  return h(
+                    'details',
+                    {
+                      className: 'overview-line-details',
+                      onClick: (event) => event.stopPropagation(),
+                    },
+                    h('summary', null, 'See line items (' + value + ')'),
+                    record.rows.map((line) =>
+                      h(
+                        'div',
+                        { key: line.id },
+                        overviewLink(line.name, 'materials'),
+                        h(
+                          'strong',
+                          null,
+                          [fmt(line.quantity), line.unit].filter(Boolean).join(' '),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                if (key === 'reconcile') {
+                  return record.left > 0 && can('create', 'materialIssues')
+                    ? h(
+                        'button',
+                        { type: 'button', onClick: () => reconcile(record.id) },
+                        'Reconcile & close →',
+                      )
+                    : '—';
+                }
+                if (['status', 'reconciliation', 'direction'].includes(key)) {
+                  const tone = ['Available', 'Received', 'Marked reconciled'].includes(value)
+                    ? ' accepted'
+                    : '';
+                  return h('span', { className: 'lab-status' + tone }, value);
+                }
+                return overviewLink(fmt(value) ?? '—', inventoryOverviewTarget(page, key, record));
+              }
+              if (key === 'lineCount') return lineDetails(row.original.rows, row.original.quantity);
+              const target = fabricOverviewTargets[page]?.[key];
+              if (target && documentOverviewColumns) {
+                const values = [...new Set(row.original.rows.map((line) => line[key] || '—'))];
+                return values.map((label, index) =>
+                  h(React.Fragment, { key: label }, index > 0 && ', ', overviewLink(label, target)),
+                );
+              }
+              if (target) return overviewLink(value, target);
+              if (
+                (page === 'batches' && key === 'batch') ||
+                ((page === 'greige' || page === 'yarnLeft') && key === 'left')
+              ) {
+                return h(React.Fragment, null, fmt(value) ?? '—', reportDetails(row.original));
+              }
+              if (labOverview && key === 'status') {
+                const order = row.original.statusOrder;
+                const tone = order >= 4 ? ' accepted' : order === 3 ? ' failed' : '';
+                return h('span', { className: 'lab-status' + tone }, value);
+              }
+              if (labOverview && key === 'version') return value || '—';
+              if (labOverview && key === 'brand' && row.original.brandId != null)
+                return overviewLink(value, 'brands');
+              const relation = links?.[key];
+              if (relation && sources.get(row.original.id)?.[relation[0]] != null)
+                return overviewLink(value, relation[1]);
+              return page === 'productionStatuses'
+                ? h('span', { className: 'erp-overview-status' }, value ?? '—')
+                : documentOverviewColumns || spec.readonly
+                  ? (fmt(value) ?? '—')
+                  : (value ?? '—');
+            },
+          })),
+        canOpen:
+          page === 'materialIssues'
+            ? (record) => record.reconciliation !== 'Marked reconciled'
+            : undefined,
         onOpen: labOverview ? setLabProgressId : !spec.readonly && can('edit') ? edit : undefined,
       });
       const openEdition = labOverview && sources.get(labProgressId);
@@ -927,7 +987,7 @@ function App({ live, refreshWorkspaceAccess }) {
           ),
         ),
       );
-    if (spec.inventory || spec.miscellaneous)
+    if (spec.miscellaneous)
       return h(
         'section',
         { className: 'overview-grid' },
@@ -939,9 +999,7 @@ function App({ live, refreshWorkspaceAccess }) {
             page,
             index,
             onEdit: edit,
-            onReconcile: reconcile,
             editable: !spec.readonly && can('edit'),
-            reconcilable: can('create', 'materialIssues'),
           }),
         ),
       );
@@ -1318,7 +1376,7 @@ function App({ live, refreshWorkspaceAccess }) {
                                   description: spec.subtitle,
                                   view,
                                   action:
-                                    overviewColumns && can('create')
+                                    overviewColumns && !spec.readonly && can('create')
                                       ? h(
                                           'button',
                                           { className: 'primary', onClick: () => edit(null) },
