@@ -749,13 +749,18 @@ function App({ live, refreshWorkspaceAccess }) {
     if (!can(mode === 'edition' ? 'create' : 'edit', 'labDips')) return;
     setEditor({ page: 'labDips', id: mode === 'edition' ? null : id, sourceId: id, mode });
   }
-  function overviewLink(value, target) {
+  function overviewLink(value, target, finishedGoods) {
     return target && value && value !== '—' && value !== 'Not selected' && can('view', target)
       ? h(
           'a',
           {
-            href: '/fabric.html' + (live ? '?live=1' : '') + '#' + target,
-            onClick: (event) => followWorkspaceLink(event, () => navigate(target)),
+            href:
+              '/fabric.html' +
+              (live ? '?live=1' : '') +
+              (finishedGoods ? '&finishedGoods=' + finishedGoods : '') +
+              '#' +
+              target,
+            onClick: (event) => followWorkspaceLink(event, () => navigate(target, finishedGoods)),
           },
           value,
         )
@@ -1273,6 +1278,7 @@ function App({ live, refreshWorkspaceAccess }) {
                         client: live ? getAccessClient() : null,
                         key: actor + ':' + finishedGoodsPage,
                         screen: finishedGoodsPage,
+                        link: overviewLink,
                         canCreate: live && can('create'),
                         capabilities: {
                           format: can('format', 'finishedProducts'),

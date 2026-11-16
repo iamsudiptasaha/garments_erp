@@ -9,32 +9,37 @@ export function FinishedGoodsEditor({
   record = false,
   disabled = false,
   defer = false,
+  onDismiss,
 }) {
   const dialog = useRef(null);
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (onDismiss && !dialog.current.open) dialog.current.showModal();
+  }, [onDismiss]);
   return h(
     'div',
     { className: record ? undefined : 'fabric-actions fg-create-actions' },
-    h(
-      'button',
-      {
-        type: 'button',
-        className: defer ? undefined : record ? 'open-document' : 'primary',
-        disabled,
-        onClick: () => {
-          if (defer) setOpen(true);
-          dialog.current.showModal();
+    !onDismiss &&
+      h(
+        'button',
+        {
+          type: 'button',
+          className: defer ? undefined : record ? 'open-document' : 'primary',
+          disabled,
+          onClick: () => {
+            if (defer) setOpen(true);
+            dialog.current.showModal();
+          },
         },
-      },
-      label,
-    ),
+        label,
+      ),
     h(
       'dialog',
       {
         ref: dialog,
         className: 'fabric-dialog',
         'aria-label': title,
-        onClose: defer ? () => setOpen(false) : undefined,
+        onClose: onDismiss ?? (defer ? () => setOpen(false) : undefined),
       },
       h(
         'div',
@@ -43,31 +48,6 @@ export function FinishedGoodsEditor({
         h('button', { type: 'button', onClick: () => dialog.current.close() }, 'Close'),
       ),
       (!defer || open) && children(() => dialog.current.close()),
-    ),
-  );
-}
-
-export function FinishedGoodsCards({ title, columns, rows, headline = columns[0][0], actions }) {
-  return h(
-    'div',
-    { className: 'overview-grid' },
-    rows.map((row, index) =>
-      h(
-        'article',
-        { className: `overview-card tone-${index % 4}`, key: row.id ?? row.size_id ?? row.item_id },
-        h('div', { className: 'card-top' }, h('span', { className: 'card-kicker' }, title)),
-        h('h2', null, row[headline] ?? '—'),
-        h(
-          'dl',
-          { className: 'fg-card-fields' },
-          columns
-            .filter(([key]) => key !== headline)
-            .map(([key, label]) =>
-              h('div', { key }, h('dt', null, label), h('dd', null, row[key] ?? '—')),
-            ),
-        ),
-        actions?.(row),
-      ),
     ),
   );
 }
