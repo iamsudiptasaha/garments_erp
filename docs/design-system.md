@@ -90,6 +90,7 @@ Migrated Overview sections:
 - Production → Stages (`productionStages`). Uses the shared Overview table and the existing editor.
 - Production → Job workers (`productionWorkers`). Uses the shared Overview table and the existing editor.
 - Production → Items (`productionItems`). Uses the shared Overview table and the existing editor.
+- Production → Challans and Worker bills. Each document table opens the existing dialog by its document key. The overview search includes the existing job-line descriptions or bill assignments. Linked workers, issuers and challans navigate to the authorized ERP pages.
 - Employee / HR → Employees (`overview-employees`). Employee code opens the existing Employee profile using `employee.id`. The contact name and existing photo appear beside the code. The contact name links to Contacts when the viewer has access, and the verifier is shown using the readable name from the Employee snapshot. The existing Current, Active, Inactive and Archived scope applies before grid filters. Employee view permission allows opening the profile, and the editor applies its existing create, edit and archive rules. The directory cards and their styles were removed. The Employee worksheet retains its existing controls.
 
 - Employee / HR → Blood groups, Employment types and Gender. Each reference page uses its own Overview grid preferences and displays Name and Updated at. The Overview identity button and the Sheet selection action open the same reference editor by stable record ID with Employee edit permission. Employee create permission controls Add. The dialog follows the shared Review and Confirm Save workflow and uses the existing reference service.
@@ -131,4 +132,4 @@ Run `npm --prefix fabric-poc run build` and `npm --prefix fabric-poc run e2e` fo
 
 ## Challan audit
 
-Challans and Worker Bills are sibling pages under Production. The workspace uses the established shell, the shared Challans Overview table, Worker Bill cards, FabricSheet, form groups, tables and dialogs. The worker bill editor selects the challan line it bills against. [Production documents](../fabric-poc/production-challan.html)
+Challans and Worker Bills are sibling pages under Production. The workspace uses the established shell, shared Overview tables, FabricSheet, form groups, tables and dialogs. The worker bill editor selects the challan line it bills against. [Production documents](../fabric-poc/production-challan.html)

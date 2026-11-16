@@ -177,7 +177,7 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
           expect(args.p_owner).toBe(actor);
           expect([first, second]).toContain(actor);
           if (args.p_grid !== 'workspace-navigation') {
-            if (args.p_grid === 'overview-production-challans') {
+            if (['overview-production-challans', 'overview-worker-bills'].includes(args.p_grid)) {
               const key = actor + ':' + args.p_grid;
               json = { ...saved.get(key), ...args.p_patch };
               if (args.p_patch) saved.set(key, json);
