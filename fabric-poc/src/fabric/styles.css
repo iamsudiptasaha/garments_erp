@@ -456,12 +456,6 @@ select {
   color: #738b9c;
   letter-spacing: 0;
 }
-.price-chip {
-  font-size: 12px;
-  background: #ffffff80;
-  border-radius: 7px;
-  padding: 10px;
-}
 .open-document {
   background: #ffffff94;
   border: 1px solid #ffffffb3;
@@ -469,18 +463,18 @@ select {
   font-size: 12px;
 }
 .card-lines,
-.movement-details {
+.overview-line-details {
   font-size: 11px;
   color: #647f93;
   margin-top: 18px;
 }
 .card-lines summary,
-.movement-details summary {
+.overview-line-details summary {
   cursor: pointer;
   padding: 8px 0;
 }
 .card-lines > div,
-.movement-details > div {
+.overview-line-details > div:not(.batch-journey) {
   display: flex;
   justify-content: space-between;
   gap: 15px;
@@ -489,6 +483,9 @@ select {
 }
 .overview-line-details {
   margin: 0;
+}
+.overview-line-details > div:not(.batch-journey) {
+  border-top-color: var(--erp-border);
 }
 .overview-line-details[open] {
   min-inline-size: 240px;

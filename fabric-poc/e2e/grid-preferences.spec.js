@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('Finished Goods searches, sorts and restores private grid settings across browsers', async ({
+test('Finished Goods Sheet and Fabric Overview restore private grid settings across browsers', async ({
   browser,
 }) => {
   test.skip(!!process.env.E2E_BASE_URL, 'Uses local authenticated fixtures');
@@ -49,12 +49,24 @@ test('Finished Goods searches, sorts and restores private grid settings across b
             enabled: true,
             permissions: {
               finishedProducts: { view: true, format: true, export: true, print: true },
+              yarnTypes: { view: true },
             },
           };
           break;
         case 'erp_finished_goods_summary':
           searches.push(args.p_sku);
           json = { sizes: stock.filter((row) => !args.p_sku || row.style_code === args.p_sku) };
+          break;
+        case 'erp_fabric_snapshot':
+          json = {
+            yarn_type: [
+              { id: '1', name: 'Cotton', yarn_count: '30S' },
+              { id: '2', name: 'Linen', yarn_count: '24S' },
+            ],
+          };
+          break;
+        case 'erp_dyed_bill_verifiers':
+          json = [];
           break;
         case 'erp_grid_preferences': {
           expect(args.p_owner).toBe(actor);
@@ -191,6 +203,28 @@ test('Finished Goods searches, sorts and restores private grid settings across b
     const other = await open(second, { width: 1024, height: 768 });
     await expect(other.getByLabel('Sheet zoom')).toHaveValue('1');
     await expect(other.getByLabel('Sort direction')).toHaveValue('asc');
+
+    const yarnTypes = '/fabric.html?live=1#yarnTypes';
+    await page.goto(yarnTypes);
+    const overviewSearch = (device) => device.getByRole('searchbox', { name: 'Search Yarn types' });
+    await overviewSearch(page).fill('Linen');
+    await page.getByRole('button', { name: 'Group', exact: true }).click();
+    await page.getByRole('button', { name: '+ Add grouping level' }).click();
+    await page.getByLabel('Group field 1').selectOption('count');
+    await page.getByRole('button', { name: 'Close dialog' }).click();
+    await expect
+      .poll(() => saved.get(first + ':overview-yarnTypes'))
+      .toMatchObject({
+        search: 'Linen',
+        grouping: ['count'],
+      });
+    await phone.goto(yarnTypes);
+    await expect(overviewSearch(phone)).toHaveValue('Linen');
+    await expect(phone.getByRole('button', { name: /▸ 24S/ })).toBeVisible();
+    await other.goto(yarnTypes);
+    await expect(overviewSearch(other)).toHaveValue('');
+    await expect(other.getByRole('cell', { name: 'Cotton', exact: true })).toBeVisible();
+    await expect(other.getByRole('cell', { name: 'Linen', exact: true })).toBeVisible();
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
   }
