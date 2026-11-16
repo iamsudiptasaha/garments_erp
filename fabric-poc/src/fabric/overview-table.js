@@ -1,4 +1,4 @@
-import { createElement as h, useEffect, useRef, useState } from 'react';
+import { createElement as h, useEffect, useId, useRef, useState } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -186,6 +186,7 @@ export function OverviewTable({ client, grid, title, records, columns, onOpen, t
   const [panel, setPanel] = useState(null);
   const [draft, setDraft] = useState(null);
   const dialog = useRef(null);
+  const captionId = useId();
   const expanded = preferences.expanded ?? {};
   const query = useGridSearch(draft ?? preferences.search ?? '');
   useEffect(() => {
@@ -359,13 +360,18 @@ export function OverviewTable({ client, grid, title, records, columns, onOpen, t
       ),
     h(
       'div',
-      { className: 'lab-record-table-wrap' },
+      {
+        className: 'lab-record-table-wrap',
+        role: 'region',
+        'aria-labelledby': captionId,
+        tabIndex: 0,
+      },
       h(
         'table',
         {
-          'aria-label': title,
           style: fixedWidth ? { width: fixedWidth, tableLayout: 'fixed' } : undefined,
         },
+        h('caption', { id: captionId, className: 'erp-overview-caption' }, title),
         h(
           'colgroup',
           null,
@@ -426,7 +432,11 @@ export function OverviewTable({ client, grid, title, records, columns, onOpen, t
                       onClick: header.column.getToggleSortingHandler(),
                     },
                     flexRender(header.column.columnDef.header, header.getContext()),
-                    sorted ? (sorted === 'asc' ? ' ↑' : ' ↓') : ' ↕',
+                    h(
+                      'span',
+                      { 'aria-hidden': true },
+                      sorted ? (sorted === 'asc' ? ' ↑' : ' ↓') : ' ↕',
+                    ),
                   ),
                   h('span', {
                     className: 'overview-resize',
