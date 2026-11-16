@@ -151,6 +151,7 @@ export const fabricColumnTypes = {
   contacts: {
     id: 'bigint',
     gst: 'text',
+    is_company: 'boolean',
     company_name: 'text',
     search_term: 'text',
     created_at: 'timestamp with time zone',

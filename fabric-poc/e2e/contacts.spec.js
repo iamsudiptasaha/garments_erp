@@ -161,9 +161,59 @@ test('a viewer opens the same contact interface with only permitted sections', a
   await page.getByRole('button', { name: 'View →', exact: true }).first().click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Basic Information' })).toBeVisible();
+  await expect(dialog.getByRole('checkbox', { name: 'Is Company' })).toBeDisabled();
   await expect(dialog.getByRole('textbox')).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: 'Review Changes' })).toHaveCount(0);
   await expect(section(dialog, 'Bank accounts')).toHaveCount(0);
   await section(dialog, 'Contact items').click();
   await expect(dialog.getByRole('button', { name: '+ Add contact item' })).toHaveCount(0);
+});
+
+test('company GST is optional, persists and clears when unchecked', async ({ page }) => {
+  test.skip(!!process.env.E2E_BASE_URL, 'No production writes');
+  await page.goto('/fabric.html#materialContacts');
+  const dialog = page.getByRole('dialog');
+  const company = dialog.getByRole('checkbox', { name: 'Is Company' });
+  const gst = dialog.getByLabel('GST number', { exact: true });
+  const save = async () => {
+    await dialog.getByRole('button', { name: 'Review Changes', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Confirm Save', exact: true }).click();
+    await expect(dialog).toBeHidden();
+  };
+  const open = async (name) => {
+    await page
+      .getByRole('article')
+      .filter({ has: page.getByRole('heading', { name, exact: true }) })
+      .getByRole('button', { name: 'View/Edit →', exact: true })
+      .click();
+  };
+  await page.getByRole('button', { name: '+ Add contact', exact: true }).click();
+  await dialog.getByLabel('Company / contact name').fill('Synthetic GST contact');
+  await expect(company).not.toBeChecked();
+  await expect(gst).toBeHidden();
+  await save();
+  await open('Synthetic GST contact');
+  await company.check();
+  await expect(gst).toBeEnabled();
+  await save();
+  await open('Synthetic GST contact');
+  await expect(company).toBeChecked();
+  await expect(gst).toHaveValue('');
+  await gst.fill('GST-SYNTHETIC');
+  await save();
+  await page.reload();
+  await open('Synthetic GST contact');
+  await expect(gst).toHaveValue('GST-SYNTHETIC');
+  await company.uncheck();
+  await expect(gst).toBeHidden();
+  await dialog.getByRole('button', { name: 'Review Changes', exact: true }).click();
+  await expect(dialog.getByText('GST-SYNTHETIC → —')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Confirm Save', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await page.reload();
+  await open('Synthetic GST contact');
+  await expect(company).not.toBeChecked();
+  await expect(gst).toBeHidden();
+  await company.check();
+  await expect(gst).toHaveValue('');
 });

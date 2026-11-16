@@ -13,7 +13,10 @@ import { initialAccess, allowed } from '../src/admin/model.js';
 import { pages } from '../src/fabric/catalog.js';
 test('central Contacts retains its old key and updates suppliers without replacing other contact fields', () => {
   const data = initialFabric();
-  data.contacts.find((r) => r.id === 's1').gst = 'DEMO-GST';
+  Object.assign(
+    data.contacts.find((r) => r.id === 's1'),
+    { is_company: true, gst: 'DEMO-GST' },
+  );
   const draft = documentFor(data, 'materialContacts', 's1');
   draft.header.company_name = 'Shivam Yarns Updated';
   draft.header.search_term = 'Shivam';

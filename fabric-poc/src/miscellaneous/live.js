@@ -18,10 +18,10 @@ const inputValues = (row, fields) =>
 export function contactWrite(data, draft, remove = false) {
   const { header, sections } = draft;
   if (!remove && !present(header.company_name)) throw Error('Enter a company / contact name.');
+  const values = inputValues(header, miscellaneousPages.materialContacts.header);
+  values.gst = header.is_company === true && present(header.gst) ? header.gst : null;
   const document = {
-    header: remove
-      ? deletion(header)
-      : { ...revision(header), ...inputValues(header, miscellaneousPages.materialContacts.header) },
+    header: remove ? deletion(header) : { ...revision(header), ...values },
     sections: {},
   };
   if (!remove)

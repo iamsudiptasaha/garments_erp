@@ -1,6 +1,7 @@
 {
   "migration": "20261031201306_contact_primary_selections.sql",
   "emailMigration": "20261112095749_verified_employee_email_change.sql",
+  "companyMigration": "20261116160050_contact_company_gst.sql",
   "flags": [
     {"table": "contact_items", "column": "primary_address", "index": "contact_items_one_primary_address"},
     {"table": "contact_items", "column": "primary_phone", "index": "contact_items_one_primary_phone"},

@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 const contract=JSON.parse(readFileSync(new URL('../database/contracts/contact-primary.json',import.meta.url),'utf8'));
 const migration=readFileSync(new URL('../supabase/migrations/'+contract.migration,import.meta.url),'utf8');
 const emailMigration=readFileSync(new URL('../supabase/migrations/'+contract.emailMigration,import.meta.url),'utf8');
+const companySql=readFileSync(new URL('../supabase/migrations/'+contract.companyMigration,import.meta.url),'utf8');
 // Keep the captured live metadata unchanged. Add only reviewed, migration-backed
 // columns to the expected release schema until the next live metadata capture.
 export function contactReleaseSchema(snapshot,sql=migration){
@@ -24,5 +25,13 @@ export function contactReleaseSchema(snapshot,sql=migration){
     throw Error('Live contact email field differs from release contract: '+name);
   }else schema.columns.push({table_schema:'garments_erp',table_name:'contact_items',column_name:name,data_type:type,is_nullable:nullable,column_default:defaultValue,pending_migration:contract.emailMigration});
  }
+ if(!companySql.includes('alter table garments_erp.contacts add column is_company boolean not null default false;') ||
+    !companySql.includes('check (is_company or gst is null);'))
+  throw Error('Contacts company flag or GST constraint differs from the release contract.');
+ const company=schema.columns.find(c=>c.table_schema==='garments_erp'&&c.table_name==='contacts'&&c.column_name==='is_company');
+ if(company){
+  if(company.data_type!=='boolean'||company.is_nullable!=='NO'||company.column_default!=='false')
+   throw Error('Live Contacts company flag differs from the release contract.');
+ }else schema.columns.push({table_schema:'garments_erp',table_name:'contacts',column_name:'is_company',data_type:'boolean',is_nullable:'NO',column_default:'false',pending_migration:contract.companyMigration});
  return schema;
 }

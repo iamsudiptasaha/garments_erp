@@ -899,6 +899,7 @@ export function saveDocument(data, page, draft) {
       (!Number.isFinite(header[field.key]) || header[field.key] < 0)
     )
       throw Error(`${field.label} must be a non-negative number.`);
+  if (page === 'materialContacts' && (!header.is_company || !header.gst)) header.gst = null;
   if (spec.inventory) prepareInventoryEdit(next, page, header, draft);
   if (page === 'productionDesigns') header.share_weight = 1;
   if (
