@@ -154,6 +154,7 @@ function workspaceRoute() {
 const productionOverviewColumns = {
   productionStatuses: ['name'],
   productionStageTypes: ['name'],
+  productionPartTypes: ['name'],
 };
 
 function isManagementPage(page, live) {

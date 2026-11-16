@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-const pages = [['productionStageTypes', 'Stage types']];
+const pages = [
+  ['productionStageTypes', 'Stage types'],
+  ['productionPartTypes', 'Part names'],
+];
 
 for (const [route, title] of pages) {
   test(`${title} uses the Overview table and existing record workflow`, async ({ page }) => {
