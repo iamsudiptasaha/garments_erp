@@ -165,10 +165,15 @@ const productionOverviewColumns = {
   productionDesigns: ['name'],
   productionFlags: ['name'],
   productionGenders: ['name'],
+  brands: ['name', 'contact', 'purpose'],
 };
 
 const productionOverviewLinks = {
   productionProductTypes: { gender: ['gender_id', 'productionGenders'] },
+  brands: {
+    contact: ['contacts_id', 'materialContacts'],
+    purpose: ['contact_purpose_id', 'contactCategories'],
+  },
 };
 
 function isManagementPage(page, live) {
