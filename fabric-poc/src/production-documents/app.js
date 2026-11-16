@@ -1,4 +1,6 @@
 import { getAccessClient } from '../access/client.js';
+import { followWorkspaceLink } from '../access/workspace-routes.js';
+import { OverviewTable } from '../fabric/overview-table.js';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FabricSheet } from '../fabric/sheet.js';
 import {
@@ -16,7 +18,7 @@ const h = React.createElement;
 const documentMaxAge = 60_000;
 const documentActions = ['view', 'create', 'edit', 'delete', 'format', 'print', 'export'];
 
-export function ProductionDocumentWorkspace({ page, can, changes }) {
+export function ProductionDocumentWorkspace({ page, can, changes, navigate }) {
   const [visited, setVisited] = useState({});
   useEffect(() => {
     if (!page || visited[page] || !can('view', page)) return;
@@ -29,12 +31,14 @@ export function ProductionDocumentWorkspace({ page, can, changes }) {
           billing: key === 'jobWorkerBills',
           visible: page === key,
           changes,
+          can,
+          navigate,
         })
       : null,
   );
 }
 
-function ProductionDocuments({ billing, visible, changes }) {
+function ProductionDocuments({ billing, visible, changes, can, navigate }) {
   const host = useRef(null);
   const editor = useRef(null);
   const controller = useRef(null);
@@ -44,6 +48,7 @@ function ProductionDocuments({ billing, visible, changes }) {
   const title = billing ? 'Worker bills' : 'Challans';
   const presentation = screen.presentation || 'overview';
   const sheet = presentation === 'sheet';
+  const tableOverview = !billing;
   const spec = useMemo(
     () => ({ title, columns: billing ? billColumns : columns }),
     [billing, title],
@@ -58,6 +63,22 @@ function ProductionDocuments({ billing, visible, changes }) {
       lineCount: record.lines.length,
     }));
   }, [billing, screen.matches, screen.snapshot]);
+  const overviewRows = useMemo(() => {
+    const data = screen.snapshot;
+    if (!data) return [];
+    return data.records.map((record) => {
+      const worker = data.workers.find(([id]) => id === record.worker)?.[1];
+      return {
+        id: record.key,
+        number: record.id,
+        date: record.date,
+        employee: record.employeeName,
+        worker,
+        lineCount: record.lines.length,
+        searchText: challanSearchText(record, worker, data.jobs),
+      };
+    });
+  }, [screen.snapshot]);
   useLayoutEffect(() => {
     const instance = mountDocuments(
       host.current,
@@ -83,6 +104,29 @@ function ProductionDocuments({ billing, visible, changes }) {
     if (screen.focus) editor.current.querySelector(screen.focus)?.focus();
   }, [screen]);
   const permissions = screen.snapshot?.permissions || {};
+  const add = permissions.create
+    ? h(
+        'button',
+        { type: 'button', className: 'primary', 'data-action': billing ? 'new-bill' : 'new' },
+        billing ? '+ New worker bill' : '+ New challan',
+      )
+    : null;
+  const overviewColumns = challanOverviewColumns.map((column) => ({
+    ...column,
+    cell: ({ getValue }) => {
+      const value = getValue();
+      const target = column.target;
+      if (!value || !target || !can('view', target)) return value ?? '—';
+      return h(
+        'a',
+        {
+          href: '/fabric.html?live=1#' + target,
+          onClick: (event) => followWorkspaceLink(event, () => navigate(target)),
+        },
+        value,
+      );
+    },
+  }));
   return h(
     'section',
     {
@@ -102,40 +146,37 @@ function ProductionDocuments({ billing, visible, changes }) {
           : 'Review issued challans and their job-variant lines.',
         view: presentation,
         viewLabel: title + ' view',
+        action: tableOverview && !sheet ? add : undefined,
         onView: (mode) => controller.current.changeView(mode),
       }),
-      h(
-        RecordPageActions,
-        {
-          view: presentation,
-          label: 'Search ' + title.toLowerCase(),
-          placeholder: 'Search ' + title.toLowerCase() + '…',
-          value: screen.search || '',
-          onSearch: (value) => controller.current.changeSearch(value),
-        },
-        permissions.create &&
-          h(
-            'button',
-            { type: 'button', className: 'primary', 'data-action': billing ? 'new-bill' : 'new' },
-            billing ? '+ New worker bill' : '+ New challan',
-          ),
-        sheet &&
-          h(
-            React.Fragment,
-            null,
+      (sheet || !tableOverview) &&
+        h(
+          RecordPageActions,
+          {
+            view: presentation,
+            label: 'Search ' + title.toLowerCase(),
+            placeholder: 'Search ' + title.toLowerCase() + '…',
+            value: screen.search || '',
+            onSearch: (value) => controller.current.changeSearch(value),
+          },
+          add,
+          sheet &&
             h(
-              'button',
-              { type: 'button', 'data-action': 'open-selected', disabled: !selection },
-              billing ? 'Open selected bill' : 'Open selected challan',
-            ),
-            permissions.edit &&
+              React.Fragment,
+              null,
               h(
                 'button',
-                { type: 'button', 'data-action': 'edit-selected', disabled: !selection },
-                billing ? 'Edit selected bill' : 'Edit selected document',
+                { type: 'button', 'data-action': 'open-selected', disabled: !selection },
+                billing ? 'Open selected bill' : 'Open selected challan',
               ),
-          ),
-      ),
+              permissions.edit &&
+                h(
+                  'button',
+                  { type: 'button', 'data-action': 'edit-selected', disabled: !selection },
+                  billing ? 'Edit selected bill' : 'Edit selected document',
+                ),
+            ),
+        ),
       h(RecordPageStatus, {
         notice: notice || (screen.snapshot ? liveRecordNotice : ''),
         onRefresh: () => controller.current.refresh(),
@@ -154,18 +195,29 @@ function ProductionDocuments({ billing, visible, changes }) {
         h(
           'div',
           { hidden: sheet },
-          screen.matches.length
-            ? h(DocumentCards, {
-                billing,
-                matches: screen.matches,
-                workers: screen.snapshot.workers,
+          tableOverview
+            ? h(OverviewTable, {
+                client: getAccessClient(),
+                grid: 'overview-production-challans',
+                title,
+                records: overviewRows,
+                columns: overviewColumns,
+                searchLabel: 'Search ' + title.toLowerCase(),
+                getSearchText: (record) => record.searchText,
+                onOpen: (key) => controller.current.openRecord(key),
               })
-            : h(RecordPageEmpty, {
-                query: screen.search,
-                prompt: permissions.create
-                  ? 'Add the first document to get started.'
-                  : 'No documents are available.',
-              }),
+            : screen.matches.length
+              ? h(DocumentCards, {
+                  billing,
+                  matches: screen.matches,
+                  workers: screen.snapshot.workers,
+                })
+              : h(RecordPageEmpty, {
+                  query: screen.search,
+                  prompt: permissions.create
+                    ? 'Add the first document to get started.'
+                    : 'No documents are available.',
+                }),
         ),
       screen.snapshot &&
         screen.sheetVisited &&
@@ -242,6 +294,29 @@ function DocumentCards({ billing, matches, workers }) {
       ),
     ),
   );
+}
+
+const challanOverviewColumns = [
+  { accessorKey: 'number', header: 'Challan' },
+  { accessorKey: 'date', header: 'Issue date' },
+  { accessorKey: 'employee', header: 'Issued by', target: 'employees' },
+  { accessorKey: 'worker', header: 'Job worker', target: 'productionWorkers' },
+  { accessorKey: 'lineCount', header: 'Job lines' },
+];
+
+function challanSearchText(record, worker, jobs) {
+  return [
+    record.id,
+    record.employeeName,
+    worker,
+    ...record.lines.flatMap((line) => [
+      line.job,
+      line.part,
+      jobs[line.job]?.[2],
+      line.description,
+      line.variant,
+    ]),
+  ].join(' ');
 }
 
 const columns = [
@@ -375,14 +450,8 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
   const table = (head, body) =>
     `<div class="lab-record-table-wrap"><table><thead><tr>${head.map((h) => `<th scope="col">${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
   function matchingRecords() {
-    return records.filter((r) =>
-      [
-        r.id,
-        r.employeeName,
-        workerName(r.worker),
-        ...r.lines.flatMap((l) => [l.job, l.part, jobs[l.job]?.[2], l.description, l.variant]),
-      ]
-        .join(' ')
+    return records.filter((record) =>
+      challanSearchText(record, workerName(record.worker), jobs)
         .toLowerCase()
         .includes(search.toLowerCase()),
     );
@@ -1039,12 +1108,25 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
       .querySelector('[data-action^="edit-bill"]')
       ?.addEventListener('click', () => dialog.close());
   }
+  function openRecord(key) {
+    if (busy || !permissions.view) return;
+    if (billing) {
+      const bill = bills.find((record) => record.key === key);
+      if (bill) viewBill(bill);
+      return;
+    }
+    const challan = records.find((record) => record.key === key);
+    if (!challan) return;
+    selected = challan;
+    view = 'detail';
+    publish();
+  }
   root.addEventListener(
     'click',
     async (event) => {
       const action = event.target.closest('[data-action]')?.dataset.action;
       if (!action) return;
-      let [cmd, arg] = action.split(':');
+      const [cmd, arg] = action.split(':');
       if (busy) return;
       if (cmd === 'edit-selected' && (!permissions.edit || !sheetSelection)) return;
       if (cmd === 'open-selected' && !sheetSelection) return;
@@ -1084,13 +1166,8 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
         if (cmd === 'new-bill' || bill) editBill(bill);
         return;
       }
-      if (view === 'billing' && cmd === 'open-selected') {
-        cmd = 'bill';
-        arg = sheetSelection;
-      }
-      if (cmd === 'bill') {
-        const bill = bills.find((b) => b.key === arg);
-        if (bill) viewBill(bill);
+      if (cmd === 'bill' || cmd === 'open-selected') {
+        openRecord(arg || sheetSelection);
         return;
       }
       if (cmd === 'job') {
@@ -1108,7 +1185,7 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
         void load();
         return;
       }
-      if (cmd === 'open' || cmd === 'open-selected' || cmd === 'edit-selected') {
+      if (cmd === 'edit-selected') {
         selected = records.find((r) => r.key === (arg || sheetSelection));
         if (!selected) return;
         view = 'detail';
@@ -1215,6 +1292,7 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
   );
   return {
     select,
+    openRecord,
     refresh: load,
     changeView(mode) {
       presentation = mode;

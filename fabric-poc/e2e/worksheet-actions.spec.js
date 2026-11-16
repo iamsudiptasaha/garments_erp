@@ -207,7 +207,22 @@ for (const [route, title, open, edit, add, record] of [
       const { permissions } = await documentFixtures(page);
       await page.setViewportSize({ width: 1280, height: 720 });
       await page.goto('/production-challan.html#' + route);
-      const overview = page.locator('.overview-grid');
+      const overview =
+        route === 'challans'
+          ? page.getByRole('region', { name: title + ' Overview', exact: true })
+          : page.locator('.overview-grid');
+      if (route === 'challans') {
+        const table = overview.getByRole('table', { name: title, exact: true });
+        await overview.getByRole('searchbox').fill('Description 2');
+        await expect(table.getByRole('button', { name: record, exact: true })).toBeVisible();
+        await expect(table.getByRole('row')).toHaveCount(2);
+        await table.getByRole('button', { name: record, exact: true }).click();
+        const detail = page.getByRole('dialog');
+        await expect(detail.getByRole('heading', { name: record, exact: true })).toBeVisible();
+        await detail.getByRole('button', { name: 'Close' }).click();
+        await overview.getByRole('button', { name: 'Clear search' }).click();
+        await expect(table.getByRole('row')).toHaveCount(3);
+      }
       await expect(overview).toBeVisible();
       const screenshot = { animations: 'disabled', caret: 'hide' };
       const before = await overview.screenshot(screenshot);
@@ -335,7 +350,7 @@ test('production document views retain their DOM and cache across workspace navi
   });
   const title = page.getByRole('heading', { name: 'Challans', exact: true });
   const search = page.getByRole('searchbox', { name: 'Search challans' });
-  const cards = page.getByRole('heading', { name: 'CH-1', exact: true });
+  const cards = page.getByRole('button', { name: 'CH-1', exact: true });
   const go = (name) => page.getByRole('link', { name, exact: true }).click();
   const activePanel = page.getByRole('region', { name: 'Production documents' });
   const toggle = (name) => activePanel.getByRole('button', { name, exact: true }).click();
@@ -459,7 +474,7 @@ test('production document page chrome matches approved record pages at desktop a
     let reference;
     for (const [route, title] of pages) {
       const documents = route === 'challans' || route === 'worker-bills';
-      const migrated = route === 'productionProductTypes';
+      const migrated = route === 'productionProductTypes' || route === 'challans';
       await page.goto(
         documents
           ? '/production-challan.html?visual=' + route + '#' + route
@@ -481,6 +496,8 @@ test('production document page chrome matches approved record pages at desktop a
         await expect(
           main.getByText('Live Supabase records · saved changes are shared', { exact: false }),
         ).toBeVisible();
+      } else if (migrated) {
+        await expect(main.getByRole('table', { name: title, exact: true })).toBeVisible();
       } else {
         await expect(main.locator('.overview-card:visible').first()).toBeVisible();
       }

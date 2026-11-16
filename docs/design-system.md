@@ -131,4 +131,4 @@ Run `npm --prefix fabric-poc run build` and `npm --prefix fabric-poc run e2e` fo
 
 ## Challan audit
 
-Challans and Worker Bills are sibling pages under Production. The workspace uses the established shell, overview cards, FabricSheet, form groups, tables and dialogs. The worker bill editor selects the challan line it bills against. [Production documents](../fabric-poc/production-challan.html)
+Challans and Worker Bills are sibling pages under Production. The workspace uses the established shell, the shared Challans Overview table, Worker Bill cards, FabricSheet, form groups, tables and dialogs. The worker bill editor selects the challan line it bills against. [Production documents](../fabric-poc/production-challan.html)

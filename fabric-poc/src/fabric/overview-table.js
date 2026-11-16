@@ -181,7 +181,17 @@ function ColumnSettings({ table }) {
   });
 }
 
-export function OverviewTable({ client, grid, title, records, columns, onOpen, toolbar }) {
+export function OverviewTable({
+  client,
+  grid,
+  title,
+  records,
+  columns,
+  onOpen,
+  toolbar,
+  searchLabel = 'Search ' + title,
+  getSearchText,
+}) {
   const { preferences, ready, save, error } = useGridPreferences(client, grid);
   const [panel, setPanel] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -219,7 +229,13 @@ export function OverviewTable({ client, grid, title, records, columns, onOpen, t
     getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
     groupedColumnMode: false,
-    globalFilterFn: (row, id, value) => text(row.getValue(id)).includes(text(value)),
+    globalFilterFn: (row, id, value) => {
+      const searchValue =
+        getSearchText && id === identity.accessorKey ? getSearchText(row.original) : '';
+      return (
+        text(row.getValue(id)).includes(text(value)) || text(searchValue).includes(text(value))
+      );
+    },
     state: {
       globalFilter: query,
       columnFilters,
@@ -288,7 +304,7 @@ export function OverviewTable({ client, grid, title, records, columns, onOpen, t
         { className: 'erp-overview-search' },
         h(Search, { size: 16, 'aria-hidden': true }),
         h(GridSearch, {
-          label: 'Search ' + title,
+          label: searchLabel,
           value: draft ?? preferences.search ?? '',
           onChange: changeSearch,
           sheet: false,

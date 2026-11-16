@@ -1415,6 +1415,7 @@ function App({ live, refreshWorkspaceAccess }) {
           page: documentPage ? page : null,
           can,
           changes: productionDocumentChanges,
+          navigate,
         }),
         renderWorkspace(),
       ),
