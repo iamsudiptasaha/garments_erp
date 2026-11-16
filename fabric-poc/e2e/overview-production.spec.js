@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 const pages = [
+  ['productionWorkers', 'Job workers'],
+
   ['productionStages', 'Stages'],
 
   ['brands', 'Brands'],
@@ -36,7 +38,13 @@ for (const [route, title] of pages) {
     await identity.press('Enter');
     const editor = page.getByRole('dialog');
     await expect(editor).toBeVisible();
-    await expect(editor.locator('input').first()).toHaveValue(name);
+    if (route === 'productionWorkers') {
+      await expect(editor.getByLabel('Company / contact').locator('option:checked')).toHaveText(
+        name,
+      );
+    } else {
+      await expect(editor.locator('input').first()).toHaveValue(name);
+    }
     await editor
       .getByRole('button', { name: /cancel|close/i })
       .first()

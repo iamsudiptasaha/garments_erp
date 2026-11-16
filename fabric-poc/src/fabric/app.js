@@ -167,6 +167,7 @@ const productionOverviewColumns = {
   productionGenders: ['name'],
   brands: ['name', 'contact', 'purpose'],
   productionStages: ['name', 'abbr', 'order', 'type', 'track'],
+  productionWorkers: ['name', 'contact', 'purpose', 'jobs'],
 };
 
 const productionOverviewLinks = {
@@ -176,6 +177,10 @@ const productionOverviewLinks = {
     purpose: ['contact_purpose_id', 'contactCategories'],
   },
   productionStages: { type: ['stage_type_id', 'productionStageTypes'] },
+  productionWorkers: {
+    contact: ['contacts_id', 'materialContacts'],
+    purpose: ['contact_purpose_id', 'contactCategories'],
+  },
 };
 
 function isManagementPage(page, live) {
@@ -673,10 +678,17 @@ function App({ live, refreshWorkspaceAccess }) {
         client: live ? getAccessClient() : null,
         grid: page === 'productionStatuses' ? 'overview-production-statuses' : 'overview-' + page,
         title: spec.title,
-        records: groups.map(({ id, rows }) => ({ ...rows[0], id })),
+        records: groups.map(({ id, rows: [record] }) =>
+          page === 'productionWorkers'
+            ? { ...record, id, contact: record.name }
+            : { ...record, id },
+        ),
         columns: overviewColumns.map((key) => ({
           accessorKey: key,
-          header: spec.columns.find((column) => column.key === key).label,
+          header:
+            page === 'productionWorkers' && key === 'contact'
+              ? 'Company / contact'
+              : spec.columns.find((column) => column.key === key).label,
           cell: ({ getValue, row }) => {
             const value = getValue();
             const relation = productionOverviewLinks[page]?.[key];
