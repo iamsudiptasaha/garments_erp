@@ -13,7 +13,7 @@ for (const [route, title, add, edit, form] of [
     const toggle = page.locator('.fabric-page-header .fabric-view-toggle');
     const overview =
       route === 'suppliers'
-        ? page.getByRole('region', { name: 'Suppliers Overview', exact: true })
+        ? page.getByRole('table', { name: 'Suppliers', exact: true })
         : page.locator('.overview-grid').first();
     await expect(overview).toBeVisible();
     const screenshot = { animations: 'disabled', caret: 'hide' };
@@ -54,7 +54,9 @@ for (const [route, title, add, edit, form] of [
     await page.setViewportSize({ width: 1280, height: 720 });
     await toggle.getByRole('button', { name: 'Overview', exact: true }).click();
     await page.mouse.move(0, 0);
-    expect(await overview.screenshot(screenshot)).toEqual(before);
+    await expect
+      .poll(async () => (await overview.screenshot(screenshot)).equals(before))
+      .toBe(true);
     await page.getByRole('button', { name: 'Sheet', exact: true }).click();
     await expect(page.getByLabel('Sheet zoom')).toHaveValue('1.25');
   });
