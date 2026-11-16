@@ -8,6 +8,16 @@ import {FILE_TARGETS} from '../fabric-poc/src/files/model.js';
 import {checklistFields} from '../fabric-poc/src/production/item-model.js';
 import {employeeRelations} from '../fabric-poc/src/hr/model.js';
 import {checkBoundaries} from './coherence-boundaries.mjs';
+function fabricSeriesReleaseSchema(schema) {
+ const migration = '20261117100000_fabric_receipt_cost_and_sku.sql';
+ const sql = readFileSync(new URL('../supabase/migrations/' + migration, import.meta.url), 'utf8');
+ if (!sql.includes('add column series smallint unique check (series between 1 and 9)'))
+  throw Error('Fabric Types requires a unique SKU series from 1 to 9');
+ return {...schema, columns: [...schema.columns, {
+  table_schema: 'garments_erp', table_name: 'fabric_type', column_name: 'series',
+  data_type: 'smallint', is_nullable: 'YES', pending_migration: migration,
+ }]};
+}
 function checkoutReleaseSchema(schema) {
  const migration = '20261108135000_checkout_variant.sql';
  const sql = readFileSync(new URL('../supabase/migrations/' + migration, import.meta.url), 'utf8');
@@ -61,7 +71,8 @@ export function inspect(schema, catalogue, screens=pages){
  return [...new Set(errors)].sort();
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
- const schema=checkoutReleaseSchema(productionReferenceSchema(fabricBatchReleaseSchema(employeePhotoReleaseSchema(contactReleaseSchema(JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url))))))));
+ const captured=JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url)));
+ const schema=fabricSeriesReleaseSchema(checkoutReleaseSchema(productionReferenceSchema(fabricBatchReleaseSchema(employeePhotoReleaseSchema(contactReleaseSchema(captured))))));
  const catalogue=JSON.parse(readFileSync(new URL('../database/catalogue/screen-table-map.json',import.meta.url)));
  const errors=[...inspect(schema,catalogue),...inspectFabricBatch(schema)];
  try{console.log(checkBoundaries());}catch(e){errors.push(e.message)}

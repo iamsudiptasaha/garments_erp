@@ -467,6 +467,7 @@ export function fabricRows(data, page) {
       id: r.id,
       documentId: r.id,
       name: r.name,
+      series: r.series,
       knitting: data.knitting_bill_item.filter((l) => l.fabric_type_id === r.id).length,
       programs: data.dyeing_program_item.filter((l) => l.fabric_type_id === r.id).length,
     }));

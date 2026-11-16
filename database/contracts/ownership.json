@@ -441,6 +441,17 @@
       "liveWrites": "Local reference adapter stays separate; live mode uses the reviewed production setup contract."
     }
   },
+  "fabricPlanner": {
+    "source": "fabric-poc/src/fabric/planner.js",
+    "readCommand": "public.erp_fabric_planner_snapshot",
+    "requirementCommand": "public.erp_save_fabric_requirement",
+    "dyeingLinkCommand": "public.erp_set_fabric_plan_dyeing_link",
+    "readPermissions": ["productionItems", "programs"],
+    "requirements": "Production Items edit permission controls consumption for an existing variant and fabric type.",
+    "links": "Production Items or Dyeing Programs edit permission controls links from that surface. Both resources require view permission.",
+    "coverage": "Read-only estimates from current quantities. The planner writes no stock movements.",
+    "receipt": "The verified dyed bill owns the automatic receipt quantity, cost, source, and vendor invoice metadata."
+  },
   "liveProductionWorkspace": {
     "migration": "20261106054224_connect_production_workspace.sql",
     "source": "fabric-poc/src/production-task-board",

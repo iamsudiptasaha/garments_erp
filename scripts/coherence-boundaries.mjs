@@ -120,9 +120,9 @@ export function inspectBoundaries({schema,catalogue,policy,functions,links=emplo
   }
   for(const child of contract.children)if(!sections.some(s=>s.table===child.table))errors.push(`${screen}: missing section ${child.table}`);
  }
- const fabric=functions.get('garments_access.fabric_contract');
+ const fabric=functions.get('garments_erp.fabric_contract')??functions.get('garments_access.fabric_contract');
  if(fabric){const literal=fabric.match(/select\s+'((?:[^']|'')*)'::jsonb/i);if(!literal)errors.push('Fabric: SQL contract is not inspectable');else if(JSON.stringify(JSON.parse(literal[1].replaceAll("''","'")))!==JSON.stringify(fabricContract))errors.push('Fabric: backend writable contract differs from UI contract');}
- const production=functions.get('garments_access.production_setup_contract');
+ const production=functions.get('garments_erp.production_setup_contract')??functions.get('garments_access.production_setup_contract');
  if(production){const literal=production.match(/select\s+'((?:[^']|'')*)'::jsonb/i);if(!literal)errors.push('Production: SQL contract is not inspectable');else if(JSON.stringify(JSON.parse(literal[1].replaceAll("''","'")))!==JSON.stringify(productionContract))errors.push('Production: backend writable contract differs from UI contract');}
  return [...new Set(errors)];
 }

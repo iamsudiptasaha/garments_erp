@@ -26,6 +26,15 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
         part_list_id: data.item_part.find((p) => p.id === v.item_part_id).part_list_id,
       })),
   );
+  const [parents, setParents] = useState(() => {
+    const parts = data.item_part.filter((part) => part.item_id === id);
+    return Object.fromEntries(
+      parts.map((part) => [
+        part.part_list_id,
+        parts.find(({ id }) => id === part.parent_item_part_id)?.part_list_id ?? '',
+      ]),
+    );
+  });
   const [checklist, setChecklist] = useState(
     () => data.production_checklist.find((c) => c.item_id === id) || {},
   );
@@ -80,6 +89,19 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
             part_list_id: part,
           },
       );
+      const byType = new Map(parts.map((part) => [part.part_list_id, part]));
+      const sortedParts = new Map();
+      function addPart(part, pending = new Set()) {
+        if (sortedParts.has(part.id)) return;
+        if (pending.has(part.id)) throw Error('Part parents cannot form a cycle.');
+        const parentType = parents[part.part_list_id];
+        const parent = byType.get(parentType);
+        if (parentType && !parent)
+          throw Error('Keep the parent part or clear its dependent relationship.');
+        if (parent) addPart(parent, new Set([...pending, part.id]));
+        sortedParts.set(part.id, { ...part, parent_item_part_id: parent?.id ?? null });
+      }
+      for (const part of parts) addPart(part);
       const allocations = sizes.map((s) => {
         const pieces = Number(s.pieces);
         if (String(s.pieces).trim() === '' || !Number.isSafeInteger(pieces) || pieces < 0)
@@ -91,7 +113,7 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
           pieces,
         };
       });
-      next.item_part = [...data.item_part.filter((p) => p.item_id !== id), ...parts];
+      next.item_part = [...data.item_part.filter((p) => p.item_id !== id), ...sortedParts.values()];
       next.item_size_list = [
         ...data.item_size_list.filter((s) => s.item_id !== id),
         ...allocations.map(({ pieces: _, ...s }) => s),
@@ -168,6 +190,20 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
           ]
             .filter(Boolean)
             .join(' · '),
+        ]),
+        ...[...sortedParts.values()].map((part) => [
+          `${data.part_list.find(({ id }) => id === part.part_list_id)?.part} · Parent part`,
+          change(
+            data.part_list.find(
+              ({ id }) =>
+                id ===
+                oldParts.find(
+                  (p) => p.id === oldParts.find((r) => r.id === part.id)?.parent_item_part_id,
+                )?.part_list_id,
+            )?.part,
+            data.part_list.find(({ id }) => id === parents[part.part_list_id])?.part ??
+              'Independent',
+          ),
         ]),
         ...Object.entries(checklistColumns).map(([label, key]) => [
           label,
@@ -355,6 +391,27 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
               setLinks([...links, { variant_id: '', part_list_id: '', lab_dip_id: '' }]),
           },
           'Add variant / part',
+        ),
+        h(
+          'div',
+          { className: 'fabric-fields' },
+          [...new Set(links.map((link) => link.part_list_id).filter(Boolean))].map((part) => {
+            const name = data.part_list.find(({ id }) => id === part)?.part;
+            const choices = data.part_list
+              .filter(({ id }) => id !== part && links.some((row) => row.part_list_id === id))
+              .map(({ id, part }) => [id, part]);
+            return h(
+              'div',
+              { key: part },
+              select(
+                `Parent of ${name}`,
+                parents[part],
+                choices,
+                (value) => setParents({ ...parents, [part]: value }),
+                false,
+              ),
+            );
+          }),
         ),
       ),
       h(

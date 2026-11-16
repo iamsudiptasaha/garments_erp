@@ -11,7 +11,7 @@ export const productionContract = {
       'base_price',
       'batch_number',
     ],
-    item_part: ['item_id', 'part_list_id'],
+    item_part: ['item_id', 'part_list_id', 'parent_item_part_id'],
     item_size_list: ['item_id', 'size_list_id'],
     item_cut_ratio: ['item_size_list_id', 'pieces'],
     variant_item: ['item_part_id', 'variant_id', 'lab_dip_id'],

@@ -10,7 +10,7 @@ import { chromium } from '@playwright/test';
 const runtime = JSON.parse(
   readFileSync(process.env.TEST_RUNTIME_FILE || '/tmp/erp-test-runtime.json', 'utf8'),
 );
-assert.match(runtime.API_URL, /^http:\/\/127[.]0[.]0[.]1:(55421|58421)$/);
+assert.match(runtime.API_URL, /^http:\/\/127[.]0[.]0[.]1:(55421|58421|59621)$/);
 const dbUrl = new URL(runtime.DB_URL);
 assert.equal(dbUrl.hostname, '127.0.0.1');
 assert.equal(dbUrl.port, String(Number(new URL(runtime.API_URL).port) + 1));
@@ -396,8 +396,8 @@ async function bill(pageKey, label, table) {
             ['Knitted fabric source', null],
             ['Batch number', 'BROWSER-' + Date.now()],
             ['Greige consumed · kg', '1'],
-            ['Billed quantity · kg', '1'],
-            ['Final quantity · kg', '1'],
+            ['Billed quantity · kg', '0.9'],
+            ['Final quantity · kg', '0.8'],
             ['Dyeing rolls', '1'],
             ['Dyeing rate / kg', '10'],
           ];
@@ -439,6 +439,23 @@ async function bill(pageKey, label, table) {
   const {
     rows: [record],
   } = await db.query('select id from garments_erp.' + table + ' where invoice_number=$1', [name]);
+  if (pageKey === 'dyeBills') {
+    const {
+      rows: [receipt],
+    } = await db.query(
+      `select r.sku, r.billed_quantity, r.billed_price,
+        r.bill_attachment = b.bill_attachment as attachment_synced
+       from garments_erp.raw_material_check_in r
+       join garments_erp.dyed_fabric_item d on d.id=r.dyed_fabric_item_id
+       join garments_erp.dyed_fabric_bill b on b.id=d.dyed_fabric_bill_id
+       where b.id=$1 and r.automatic_dyed_receipt`,
+      [record.id],
+    );
+    assert.match(receipt.sku, /^FAB-9[0-9]{3}$/);
+    assert.equal(Number(receipt.billed_quantity), 0.8);
+    assert.equal(Number(receipt.billed_price), 33);
+    assert.equal(receipt.attachment_synced, true);
+  }
   return record.id;
 }
 async function po() {
@@ -527,10 +544,7 @@ async function stockReceipt() {
   await b('Fabric').click();
   const batch = dialog.getByLabel('Fabric batch');
   const options = await batch.locator('option').allTextContents();
-  const available = options
-    .filter((label) => label.includes('BROWSER-'))
-    .sort()
-    .at(-1);
+  const available = options.find((label) => label.includes('BROWSER-LEGACY-STOCK'));
   assert.ok(available, 'Create a dyed fabric batch fixture before receiving stock');
   await pick(dialog, 'Fabric batch', available);
   await dialog.getByLabel('Inward date').fill('2026-11-13');
@@ -1028,6 +1042,102 @@ async function contactBankModal(target) {
 }
 
 const modalOnly = process.argv.includes('--owning-modal');
+async function fabricPlannerWorkflow() {
+  await route('productionItems');
+  const style = 'Planner browser ' + randomBytes(4).toString('hex');
+  await button(page, '+ Create item').click();
+  await dialog.getByLabel('Style code', { exact: true }).fill(style);
+  await pick(dialog, 'Brand', 'Verification brand');
+  await b('Add size').click();
+  await pick(dialog, 'Size 1', 'Billing test S');
+  await dialog.getByLabel('Pieces 1', { exact: true }).fill('3');
+  for (const [n, part] of [
+    [1, 'Billing test body'],
+    [2, 'Planner sleeve'],
+  ]) {
+    await b('Add variant / part').click();
+    await pick(dialog, 'Variant ' + n, 'Browser variant');
+    await pick(dialog, 'Part ' + n, part);
+    await pick(dialog, 'Lab dip ' + n);
+  }
+  await pick(dialog, 'Parent of Planner sleeve', 'Billing test body');
+  await b('Review item').click();
+  await b('Confirm save').click();
+  await hidden();
+  await button(page, 'Fabric Planner').click();
+  await page.getByRole('heading', { name: 'Fabric Planner', exact: true }).waitFor();
+  const search = page.getByRole('searchbox', { name: 'Search fabric plan' });
+  await search.fill(style + ' missing');
+  await page.getByText('No matching records.').waitFor();
+  await page.getByLabel('Item', { exact: true }).selectOption({ label: style });
+  await search.fill('Planner sleeve');
+  await page.getByText('1 row', { exact: true }).waitFor();
+  const selectRow = () =>
+    page.locator('.fortune-sheet-overlay').click({ position: { x: 85, y: 82 } });
+  await selectRow();
+  await button(page, 'Edit selected fabric plan').click();
+  await pick(dialog, 'Fabric type', 'Verification fabric');
+  await dialog.getByLabel('Consumption per piece · kg').fill('0.125');
+  await b('Review consumption').click();
+  const requirementQuery = `select f.id, f.consumption_per_piece_kg, v.required_kg, v.estimated_received_kg
+    from garments_erp.item_part_fabric f join garments_erp.fabric_plan_estimates v on v.id=f.id
+    join garments_erp.item i on i.id=v.item_id where i.style_code=$1`;
+  assert.equal((await db.query(requirementQuery, [style])).rowCount, 0);
+  await b('Back to edit').click();
+  assert.equal(await dialog.getByLabel('Consumption per piece · kg').inputValue(), '0.125');
+  await b('Review consumption').click();
+  await b('Confirm save').click();
+  await hidden();
+  const {
+    rows: [requirement],
+  } = await db.query(requirementQuery, [style]);
+  assert.equal(Number(requirement.consumption_per_piece_kg), 0.125);
+  assert.equal(Number(requirement.required_kg), 0.375);
+
+  await selectRow();
+  await button(page, 'Edit selected fabric plan').click();
+  await pick(dialog, 'Fabric type', 'Verification fabric');
+  await pick(dialog, 'Dyeing program item');
+  await b('Review link').click();
+  await b('Confirm save').click();
+  await hidden();
+  const {
+    rows: [link],
+  } = await db.query(
+    `select p.dyeing_program_id from garments_erp.fabric_plan_dyeing_link l
+     join garments_erp.dyeing_program_item p on p.id=l.dyeing_program_item_id
+     where l.item_part_fabric_id=$1`,
+    [requirement.id],
+  );
+  await page.goto(
+    app + '/fabric.html?live=1&plannerProgram=' + link.dyeing_program_id + '#fabricPlanner',
+  );
+  await page.getByLabel('Item', { exact: true }).selectOption({ label: style });
+  await page.getByText('1 row', { exact: true }).waitFor();
+  await selectRow();
+  await button(page, 'Edit dyeing link').click();
+  await pick(dialog, 'Dyeing program item');
+  await b('Review unlink').click();
+  await b('Confirm save').click();
+  await hidden();
+  await selectRow();
+  await button(page, 'Edit dyeing link').click();
+  await pick(dialog, 'Dyeing program item');
+  await b('Review link').click();
+  await b('Confirm save').click();
+  await hidden();
+
+  await bill('dyeBills', 'dyed fabric bill', 'dyed_fabric_bill');
+  const {
+    rows: [covered],
+  } = await db.query(requirementQuery, [style]);
+  assert.equal(Number(covered.estimated_received_kg), 0.375);
+  console.log(
+    'PASS Chromium item, dependent part, fractional plan, link/unlink, verified bill and automatic inventory',
+  );
+}
+
+const plannerOnly = process.argv.includes('--fabric-planner');
 const photoOnly = process.argv.includes('--employee-profile');
 const selected = new Set(process.argv.slice(2).filter((arg) => !arg.startsWith('--')));
 const completed = new Map();
@@ -1043,6 +1153,7 @@ try {
     configured.map(({ key }) => key).sort(),
     FILE_TARGETS.map(({ key }) => key).sort(),
   );
+  if (plannerOnly) await fabricPlannerWorkflow();
   if (photoOnly) {
     const target = FILE_TARGETS.find(({ key }) => key === 'employeePhoto');
     await nativeRecordModal(target, await employee());
@@ -1069,7 +1180,7 @@ try {
       }
     }
   }
-  for (const target of modalOnly || photoOnly ? [] : FILE_TARGETS) {
+  for (const target of modalOnly || photoOnly || plannerOnly ? [] : FILE_TARGETS) {
     if (selected.size && !selected.has(target.key)) continue;
     let id;
     const create = creation[target.key];

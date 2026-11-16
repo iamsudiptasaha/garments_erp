@@ -79,6 +79,7 @@ import {
   WorkspaceConnectionBanner,
 } from './record-page.js';
 import { BillEditor } from './editor.js';
+import { FabricPlanner } from './planner.js';
 import './styles.css';
 import { ProductionDocumentWorkspace } from '../production-documents/app.js';
 import { adminPages, initialAccess, allowed, upgradeAccess } from '../admin/model.js';
@@ -104,7 +105,7 @@ function load() {
 }
 const pageFromHash = () => {
   const key = location.hash.slice(1);
-  if (key === 'fabricOverview') return key;
+  if (['fabricOverview', 'fabricPlanner'].includes(key)) return key;
   if (key === 'adminUsers') return 'employees';
   return Object.hasOwn(pages, key) || Object.hasOwn(adminPages, key) || Object.hasOwn(hrPages, key)
     ? key
@@ -159,6 +160,7 @@ function workspaceRoute() {
     finishedGoodsPage: Object.hasOwn(finishedGoodsPages, finishedGoods) ? finishedGoods : 'sizes',
     floor: location.pathname === '/fabric.html' && params.get('floor') === '1',
     task: params.get('task'),
+    plannerProgram: params.get('plannerProgram'),
   };
 }
 
@@ -169,7 +171,7 @@ const recordOverviewColumns = {
   colourMappings: ['name', 'pantone', 'brand'],
   labDips: ['name', 'pantone', 'edition', 'version', 'status', 'brand', 'dyer'],
   yarnTypes: ['name', 'count', 'uses'],
-  fabricTypes: ['name', 'knitting', 'programs'],
+  fabricTypes: ['name', 'series', 'knitting', 'programs'],
   suppliers: ['name', 'kind', 'purpose', 'orders'],
   dyed: ['batch', 'name', 'color', 'bill', 'quantity', 'price', 'wastage'],
   yarnLeft: ['bill', 'name', 'supplier', 'quantity', 'consumed', 'left'],
@@ -257,7 +259,8 @@ function App({ live, refreshWorkspaceAccess }) {
   const [billingPO, setBillingPO] = useState(null);
   const [billingTransport, setBillingTransport] = useState(null);
   const [billingFormalPO, setBillingFormalPO] = useState(null);
-  const [{ page, finishedGoodsPage, floor, task }, setRoute] = useState(workspaceRoute);
+  const [{ page, finishedGoodsPage, floor, task, plannerProgram }, setRoute] =
+    useState(workspaceRoute);
   const [workspaceDataStarted, setWorkspaceDataStarted] = useState(
     () => !isManagementPage(page, live),
   );
@@ -279,6 +282,13 @@ function App({ live, refreshWorkspaceAccess }) {
       ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(key) ? 'productionJobs' : key,
       action,
     );
+  const plannerView = Boolean(live && can('view', 'productionItems') && can('view', 'programs'));
+  function openProgramPlanner(id) {
+    const url = new URL(location.href);
+    url.searchParams.set('plannerProgram', id);
+    url.hash = 'fabricPlanner';
+    navigate('fabricPlanner', undefined, url.pathname + url.search + url.hash);
+  }
   function saveAccess(next) {
     try {
       localStorage.setItem('garments-access-preview-v1', JSON.stringify(next));
@@ -544,6 +554,7 @@ function App({ live, refreshWorkspaceAccess }) {
       }
       url.searchParams.delete('floor');
       url.searchParams.delete('task');
+      url.searchParams.delete('plannerProgram');
       if (finishedGoods) url.searchParams.set('finishedGoods', finishedGoods);
       url.hash = key === 'home' ? '' : key;
       if (url.href !== location.href) history.pushState(null, '', url);
@@ -553,6 +564,16 @@ function App({ live, refreshWorkspaceAccess }) {
   }
   function edit(id) {
     if (live && (!liveReady || !connectedPage(page))) return;
+    if (
+      live &&
+      page === 'materialReceipts' &&
+      data.raw_material_check_in?.some(
+        (receipt) => receipt.id === id && receipt.automatic_dyed_receipt,
+      )
+    ) {
+      setNotice('This stock receipt is maintained by its verified dyed fabric bill.');
+      return;
+    }
     if (!can(id && page === 'materialContacts' ? 'view' : id ? 'edit' : 'create')) {
       setNotice('Your role does not allow this action.');
       return;
@@ -1124,6 +1145,26 @@ function App({ live, refreshWorkspaceAccess }) {
   const administrationPage = live && Object.hasOwn(adminTabs, page);
   const filesPage = page === 'files' || page === 'files-admin';
   function renderWorkspace() {
+    if (page === 'fabricPlanner') {
+      return plannerView
+        ? h(FabricPlanner, {
+            key: plannerProgram || 'all',
+            client: getAccessClient(),
+            program: plannerProgram,
+            canEdit: can('edit', 'productionItems'),
+            canLink: can('edit', plannerProgram ? 'programs' : 'productionItems'),
+            capabilities: {
+              format: can('format', 'productionItems'),
+              export: can('export', 'productionItems'),
+              print: can('print', 'productionItems'),
+            },
+          })
+        : h(
+            'section',
+            { className: 'access-denied' },
+            h('h1', null, 'Fabric Planner access restricted'),
+          );
+    }
     if (administrationPage)
       return h(AccessApp, {
         key: actor,
@@ -1559,6 +1600,10 @@ function App({ live, refreshWorkspaceAccess }) {
           reconciliation: editor.reconciliation,
           canEditFiles: can('edit', editor.page),
           onFilesSaved: refreshLive,
+          onOpenPlanner:
+            plannerView && editor.page === 'programs' && editor.id
+              ? () => openProgramPlanner(editor.id)
+              : undefined,
           onSave: live && editor.page === 'materialContacts' ? saveLiveContact : saveData,
           onReload: live && editor.page === 'materialContacts' ? reloadContacts : undefined,
           verifiers: live

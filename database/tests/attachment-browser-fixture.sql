@@ -5,7 +5,7 @@ insert into garments_erp.lab_dip_version_status(status,sort_order) values
  on conflict(sort_order) do nothing;
 do $$
 declare yarn bigint; supplier bigint; po bigint; poi bigint; ybi bigint; fabric bigint; knit bigint;
- brand bigint; colour bigint; mapping bigint; dyer bigint; lab bigint; version bigint; program bigint; program_item bigint;
+ brand bigint; colour bigint; mapping bigint; dyer bigint; lab bigint; version bigint; program bigint; program_item bigint; legacy_bill bigint; legacy_line bigint;
 begin
  update garments_erp.employee_status set is_verified=true,verified_by_employee_id=900001 where employee_id=900001;
  insert into garments_erp.yarn_type(name) values('Verification yarn') returning id into yarn;
@@ -13,7 +13,7 @@ begin
  insert into garments_erp.yarn_purchase_order(yarn_supplier_id) values(supplier) returning id into po;
  insert into garments_erp.yarn_purchase_order_item(purchase_order_number_id,yarn_type_id,quantity,rate) values(po,yarn,1000,10) returning id into poi;
  insert into garments_erp.yarn_bill_item(yarn_bill_id,yarn_purchase_order_item_id,billed_quantity,billed_rate) values(900001,poi,1000,10) returning id into ybi;
- insert into garments_erp.fabric_type(name) values('Verification fabric') returning id into fabric;
+ insert into garments_erp.fabric_type(name,series) values('Verification fabric',9) returning id into fabric;
  insert into garments_erp.knitting_bill_item(knitting_bill_id,fabric_type_id,yarn_bill_item_id,billed_quantity,consumption,billed_rate) values(900001,fabric,ybi,1000,1000,10) returning id into knit;
  insert into garments_erp.brand_list(brand,contacts_id,contact_purpose_id) values('Verification brand',900001,900001) returning id into brand;
  insert into garments_erp.color_map(name) values('Verification colour') returning id into colour;
@@ -24,9 +24,17 @@ begin
  insert into garments_erp.lab_dip_version_item(lab_dip_version_id,date,lab_dip_status_id) select version,current_date,id from garments_erp.lab_dip_version_status where sort_order=6;
  insert into garments_erp.dyeing_program(dyer_id) values(dyer) returning id into program;
  insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity) values(fabric,program,version,100) returning id into program_item;
+ insert into garments_erp.dyed_fabric_bill(invoice_number,invoice_date)
+ values('Browser manual receipt source',current_date) returning id into legacy_bill;
+ insert into garments_erp.dyed_fabric_item(
+  dyed_fabric_bill_id,dyeing_program_item_id,knitting_bill_item_id,gross_quantity,billed_quantity,final_quantity,dyeing_rate,dyeing_rolls
+ ) values(legacy_bill,program_item,knit,1,1,1,10,1) returning id into legacy_line;
+ insert into garments_erp.batch_no_lab_dip_version_map(dyed_fabric_item_id,batch_no,lab_dip_version_id)
+ values(legacy_line,'BROWSER-LEGACY-STOCK',version);
 end $$;
 insert into garments_erp.item (id, style_code) values (982001, 'Billing test');
-insert into garments_erp.part_list (id, part) values (982001, 'Billing test body');
+insert into garments_erp.part_list (id, part) values
+ (982001, 'Billing test body'), (982002, 'Planner sleeve');
 insert into garments_erp.item_part (id, item_id, part_list_id) values (982001, 982001, 982001);
 insert into garments_erp.size_list (id, size) values (982001, 'Billing test S');
 insert into garments_erp.item_size_list (id, item_id, size_list_id) values (982001, 982001, 982001);
