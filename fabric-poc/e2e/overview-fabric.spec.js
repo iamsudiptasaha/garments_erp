@@ -45,3 +45,26 @@ test('Yarn types keeps its record editor and Sheet while saving Overview prefere
   await expect(identity).toBeVisible();
   await expect(page.getByRole('button', { name: '+ Add yarn type' })).toBeVisible();
 });
+
+for (const [route, title, field] of [
+  ['fabricTypes', 'Fabric types', 'Fabric type name'],
+  ['suppliers', 'Suppliers', 'Company / contact'],
+]) {
+  test(title + ' opens its existing record from Overview and retains Sheet', async ({ page }) => {
+    await page.goto('/fabric.html#' + route);
+    const table = page.getByRole('table', { name: title, exact: true });
+    const identity = table.locator('tbody button').first();
+    const name = await identity.innerText();
+    await identity.click();
+    const editor = page.getByRole('dialog');
+    const input = editor.getByLabel(field);
+    if (route === 'suppliers') {
+      await expect(input.locator('option:checked')).toHaveText(name);
+    } else {
+      await expect(input).toHaveValue(name);
+    }
+    await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: 'Sheet', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Sheet zoom' })).toBeVisible();
+  });
+}

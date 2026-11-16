@@ -158,6 +158,8 @@ function workspaceRoute() {
 // Overview columns use the existing worksheet projections and record editor IDs.
 const recordOverviewColumns = {
   yarnTypes: ['name', 'count', 'uses'],
+  fabricTypes: ['name', 'knitting', 'programs'],
+  suppliers: ['name', 'kind', 'purpose', 'orders'],
   productionStatuses: ['name'],
   productionStageTypes: ['name'],
   productionPartTypes: ['name'],
@@ -172,7 +174,8 @@ const recordOverviewColumns = {
   productionItems: ['name', 'brand', 'product', 'season', 'batch_number'],
 };
 
-const productionOverviewLinks = {
+const recordOverviewLinks = {
+  suppliers: { purpose: ['contact_purpose_id', 'contactCategories'] },
   productionProductTypes: { gender: ['gender_id', 'productionGenders'] },
   brands: {
     contact: ['contacts_id', 'materialContacts'],
@@ -679,8 +682,14 @@ function App({ live, refreshWorkspaceAccess }) {
   }
   function overview() {
     if (overviewColumns) {
-      const links = productionOverviewLinks[page];
-      const sources = new Map(links ? data[spec.entity].map((record) => [record.id, record]) : []);
+      const links = recordOverviewLinks[page];
+      const sources = new Map(
+        links && page !== 'suppliers' ? data[spec.entity].map((record) => [record.id, record]) : [],
+      );
+      if (page === 'suppliers') {
+        for (const table of ['yarn_supplier', 'knitter', 'dyer'])
+          for (const record of data[table]) sources.set(table + ':' + record.id, record);
+      }
       return h(OverviewTable, {
         key: actor + ':' + page,
         client: live ? getAccessClient() : null,
@@ -1272,7 +1281,10 @@ function App({ live, refreshWorkspaceAccess }) {
                                       ? h(
                                           'button',
                                           { className: 'primary', onClick: () => edit(null) },
-                                          spec.newLabel,
+                                          spec.newLabel ||
+                                            (page === 'suppliers'
+                                              ? '+ Add supplier'
+                                              : '+ New document'),
                                         )
                                       : overviewColumns
                                         ? null
