@@ -26,7 +26,7 @@ test('contact entry saves optional child sections together and reopens them for 
     .fill('Synthetic note');
   await dialog.getByRole('button', { name: 'Review Changes', exact: true }).click();
   await dialog.getByRole('button', { name: 'Confirm Save', exact: true }).click();
-  await page.getByRole('button', { name: 'View/Edit →', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Synthetic combined contact', exact: true }).click();
   dialog = page.getByRole('dialog');
   await section(dialog, 'Contact items').click();
   await expect(dialog.getByLabel('Contact items 1 Phone number', { exact: true })).toHaveValue(
@@ -56,7 +56,7 @@ test('a contact can be saved with no items, bank accounts or extra data', async 
   await dialog.getByRole('button', { name: 'Review Changes', exact: true }).click();
   await dialog.getByRole('button', { name: 'Confirm Save', exact: true }).click();
   await expect(
-    page.getByRole('heading', { name: 'Synthetic contact only', exact: true }),
+    page.getByRole('button', { name: 'Synthetic contact only', exact: true }),
   ).toBeVisible();
 });
 
@@ -94,7 +94,7 @@ test('primary choices are exclusive per category and persist on reopening', asyn
   ).not.toBeChecked();
   await dialog.getByRole('button', { name: 'Review Changes', exact: true }).click();
   await dialog.getByRole('button', { name: 'Confirm Save', exact: true }).click();
-  await page.getByRole('button', { name: 'View/Edit →', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Synthetic primary UI', exact: true }).click();
   await section(dialog, 'Contact items').click();
   await expect(dialog.getByLabel('Contact items 2 Primary address', { exact: true })).toBeChecked();
   await expect(dialog.getByLabel('Contact items 1 Primary phone', { exact: true })).toBeChecked();
@@ -158,7 +158,11 @@ test('a viewer opens the same contact interface with only permitted sections', a
   }, access);
   await page.goto('/fabric.html#materialContacts');
   await page.getByLabel('Preview access as').selectOption(user.id);
-  await page.getByRole('button', { name: 'View →', exact: true }).first().click();
+  await page
+    .getByRole('table', { name: 'Contacts' })
+    .locator('tbody button[aria-haspopup=dialog]')
+    .first()
+    .click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Basic Information' })).toBeVisible();
   await expect(dialog.getByRole('checkbox', { name: 'Is Company' })).toBeDisabled();
@@ -182,9 +186,8 @@ test('company GST is optional, persists and clears when unchecked', async ({ pag
   };
   const open = async (name) => {
     await page
-      .getByRole('article')
-      .filter({ has: page.getByRole('heading', { name, exact: true }) })
-      .getByRole('button', { name: 'View/Edit →', exact: true })
+      .getByRole('table', { name: 'Contacts' })
+      .getByRole('button', { name, exact: true })
       .click();
   };
   await page.getByRole('button', { name: '+ Add contact', exact: true }).click();
@@ -216,4 +219,66 @@ test('company GST is optional, persists and clears when unchecked', async ({ pag
   await expect(gst).toBeHidden();
   await company.check();
   await expect(gst).toHaveValue('');
+});
+
+test('Miscellaneous grids retain worksheet controls and persist Overview preferences', async ({
+  page,
+}) => {
+  test.skip(!!process.env.E2E_BASE_URL, 'Uses sample data and grid preferences');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/fabric.html#materialContacts');
+  const contacts = page.getByRole('table', { name: 'Contacts', exact: true });
+  await expect(page.getByRole('region', { name: 'Contacts', exact: true })).toHaveAttribute(
+    'tabindex',
+    '0',
+  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page
+    .getByRole('searchbox', { name: 'Search Contacts', exact: true })
+    .fill('no-such-contact');
+  await expect(contacts.getByText('No matching records')).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Search Contacts', exact: true }).clear();
+  await page.getByRole('button', { name: 'Columns', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Search name / alias', exact: true }).check();
+  await page.keyboard.press('Escape');
+  await page.reload();
+  await expect(contacts.getByRole('columnheader', { name: 'Search name / alias' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sheet', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Sheet zoom' })).toBeVisible();
+  await expect(contacts).toHaveCount(0);
+
+  await page.goto('/fabric.html#contactCategories');
+  const purpose = page.getByRole('table', { name: 'Contact Purpose', exact: true });
+  await purpose.getByRole('button', { name: 'Category name', exact: true }).click();
+  await expect(purpose.getByRole('columnheader', { name: 'Category name' })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  );
+  await page.getByRole('button', { name: 'Filter', exact: true }).click();
+  await page.getByRole('button', { name: '+ Add filter rule' }).click();
+  await page.getByLabel('Filter field 1').selectOption('name');
+  await page.getByLabel('Filter value 1').fill('Raw material supplier');
+  await page.keyboard.press('Escape');
+  const row = purpose.getByRole('row').filter({ hasText: 'Raw material supplier' });
+  await expect(purpose.locator('tbody tr')).toHaveCount(1);
+  await row.getByRole('cell').last().click();
+  await expect(page.getByRole('dialog').getByLabel('Category name')).toHaveValue(
+    'Raw material supplier',
+  );
+});
+
+test('view-only Contact Purpose keeps rows visible without opening the editor', async ({
+  page,
+}) => {
+  test.skip(!!process.env.E2E_BASE_URL, 'Uses the sample access picker');
+  const access = initialAccess();
+  access.roles.find(({ id }) => id === 'admin').permissions.contactCategories = { view: true };
+  await page.addInitScript((state) => {
+    localStorage.setItem('garments-access-preview-v1', JSON.stringify(state));
+  }, access);
+  await page.goto('/fabric.html#contactCategories');
+  const table = page.getByRole('table', { name: 'Contact Purpose', exact: true });
+  await table.getByRole('cell', { name: 'Raw material supplier', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '+ Add category', exact: true })).toHaveCount(0);
 });
