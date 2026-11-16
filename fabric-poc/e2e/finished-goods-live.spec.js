@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { sameRendering } from './same-rendering.js';
 
 test('signed-in Finished Goods keeps manual price independent of costing and finalizes a draft', async ({
   page,
@@ -359,6 +360,7 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
       await expect(page.getByRole('button', { name: 'Columns', exact: true })).toBeEnabled();
       const screenshot = { animations: 'disabled', caret: 'hide' };
       await page.mouse.move(0, 0);
+      await grid.scrollIntoViewIfNeeded();
       const overview = await grid.screenshot(screenshot);
       await views.getByRole('button', { name: 'Sheet' }).click();
       const selected = page.getByRole('button', { name: action, exact: true });
@@ -404,7 +406,10 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
       await views.getByRole('button', { name: 'Overview' }).click();
       await page.mouse.move(0, 0);
       await expect(page.getByRole('button', { name: 'Columns', exact: true })).toBeEnabled();
-      expect((await grid.screenshot(screenshot)).equals(overview)).toBe(true);
+      await grid.scrollIntoViewIfNeeded();
+      await expect
+        .poll(async () => sameRendering(page, await grid.screenshot(screenshot), overview))
+        .toBe(true);
       await views.getByRole('button', { name: 'Sheet' }).click();
       await expect(zoom).toHaveValue('1.5');
       await expect(selected).toBeDisabled();
