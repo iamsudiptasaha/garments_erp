@@ -350,7 +350,8 @@ function App({ live, refreshWorkspaceAccess }) {
     [liveError, setLiveError] = useState(''),
     [productionError, setProductionError] = useState(''),
     [inventoryError, setInventoryError] = useState(''),
-    [contactsError, setContactsError] = useState('');
+    [contactsError, setContactsError] = useState(''),
+    [contactPurposeError, setContactPurposeError] = useState('');
   const commands = useMemo(
     () => (live ? liveFabricCommands(getAccessClient(), createVerificationClient) : null),
     [Boolean(live)],
@@ -369,6 +370,7 @@ function App({ live, refreshWorkspaceAccess }) {
   );
   const connectedPage = (key) =>
     key === 'materialContacts' ||
+    key === 'contactCategories' ||
     liveFabricPage(key) ||
     liveProductionPage(key) ||
     liveInventoryPage(key);
@@ -377,15 +379,17 @@ function App({ live, refreshWorkspaceAccess }) {
     (live.administrator ||
       Object.entries(live.permissions || {}).some(([key, p]) => check(key) && p.view));
   async function loadLive() {
-    const [fabricResult, productionResult, inventoryResult, contactsResult] =
+    const [fabricResult, productionResult, inventoryResult, contactsResult, purposeResult] =
       await Promise.allSettled([
         allowedModule(liveFabricPage) ? commands.load() : {},
         allowedModule(liveProductionPage) || can('view', 'productionJobs') ? production.load() : {},
         allowedModule(liveInventoryPage) ? inventory.load() : {},
         can('view', 'materialContacts') ? contacts.load() : {},
+        can('view', 'contactCategories') ? contacts.loadPurposes() : null,
       ]);
     setLiveError(fabricResult.status === 'rejected' ? fabricResult.reason.message : '');
     setContactsError(contactsResult.status === 'rejected' ? contactsResult.reason.message : '');
+    setContactPurposeError(purposeResult.status === 'rejected' ? purposeResult.reason.message : '');
     const contactData = contactsResult.status === 'fulfilled' ? contactsResult.value : {};
     setProductionError(
       productionResult.status === 'rejected' ? productionResult.reason.message : '',
@@ -401,6 +405,7 @@ function App({ live, refreshWorkspaceAccess }) {
     return {
       ...mergeProductionSnapshot(base, { ...stock, employee: [...employees.values()] }),
       ...contactData,
+      contactPurposeRows: purposeResult.status === 'fulfilled' ? purposeResult.value : null,
     };
   }
   async function applyProduction(
@@ -483,6 +488,7 @@ function App({ live, refreshWorkspaceAccess }) {
   const data = useMemo(
     () => ({
       ...state.data,
+      contact_purpose: state.data.contactPurposeRows ?? state.data.contact_purpose,
       employee: live
         ? state.data.employee
         : access.users.map(({ id, name, employeeCode }) => ({ id, name, employeeCode })),
@@ -603,6 +609,27 @@ function App({ live, refreshWorkspaceAccess }) {
     }
     if (live) {
       if (!liveReady) throw Error('Wait for live data to load.');
+      if (editor.page === 'contactCategories') {
+        const original = data.contact_purpose;
+        const draft = next.contact_purpose.find((entry) =>
+          editor.id ? entry.id === editor.id : !original.some(({ id }) => id === entry.id),
+        );
+        const saved = await contacts.savePurpose(editor.id, draft);
+        setState((previous) => ({
+          ...previous,
+          data: {
+            ...previous.data,
+            contactPurposeRows: editor.id
+              ? previous.data.contactPurposeRows.map((row) =>
+                  row.id === saved.id ? { ...row, ...saved } : row,
+                )
+              : [...previous.data.contactPurposeRows, { ...saved, uses: 0 }],
+          },
+        }));
+        setSelected(null);
+        setNotice('Contact Purpose saved to Supabase');
+        return saved.id;
+      }
       if (liveProductionPage(editor.page)) {
         const { _saved_id, ...snapshot } = await production.saveSetup({
           resource: editor.page,
@@ -1106,11 +1133,13 @@ function App({ live, refreshWorkspaceAccess }) {
   const activeLiveError =
     page === 'materialContacts'
       ? contactsError
-      : liveInventoryPage(page)
-        ? inventoryError
-        : liveProductionPage(page)
-          ? productionError
-          : liveError;
+      : page === 'contactCategories'
+        ? contactPurposeError
+        : liveInventoryPage(page)
+          ? inventoryError
+          : liveProductionPage(page)
+            ? productionError
+            : liveError;
   function renderFloor() {
     if (live && (!liveReady || productionError))
       return h(

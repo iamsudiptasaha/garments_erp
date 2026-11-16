@@ -62,31 +62,35 @@ async function signIn(role) {
   return { user, session: ok(await user.auth.getSession()).session, password };
 }
 const { user: actor, session, password } = await signIn('ci_admin');
-const { user: denied } = await signIn('ci_viewer');
+const { user: denied, session: viewerSession } = await signIn('ci_viewer');
 const app = process.env.ATTACHMENT_UI_URL || 'http://127.0.0.1:18766';
 assert.match(app, /^http:\/\/127[.]0[.]0[.]1:\d+$/);
 const filesService = process.env.ATTACHMENT_FILES_SERVICE;
 if (filesService) assert.equal(filesService, 'http://127.0.0.1:55426');
 const browser = await chromium.launch();
-const context = await browser.newContext({
-  viewport: { width: 1440, height: 1000 },
-  acceptDownloads: true,
-});
-await context.route('https://erp-local.invalid/**', async (route) => {
-  const url = new URL(route.request().url());
-  const response = await route.fetch({
-    url:
-      (filesService && url.pathname === '/functions/v1/erp-files'
-        ? filesService
-        : runtime.API_URL + url.pathname) + url.search,
-    headers: route.request().headers(),
+async function authenticatedContext(session) {
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    acceptDownloads: true,
   });
-  await route.fulfill({ response });
-});
-await context.addInitScript(
-  (value) => localStorage.setItem('sb-erp-local-auth-token', JSON.stringify(value)),
-  session,
-);
+  await context.route('https://erp-local.invalid/**', async (route) => {
+    const url = new URL(route.request().url());
+    const response = await route.fetch({
+      url:
+        (filesService && url.pathname === '/functions/v1/erp-files'
+          ? filesService
+          : runtime.API_URL + url.pathname) + url.search,
+      headers: route.request().headers(),
+    });
+    await route.fulfill({ response });
+  });
+  await context.addInitScript(
+    (value) => localStorage.setItem('sb-erp-local-auth-token', JSON.stringify(value)),
+    session,
+  );
+  return context;
+}
+const context = await authenticatedContext(session);
 const page = await context.newPage();
 page.setDefaultTimeout(7000);
 page.on('pageerror', (error) => console.log('PAGE ERROR', error.message));
@@ -1137,6 +1141,96 @@ async function fabricPlannerWorkflow() {
   );
 }
 
+async function contactPurposeWorkflow() {
+  const route = '/fabric.html?live=1#contactCategories';
+  const name = 'Chromium purpose ' + randomUUID();
+  const renamed = name + ' renamed';
+  await page.goto(app + route);
+  const table = page.getByRole('table', { name: 'Contact Purpose', exact: true });
+  await table.getByRole('button', { name: 'CI fixture', exact: true }).waitFor();
+
+  await button(page, '+ Add category').click();
+  await dialog.getByLabel('Category name').fill(name);
+  await b('Review details →').click();
+  await dialog.getByText(name, { exact: true }).waitFor();
+  await b('Confirm & save').click();
+  await table.getByRole('button', { name, exact: true }).waitFor();
+  const saved = (
+    await db.query('select id from garments_erp.contact_purpose where type=$1', [name])
+  ).rows[0];
+  assert.ok(saved?.id, 'Create must persist a database-generated ID');
+
+  await page.getByRole('searchbox', { name: 'Search Contact Purpose', exact: true }).fill(name);
+  await table.getByRole('button', { name: 'CI fixture', exact: true }).waitFor({ state: 'hidden' });
+  await table
+    .getByRole('row', { name: new RegExp(name) })
+    .getByRole('cell')
+    .last()
+    .click();
+  assert.equal(await dialog.getByLabel('Category name').inputValue(), name);
+  await dialog.getByLabel('Category name').fill(renamed);
+  await b('Review details →').click();
+  await b('Confirm & save').click();
+  await table.getByRole('button', { name: renamed, exact: true }).waitFor();
+  assert.equal(
+    (await db.query('select type from garments_erp.contact_purpose where id=$1', [saved.id]))
+      .rows[0].type,
+    renamed,
+  );
+
+  await page.reload();
+  await table.getByRole('button', { name: renamed, exact: true }).waitFor();
+  await button(page, 'Sheet').click();
+  await page.getByRole('combobox', { name: 'Sheet zoom' }).waitFor();
+  await button(page, 'Print / PDF').click();
+  await page
+    .locator('.fabric-print-dialog')
+    .getByRole('cell', { name: renamed, exact: true })
+    .waitFor();
+
+  const viewerContext = await authenticatedContext(viewerSession);
+  try {
+    const viewer = await viewerContext.newPage();
+    assert.equal((await denied.rpc('erp_contact_purpose_workspace')).error?.code, '42501');
+    await viewer.goto(app + route);
+    const viewerTable = viewer.getByRole('table', { name: 'Contact Purpose', exact: true });
+    await viewer.getByRole('heading', { name: 'Access restricted', exact: true }).waitFor();
+    const grant = await db.query(`
+      insert into garments_access.app_role_resource_permission(app_role_id,app_resource_id,can_view)
+      select role.id,resource.id,true from garments_access.app_role role,garments_access.app_resource resource
+      where role.key='ci_viewer' and resource.key='contactCategories' returning id
+    `);
+    try {
+      await viewer.reload();
+      const cell = viewerTable.getByRole('cell', { name: renamed, exact: true });
+      await cell.click();
+      assert.equal(await viewer.getByRole('dialog').count(), 0);
+      assert.equal(await button(viewer, '+ Add category').count(), 0);
+      assert.equal(
+        (
+          await denied.rpc('erp_save_contact_purpose', {
+            p_id: saved.id,
+            p_type: 'Unauthorized rename',
+            p_expected: null,
+          })
+        ).error?.code,
+        '42501',
+      );
+    } finally {
+      await db.query('delete from garments_access.app_role_resource_permission where id=$1', [
+        grant.rows[0].id,
+      ]);
+    }
+  } finally {
+    await viewerContext.close();
+    await db.query('delete from garments_erp.contact_purpose where id=$1', [saved.id]);
+  }
+  console.log(
+    'PASS Contact Purpose live Overview, search, create, rename, reload, Sheet and permissions',
+  );
+}
+
+const purposeOnly = process.argv.includes('--contact-purpose');
 const plannerOnly = process.argv.includes('--fabric-planner');
 const photoOnly = process.argv.includes('--employee-profile');
 const selected = new Set(process.argv.slice(2).filter((arg) => !arg.startsWith('--')));
@@ -1154,6 +1248,7 @@ try {
     FILE_TARGETS.map(({ key }) => key).sort(),
   );
   if (plannerOnly) await fabricPlannerWorkflow();
+  if (purposeOnly) await contactPurposeWorkflow();
   if (photoOnly) {
     const target = FILE_TARGETS.find(({ key }) => key === 'employeePhoto');
     await nativeRecordModal(target, await employee());
@@ -1180,7 +1275,7 @@ try {
       }
     }
   }
-  for (const target of modalOnly || photoOnly || plannerOnly ? [] : FILE_TARGETS) {
+  for (const target of modalOnly || photoOnly || plannerOnly || purposeOnly ? [] : FILE_TARGETS) {
     if (selected.size && !selected.has(target.key)) continue;
     let id;
     const create = creation[target.key];

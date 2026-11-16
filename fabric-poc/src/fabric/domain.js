@@ -917,7 +917,7 @@ export function saveDocument(data, page, draft) {
       next[spec.entity].some(
         (r) =>
           r.id !== id &&
-          r[spec.identity].trim().toLowerCase() === header[spec.identity].toLowerCase(),
+          (r[spec.identity] ?? '').trim().toLowerCase() === header[spec.identity].toLowerCase(),
       )
     )
       throw Error('This name already exists. Edit the existing record.');

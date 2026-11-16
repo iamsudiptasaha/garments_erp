@@ -47,6 +47,22 @@ export function inspectBoundaries({schema,catalogue,policy,functions,links=emplo
    errors.push('Finished Goods: catalogue write boundary differs from its reviewed contract');
   }
  }
+ const purpose = policy.contactPurpose;
+ if (purpose) {
+  const read = functions.get(purpose.readFunction);
+  const save = functions.get(purpose.saveFunction);
+  const permission = action => `has_screen_permission('${purpose.permissionScreen}', ${action})`;
+  const writes = code => [...(code || '').matchAll(/\b(insert\s+into|update|delete\s+from)\s+(?:garments_erp|garments_access|public)\.(\w+)/gi)];
+  const mapping = catalogue.mappings.filter(entry => entry.resource_key === purpose.permissionScreen);
+  if (!read?.includes(permission("'view'")) || writes(read).length)
+   errors.push('Contact Purpose: unreviewed read boundary');
+  if (!save?.includes(permission("'view'")) ||
+      !save.includes(permission("case when p_id is null then 'create' else 'edit' end")) ||
+      /\bexecute\b/i.test(save) || writes(save).length !== 2 ||
+      writes(save).some(([, action, table]) => /delete/i.test(action) || table !== purpose.writableTable) ||
+      mapping.length !== 1 || mapping[0].table_name !== purpose.writableTable || mapping[0].can_delete)
+   errors.push('Contact Purpose: unreviewed write boundary');
+ }
  for (const [name, contract] of Object.entries(policy.billingPortal || {})) {
   const entry = functions.get(name);
   if (!entry?.includes(`garments_erp.billing_employee('${contract.permissionScreen}')`))

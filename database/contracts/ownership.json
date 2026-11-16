@@ -76,6 +76,13 @@
     "writableTables": ["sellable_product", "sellable_unit", "item_in_store_price", "price_type"],
     "referenceTables": ["item", "item_size_list", "size_list", "employee", "item_costing"]
   },
+  "contactPurpose": {
+    "permissionScreen": "contactCategories",
+    "readFunction": "garments_erp.contact_purpose_workspace",
+    "saveFunction": "garments_erp.save_contact_purpose",
+    "writableTable": "contact_purpose",
+    "scope": "Create and edit the purpose name only. Read linked supplier and employee counts within the viewer's existing screen permissions. Preserve all foreign-key links."
+  },
   "billingPortal": {
     "public.erp_portal_carton_workspace": {
       "permissionScreen": "billingCartons",
