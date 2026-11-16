@@ -188,6 +188,7 @@ export function OverviewTable({
   records,
   columns,
   onOpen,
+  opensDialog = true,
   canOpen,
   toolbar,
   searchLabel = 'Search ' + title,
@@ -529,7 +530,7 @@ export function OverviewTable({
                         'button',
                         {
                           type: 'button',
-                          'aria-haspopup': 'dialog',
+                          'aria-haspopup': opensDialog ? 'dialog' : undefined,
                           onClick: () => onOpen(row.original.id),
                         },
                         value,

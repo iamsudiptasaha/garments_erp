@@ -2,7 +2,7 @@ import { ReturnEntry } from './returns.js';
 import { createElement as h, useEffect, useMemo, useState } from 'react';
 import { FabricSheet } from '../fabric/sheet.js';
 import { GridSearch, useGridSearch } from '../fabric/grid-toolbar.js';
-import { WorkspaceViewToggle } from '../fabric/view-toggle.js';
+import { BillingOverview, BillingViewActions, useBillingOverviewSearch } from './overview.js';
 import { FinishedGoodsEditor as DocumentDialog } from '../finished-goods/sheet-view.js';
 import { InvoiceEditor } from './invoice-editor.js';
 import { PackingDetail } from './packing-lists.js';
@@ -31,59 +31,6 @@ const pageSize = 50;
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 const capitalize = (value) => value[0].toUpperCase() + value.slice(1);
 const invoiceLabel = (number, id) => number || `Draft ${id}`;
-
-function InvoiceTable({ records, onOpen }) {
-  return h(
-    'div',
-    { className: 'lab-record-table-wrap billing-table-frame' },
-    h(
-      'table',
-      null,
-      h(
-        'thead',
-        null,
-        h(
-          'tr',
-          null,
-          columns.map(([key, label]) => h('th', { key, scope: 'col' }, label)),
-        ),
-      ),
-      h(
-        'tbody',
-        null,
-        records.map((record) =>
-          h(
-            'tr',
-            { key: record.id },
-            columns.map(([key]) =>
-              h(
-                'td',
-                { key },
-                key === 'invoice'
-                  ? h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'open-document',
-                        onClick: () => onOpen(record.id),
-                      },
-                      record.invoice,
-                    )
-                  : key === 'status'
-                    ? h(BillingStatus, { value: record.status })
-                    : key === 'verified_credit' && !record[key]
-                      ? '—'
-                      : key.endsWith('_value') || key.endsWith('_credit')
-                        ? money.format(record[key])
-                        : (record[key] ?? '—'),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
 
 const lineColumns = [
   { key: 'item', label: 'Invoice item' },
@@ -449,7 +396,9 @@ export function BillingInvoices({
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const query = useGridSearch(search.trim());
+  const sheetQuery = useGridSearch(search.trim());
+  const [overviewQuery, onSearch] = useBillingOverviewSearch(setPage);
+  const query = view === 'sheet' ? sheetQuery : overviewQuery;
   useEffect(() => {
     if (invoiceToOpen) {
       setInvoice(invoiceToOpen);
@@ -522,6 +471,28 @@ export function BillingInvoices({
       canViewReturns,
       openPO,
     });
+  const statusFilter = h(
+    'select',
+    {
+      'aria-label': 'Invoice status',
+      value: status,
+      onChange: (event) => {
+        setSelection(null);
+        setStatus(event.target.value);
+        setPage(0);
+      },
+    },
+    h('option', { value: '' }, 'All statuses'),
+    statuses.map((value) => h('option', { key: value, value }, capitalize(value))),
+  );
+  const add =
+    canCreate &&
+    createInvoice &&
+    h(
+      'button',
+      { type: 'button', className: 'primary', onClick: () => createInvoice() },
+      'New invoice',
+    );
   return h(
     'section',
     null,
@@ -534,62 +505,45 @@ export function BillingInvoices({
         h('h1', null, 'Invoices'),
         h('p', null, 'Create drafts and track finalized invoices, dispatch and returns.'),
       ),
-      h(WorkspaceViewToggle, {
+      h(BillingViewActions, {
         view,
-        label: 'Invoices view',
+        title: 'Invoices',
+        add,
         onChange: (next) => {
           setSelection(null);
+          if (overviewQuery !== sheetQuery) setPage(0);
           setView(next);
         },
       }),
     ),
-    h(
-      'div',
-      { className: 'fabric-actions' },
-      h(GridSearch, {
-        label: 'Search invoice number, buyer or PO',
-        value: search,
-        onChange: (value) => {
-          setSelection(null);
-          setSearch(value);
-          setPage(0);
-        },
-      }),
+    view === 'sheet' &&
       h(
-        'select',
-        {
-          'aria-label': 'Invoice status',
-          value: status,
-          onChange: (event) => {
+        'div',
+        { className: 'fabric-actions' },
+        h(GridSearch, {
+          label: 'Search invoice number, buyer or PO',
+          value: search,
+          onChange: (value) => {
             setSelection(null);
-            setStatus(event.target.value);
+            setSearch(value);
             setPage(0);
           },
-        },
-        h('option', { value: '' }, 'All statuses'),
-        statuses.map((value) => h('option', { key: value, value }, capitalize(value))),
-      ),
-      canCreate &&
-        createInvoice &&
-        h(
-          'button',
-          { type: 'button', className: 'primary', onClick: () => createInvoice() },
-          'New invoice',
-        ),
-      view === 'sheet' &&
+        }),
+        statusFilter,
+        add,
         canEdit &&
-        h(
-          DocumentDialog,
-          {
-            record: true,
-            defer: true,
-            title: 'Edit invoice',
-            label: 'Edit selected document',
-            disabled: !selection || !['Draft', 'Finalized'].includes(selection.status),
-          },
-          (onClose) => h(InvoiceEditRecord, { client, id: selection.id, onClose, onSaved: saved }),
-        ),
-      view === 'sheet' &&
+          h(
+            DocumentDialog,
+            {
+              record: true,
+              defer: true,
+              title: 'Edit invoice',
+              label: 'Edit selected document',
+              disabled: !selection || !['Draft', 'Finalized'].includes(selection.status),
+            },
+            (onClose) =>
+              h(InvoiceEditRecord, { client, id: selection.id, onClose, onSaved: saved }),
+          ),
         h(
           'button',
           {
@@ -599,12 +553,12 @@ export function BillingInvoices({
           },
           'Open selected invoice',
         ),
-    ),
+      ),
     (error || notice) && h('p', { role: error ? 'alert' : 'status' }, error || notice),
     !data && !error && h('p', { role: 'status' }, 'Loading invoices…'),
-    data &&
-      (view === 'sheet'
-        ? h(FabricSheet, {
+    view === 'sheet'
+      ? data &&
+          h(FabricSheet, {
             client,
             page: 'billing-invoices',
             spec,
@@ -614,8 +568,28 @@ export function BillingInvoices({
             onSelect: setSelection,
             paged: page > 0 || data.length > pageSize,
           })
-        : h(InvoiceTable, { records, onOpen: setInvoice })),
-    data && !records.length && h('p', null, 'No invoices found.'),
+      : h(BillingOverview, {
+          client,
+          page: 'billing-invoices',
+          title: 'Invoices',
+          columns: spec.columns,
+          hidden: ['mode', 'verified_credit'],
+          rows: data ? records : undefined,
+          onOpen: setInvoice,
+          opensDialog: false,
+          onSearch,
+          searchLabel: 'Search invoice number, buyer or PO',
+          toolbar: statusFilter,
+          render: (row, key) =>
+            key === 'status'
+              ? h(BillingStatus, { value: row.status })
+              : key === 'original_value' || (key === 'verified_credit' && row[key])
+                ? money.format(row[key])
+                : key === 'verified_credit'
+                  ? '—'
+                  : row[key],
+        }),
+    view === 'sheet' && data && !records.length && h('p', null, 'No invoices found.'),
     (page > 0 || (data?.length ?? 0) > pageSize) &&
       h(
         'div',

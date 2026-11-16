@@ -1,3 +1,4 @@
+import { BillingOverview, BillingRelatedRecord } from './overview.js';
 import { fileRecordPath } from '../access/workspace-routes.js';
 import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
 import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
@@ -251,25 +252,27 @@ export function BillingReturns({ client, capabilities, canCreate, canEdit, openI
   const { data, error } = useBillingQuery(client, 'erp_portal_return_workspace', args, revision);
   const rows = useMemo(
     () =>
-      data?.returns
-        .slice(0, 50)
-        .flatMap((row) => {
-          const header = {
-            ...row,
-            return_id: row.id,
-            number: 'RET-' + row.id.padStart(4, '0'),
-            status: 'Verified',
-          };
-          return row.parts.length
-            ? row.parts.map((part) => ({ ...header, ...part, id: row.id + ':' + part.id }))
-            : [header];
-        })
-        .filter((row) =>
-          [row.number, row.invoice_number, row.item, row.verifier].some((value) =>
-            value?.toLowerCase().includes(query),
-          ),
+      data?.returns.slice(0, 50).flatMap((row) => {
+        const header = {
+          ...row,
+          return_id: row.id,
+          number: 'RET-' + row.id.padStart(4, '0'),
+          status: 'Verified',
+        };
+        return row.parts.length
+          ? row.parts.map((part) => ({ ...header, ...part, id: row.id + ':' + part.id }))
+          : [header];
+      }),
+    [data],
+  );
+  const sheetRows = useMemo(
+    () =>
+      rows?.filter((row) =>
+        [row.number, row.invoice_number, row.item, row.verifier].some((value) =>
+          value?.toLowerCase().includes(query),
         ),
-    [data, query],
+      ),
+    [rows, query],
   );
   const refresh = () => setRevision((value) => value + 1);
   const paged = offset > 0 || data?.returns.length > 50;
@@ -280,7 +283,7 @@ export function BillingReturns({ client, capabilities, canCreate, canEdit, openI
       subtitle: 'Verify physical pieces against their original billed quantities.',
       page: 'billing-returns',
       columns,
-      rows,
+      rows: sheetRows,
       client,
       capabilities,
       search,
@@ -330,25 +333,25 @@ export function BillingReturns({ client, capabilities, canCreate, canEdit, openI
             'div',
             null,
             paged && h('p', null, 'Search applies to this page.'),
-            h(BillingTable, {
+            h(BillingOverview, {
+              client,
+              page: 'billing-returns',
+              title: 'Returns',
               columns,
+              hidden: ['price', 'verifier'],
               rows,
-              render: (row, key) =>
-                (key === 'credit' || key === 'price') && row[key] != null
-                  ? money.format(row[key])
-                  : key === 'invoice_number' && openInvoice
-                    ? h(
-                        'button',
-                        {
-                          type: 'button',
-                          className: 'open-document',
-                          onClick: () => openInvoice(row.billing_id),
-                        },
-                        row.invoice_number,
-                      )
-                    : key === 'status'
-                      ? h(BillingStatus, { value: row.status })
-                      : row[key],
+              render: (row, key) => {
+                if ((key === 'credit' || key === 'price') && row[key] != null)
+                  return money.format(row[key]);
+                if (key === 'invoice_number')
+                  return h(BillingRelatedRecord, {
+                    value: row[key],
+                    id: row.billing_id,
+                    open: openInvoice,
+                  });
+                if (key === 'status') return h(BillingStatus, { value: row.status });
+                return row[key];
+              },
             }),
           ),
   );

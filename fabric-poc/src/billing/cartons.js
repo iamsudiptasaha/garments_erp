@@ -1,3 +1,4 @@
+import { BillingOverview, BillingRelatedRecord } from './overview.js';
 import { PackingDetail } from './packing-lists.js';
 import { createElement as h, useMemo, useState } from 'react';
 import { FinishedGoodsEditor as DocumentDialog } from '../finished-goods/sheet-view.js';
@@ -190,6 +191,7 @@ export function BillingCartons({
   openTransport,
 }) {
   const [search, setSearch] = useState('');
+  const [opened, setOpened] = useState(null);
   const [offset, setOffset] = useState(0);
   const [revision, setRevision] = useState(0);
   const query = useGridSearch(search.trim().toLowerCase());
@@ -197,21 +199,23 @@ export function BillingCartons({
   const { data, error } = useBillingQuery(client, 'erp_portal_carton_workspace', args, revision);
   const rows = useMemo(
     () =>
-      data?.cartons
-        .slice(0, 50)
-        .map((row) => ({
-          ...row,
-          transport: row.transport_id ? 'TR-' + row.transport_id.padStart(4, '0') : null,
-        }))
-        .filter((row) =>
-          [row.carton_number, row.invoice_number, row.packing_list_number, row.transport].some(
-            (value) => value?.toLowerCase().includes(query),
-          ),
+      data?.cartons.slice(0, 50).map((row) => ({
+        ...row,
+        transport: row.transport_id ? 'TR-' + row.transport_id.padStart(4, '0') : null,
+      })),
+    [data],
+  );
+  const sheetRows = useMemo(
+    () =>
+      rows?.filter((row) =>
+        [row.carton_number, row.invoice_number, row.packing_list_number, row.transport].some(
+          (value) => value?.toLowerCase().includes(query),
         ),
-    [data, query],
+      ),
+    [rows, query],
   );
   const refresh = () => setRevision((value) => value + 1);
-  function editor(carton, label, editable, disabled = false, deleting = false) {
+  function editor(carton, label, editable, disabled = false, deleting = false, onDismiss) {
     const title = deleting
       ? 'Delete carton'
       : !carton
@@ -221,7 +225,7 @@ export function BillingCartons({
           : 'Carton details';
     return h(
       DocumentDialog,
-      { record: Boolean(carton) || disabled, defer: true, label, title, disabled },
+      { record: Boolean(carton) || disabled, defer: !onDismiss, label, title, disabled, onDismiss },
       (onClose) =>
         h(CartonForm, {
           client,
@@ -243,7 +247,7 @@ export function BillingCartons({
       subtitle: 'Carton contents and transport assignments.',
       page: 'billing-cartons',
       columns,
-      rows,
+      rows: sheetRows,
       client,
       capabilities,
       search,
@@ -271,51 +275,48 @@ export function BillingCartons({
             'div',
             null,
             paged && h('p', null, 'Search applies to this page.'),
-            h(BillingTable, {
-              columns: [...columns, { key: 'action', label: 'Action' }],
+            h(BillingOverview, {
+              client,
+              page: 'billing-cartons',
+              title: 'Cartons',
+              columns,
               rows,
-              render: (row, key) =>
-                key === 'carton_number'
-                  ? editor(row, row.carton_number, editable(row))
-                  : key === 'packing_list_number' && canViewPacking
-                    ? h(
-                        DocumentDialog,
-                        {
-                          record: true,
-                          defer: true,
-                          label: row.packing_list_number,
-                          title: 'Packing list details',
-                        },
-                        () => h(PackingDetail, { client, id: row.packing_id, openInvoice }),
-                      )
-                    : key === 'invoice_number' && openInvoice
-                      ? h(
-                          'button',
-                          {
-                            type: 'button',
-                            className: 'open-document',
-                            onClick: () => openInvoice(row.billing_id),
-                          },
-                          row.invoice_number,
-                        )
-                      : key === 'transport' && row.transport_id && openTransport
-                        ? h(
-                            'button',
-                            {
-                              type: 'button',
-                              className: 'open-document',
-                              onClick: () => openTransport(row.transport_id),
-                            },
-                            row.transport,
-                          )
-                        : key === 'action'
-                          ? canDelete && row.status !== 'Dispatched'
-                            ? editor(row, 'Delete', false, false, true)
-                            : null
-                          : key === 'status'
-                            ? h(BillingStatus, { value: row.status })
-                            : row[key],
+              onOpen: (id) => setOpened(rows.find((row) => row.id === id)),
+              actions: canDelete
+                ? (row) => row.status !== 'Dispatched' && editor(row, 'Delete', false, false, true)
+                : undefined,
+              render: (row, key) => {
+                if (key === 'packing_list_number' && canViewPacking)
+                  return h(
+                    DocumentDialog,
+                    {
+                      record: true,
+                      defer: true,
+                      label: row.packing_list_number,
+                      title: 'Packing list details',
+                    },
+                    () => h(PackingDetail, { client, id: row.packing_id, openInvoice }),
+                  );
+                if (key === 'invoice_number')
+                  return h(BillingRelatedRecord, {
+                    value: row[key],
+                    id: row.billing_id,
+                    open: openInvoice,
+                  });
+                if (key === 'transport')
+                  return h(BillingRelatedRecord, {
+                    value: row[key],
+                    id: row.transport_id,
+                    open: openTransport,
+                  });
+                if (key === 'status') return h(BillingStatus, { value: row.status });
+                return row[key];
+              },
             }),
+            opened &&
+              editor(opened, opened.carton_number, editable(opened), false, false, () =>
+                setOpened(null),
+              ),
           ),
   );
 }

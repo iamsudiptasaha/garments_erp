@@ -219,14 +219,6 @@ export function WorkspaceSidebar({
         pageButtons('inventory'),
         'inventory-nav',
       ),
-      section(
-        'miscellaneous',
-        'Miscellaneous',
-        'Miscellaneous pages',
-        pageButtons('miscellaneous'),
-        'miscellaneous-nav',
-      ),
-      live && section('billing', 'Billing', 'Billing pages', pageButtons('billing')),
       can('finishedProducts') &&
         section(
           'finished-goods',
@@ -241,6 +233,7 @@ export function WorkspaceSidebar({
             ),
           ),
         ),
+      live && section('billing', 'Billing', 'Billing pages', pageButtons('billing')),
       otherModules
         .filter((name) => name !== 'Billing' || !live)
         .map((name) =>
@@ -251,6 +244,13 @@ export function WorkspaceSidebar({
             h('p', { className: 'phase-note' }, 'Next phase · after Fabric'),
           ),
         ),
+      section(
+        'miscellaneous',
+        'Miscellaneous',
+        'Miscellaneous pages',
+        pageButtons('miscellaneous'),
+        'miscellaneous-nav',
+      ),
       can('employees') &&
         section(
           'hr',

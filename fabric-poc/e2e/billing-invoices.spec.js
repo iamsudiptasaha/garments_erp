@@ -37,17 +37,27 @@ test('Billing invoice list filters, opens the shared sheet and loads invoice tot
     verified_credit: 100,
   };
   let allowed = true;
+  let invoicePreferences = {};
   await page.route('https://example.invalid/**', async (route) => {
     const name = new URL(route.request().url()).pathname.split('/').at(-1);
     const args = route.request().postDataJSON();
+    if (name === 'erp_grid_preferences' && args?.p_grid === 'overview-billing-invoices') {
+      invoicePreferences = { ...invoicePreferences, ...args.p_patch };
+    }
     const responses = {
+      erp_contacts_workspace: {},
       erp_account_security: { enabled: true, ready: true },
       erp_access_snapshot: {
         actor,
         enabled: true,
-        permissions: { billingInvoices: { view: allowed } },
+        permissions: {
+          billingInvoices: { view: allowed },
+          finishedProducts: { view: allowed },
+          employees: { view: allowed },
+          materialContacts: { view: allowed },
+        },
       },
-      erp_grid_preferences: {},
+      erp_grid_preferences: args?.p_grid === 'overview-billing-invoices' ? invoicePreferences : {},
       erp_portal_invoice_list:
         (!args?.p_status || args.p_status === record.status) &&
         (!args?.p_search || record.invoice_number.includes(args.p_search))
@@ -74,13 +84,72 @@ test('Billing invoice list filters, opens the shared sheet and loads invoice tot
 
   await page.goto('/fabric.html?live=1#billingInvoices');
   await expect(page.getByRole('heading', { name: 'Invoices', exact: true })).toBeVisible();
+  const sidebarOrder = await page
+    .locator('#workspace-sidebar [data-nav-section]')
+    .evaluateAll((sections) => sections.map((section) => section.dataset.navSection));
+  expect(sidebarOrder.indexOf('finished-goods')).toBeGreaterThanOrEqual(0);
+  expect(sidebarOrder.indexOf('billing')).toBe(sidebarOrder.indexOf('finished-goods') + 1);
+  expect(sidebarOrder.indexOf('miscellaneous')).toBeGreaterThanOrEqual(0);
+  expect(sidebarOrder.indexOf('hr')).toBe(sidebarOrder.indexOf('miscellaneous') + 1);
+  await expect(page.getByRole('button', { name: 'New invoice' })).toHaveCount(0);
+
   const rowLink = page.getByRole('button', { name: record.invoice_number });
   await expect(rowLink).toBeVisible();
   await page.getByRole('combobox', { name: 'Invoice status' }).selectOption('draft');
-  await expect(page.getByText('No invoices found.')).toBeVisible();
+  await expect(rowLink).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Invoice status' }).selectOption('dispatched');
   await expect(rowLink).toBeVisible();
+  const scrollRegion = page.getByRole('region', { name: 'Invoices', exact: true });
+  await expect(scrollRegion).toHaveAttribute('tabindex', '0');
+  const buyer = page.getByRole('columnheader', { name: 'Buyer' });
+  await buyer.getByRole('button', { name: 'Buyer' }).click();
+  await expect(buyer).toHaveAttribute('aria-sort', 'ascending');
+
+  await page.getByRole('button', { name: 'Filter', exact: true }).click();
+  const filters = page.getByRole('dialog', { name: 'Filter' });
+  await filters.getByRole('button', { name: '+ Add filter rule' }).click();
+  await filters.getByLabel('Filter field 1').selectOption('buyer');
+  await filters.getByLabel('Filter value 1').fill('Missing buyer');
+  await filters.getByRole('button', { name: 'Close' }).click();
+  await expect(rowLink).toHaveCount(0);
+  await page.getByRole('button', { name: 'Clear all' }).click();
+  await expect(rowLink).toBeVisible();
+
+  await page.getByRole('button', { name: 'Group', exact: true }).click();
+  const groups = page.getByRole('dialog', { name: 'Group' });
+  await groups.getByRole('button', { name: '+ Add grouping level' }).click();
+  await groups.getByLabel('Group field 1').selectOption('status');
+  await groups.getByRole('button', { name: 'Close' }).click();
+  const statusGroup = page.getByRole('button', { name: /Dispatched · 1/ });
+  await expect(statusGroup).toBeVisible();
+  await statusGroup.click();
+  await expect(rowLink).toBeVisible();
+
+  await page.getByRole('button', { name: 'Columns' }).click();
+  const columns = page.getByRole('dialog', { name: 'Columns' });
+  await columns.getByRole('checkbox', { name: 'Sale mode' }).check();
+  await columns.getByRole('spinbutton', { name: 'Buyer width in pixels' }).fill('240');
+  await columns.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByRole('columnheader', { name: 'Sale mode' })).toBeVisible();
+
+  const search = page.getByRole('searchbox', { name: 'Search invoice number, buyer or PO' });
+  await search.fill('INV-2026-046');
+  await expect.poll(() => invoicePreferences.search).toBe('INV-2026-046');
+  await page.reload();
+  await expect(search).toHaveValue('INV-2026-046');
+  await expect(page.getByRole('columnheader', { name: 'Sale mode' })).toBeVisible();
+  expect(invoicePreferences.columnWidths).toMatchObject({ buyer: 240 });
+  await expect(buyer).toHaveAttribute('aria-sort', 'ascending');
+  await expect(rowLink).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('invoice-overview.png') });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Hide menu' }).click();
+  await expect(scrollRegion).toBeVisible();
+  expect(await scrollRegion.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.screenshot({ path: testInfo.outputPath('invoice-overview-mobile.png') });
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.getByRole('button', { name: 'Sheet', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sheet', exact: true })).toHaveAttribute(
@@ -93,7 +162,7 @@ test('Billing invoice list filters, opens the shared sheet and loads invoice tot
     .getByRole('group', { name: 'Invoices view' })
     .getByRole('button', { name: 'Overview' })
     .click();
-  await rowLink.click();
+  await page.getByRole('cell', { name: record.buyer }).click();
   await expect(page.getByRole('heading', { name: record.invoice_number })).toBeVisible();
   await expect(page.getByText('₹210.00')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('invoice-detail.png') });
