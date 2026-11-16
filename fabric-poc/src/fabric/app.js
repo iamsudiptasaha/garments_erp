@@ -155,6 +155,7 @@ const productionOverviewColumns = {
   productionStatuses: ['name'],
   productionStageTypes: ['name'],
   productionPartTypes: ['name'],
+  productionSizes: ['name', 'order'],
 };
 
 function isManagementPage(page, live) {
