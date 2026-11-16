@@ -703,7 +703,7 @@ const nativeEditors = {
     'Stock receipts',
     'invoice_number',
     'Attachment receipt %',
-    'Edit →',
+    null,
     'Review details →',
     'Confirm & save',
   ],
@@ -748,10 +748,11 @@ const nativeEditors = {
 async function nativeRecordModal(target, createdId) {
   const [key, title, labelColumn, pattern, action, review, confirm] = nativeEditors[target.key];
   const employee = key === 'employees';
+  const stockReceipt = key === 'materialReceipts';
   const {
     rows: [row],
   } = await db.query(
-    `select r.id, ${labelColumn} as name from garments_erp.${target.table} r
+    `select r.id, ${labelColumn} as name${stockReceipt ? ', r.sku' : ''} from garments_erp.${target.table} r
        ${employee ? 'join garments_erp.contacts c on c.id=r.contacts_id' : ''}
        where ${labelColumn} like $1 and
          ($2::bigint is null and r.${target.slot} is null or r.id = $2)
@@ -764,11 +765,13 @@ async function nativeRecordModal(target, createdId) {
     await page.getByRole('searchbox', { name: 'Search ' + title, exact: true }).fill(row.name);
     const openRecord =
       action === null
-        ? page
-            .getByRole('table', { name: title })
-            .getByRole('row')
-            .filter({ hasText: row.name })
-            .getByRole('button')
+        ? stockReceipt
+          ? button(page.getByRole('table', { name: title, exact: true }), row.sku)
+          : page
+              .getByRole('table', { name: title })
+              .getByRole('row')
+              .filter({ hasText: row.name })
+              .getByRole('button')
         : button(page.locator('.overview-card').filter({ hasText: row.name }), action);
     await openRecord.click();
     if (employee && target.key !== 'employeePhoto') await b('Documents').click();

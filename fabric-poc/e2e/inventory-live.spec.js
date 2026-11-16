@@ -87,6 +87,7 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
   await page.getByLabel('Purchase order', { exact: true }).selectOption('4');
   await page.getByLabel('Purchase order line', { exact: true }).selectOption('12');
   await page.getByLabel('Billed quantity').fill('10');
+  await page.getByLabel('Invoice number').fill('INV-21');
   await page.getByLabel('Material category', { exact: true }).selectOption('15');
   await page.getByRole('button', { name: 'Review details →' }).click();
   await page.getByRole('button', { name: 'Confirm & save', exact: true }).click();
@@ -95,7 +96,13 @@ test('signed-in Inventory saves a receipt and issues stock against the saved rec
     raw_material_purchase_order_item_id: '12',
     material_category_id: '15',
   });
-  await page.getByRole('button', { name: 'Edit →', exact: true }).click();
+  const receiptTable = page.getByRole('table', { name: 'Stock receipts', exact: true });
+  const search = page.getByRole('searchbox', { name: 'Search Stock receipts', exact: true });
+  await expect(receiptTable.getByRole('columnheader', { name: /Invoice/ })).toHaveCount(0);
+  await search.fill('does-not-exist');
+  await expect(receiptTable.getByText('No matching records')).toBeVisible();
+  await search.fill('INV-21');
+  await receiptTable.getByRole('button', { name: 'RCV-21', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Upload stock receipt bill' })).toBeVisible();
 
   await page.goto('/fabric.html?live=1#materialIssues');
