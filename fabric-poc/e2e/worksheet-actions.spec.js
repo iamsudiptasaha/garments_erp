@@ -219,9 +219,16 @@ for (const [route, title, open, edit, add, record] of [
       await overview.getByRole('button', { name: 'Clear search' }).click();
       await expect(table.getByRole('row')).toHaveCount(3);
       await expect(overview).toBeVisible();
-      const screenshot = { animations: 'disabled', caret: 'hide' };
-      await page.mouse.move(0, 0);
-      const before = await overview.screenshot(screenshot);
+      const captureOverview = async () => {
+        await page.mouse.move(0, 0);
+        await page.evaluate(async () => {
+          await document.fonts.ready;
+          document.activeElement?.blur();
+          window.scrollTo(0, 0);
+        });
+        return overview.screenshot({ animations: 'disabled', caret: 'hide' });
+      };
+      const before = await captureOverview();
       await page.getByRole('button', { name: 'Sheet', exact: true }).click();
       const editSelected = page.getByRole('button', { name: edit, exact: true });
       const openSelected = page.getByRole('button', { name: open, exact: true });
@@ -263,6 +270,60 @@ for (const [route, title, open, edit, add, record] of [
       await search.clear();
       await expect(page.getByText('2 rows', { exact: true })).toBeVisible();
       await page.getByLabel('Sheet zoom').selectOption('1.25');
+      await page
+        .getByRole('region', { name: 'Production documents' })
+        .getByRole('button', { name: 'Overview', exact: true })
+        .click();
+      await expect
+        .poll(async () => {
+          const after = await captureOverview();
+          if (after.equals(before)) return null;
+          return page.evaluate(
+            async ([before, after]) => {
+              const decode = async (png) => {
+                const image = await createImageBitmap(
+                  await (await fetch('data:image/png;base64,' + png)).blob(),
+                );
+                const canvas = new OffscreenCanvas(image.width, image.height);
+                const context = canvas.getContext('2d');
+                context.drawImage(image, 0, 0);
+                image.close();
+                return context.getImageData(0, 0, canvas.width, canvas.height);
+              };
+              const [first, second] = await Promise.all([decode(before), decode(after)]);
+              if (first.width !== second.width || first.height !== second.height)
+                return {
+                  before: [first.width, first.height],
+                  after: [second.width, second.height],
+                };
+              let left = first.width,
+                top = first.height,
+                right = -1,
+                bottom = -1,
+                changed = 0;
+              for (let i = 0; i < first.data.length; i += 4) {
+                if (
+                  first.data
+                    .subarray(i, i + 4)
+                    .every((value, channel) => value === second.data[i + channel])
+                )
+                  continue;
+                const pixel = i / 4;
+                const x = pixel % first.width;
+                const y = Math.floor(pixel / first.width);
+                left = Math.min(x, left);
+                right = Math.max(x, right);
+                top = Math.min(y, top);
+                bottom = Math.max(y, bottom);
+                changed++;
+              }
+              return changed ? { changed, left, top, right, bottom } : null;
+            },
+            [before.toString('base64'), after.toString('base64')],
+          );
+        })
+        .toBeNull();
+      await page.getByRole('button', { name: 'Sheet', exact: true }).click();
       for (const width of [1024, 390]) {
         await page.setViewportSize({ width, height: 900 });
         const toolbar = page.locator('.worksheet-actions');
@@ -271,14 +332,6 @@ for (const [route, title, open, edit, add, record] of [
         expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
       }
       await page.setViewportSize({ width: 1280, height: 720 });
-      await page
-        .getByRole('region', { name: 'Production documents' })
-        .getByRole('button', { name: 'Overview', exact: true })
-        .click();
-      await page.mouse.move(0, 0);
-      await expect
-        .poll(async () => (await overview.screenshot(screenshot)).equals(before))
-        .toBe(true);
       Object.assign(permissions, {
         view: true,
         create: false,
