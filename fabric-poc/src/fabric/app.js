@@ -168,6 +168,7 @@ const productionOverviewColumns = {
   brands: ['name', 'contact', 'purpose'],
   productionStages: ['name', 'abbr', 'order', 'type', 'track'],
   productionWorkers: ['name', 'contact', 'purpose', 'jobs'],
+  productionItems: ['name', 'brand', 'product', 'season', 'batch_number'],
 };
 
 const productionOverviewLinks = {
@@ -180,6 +181,10 @@ const productionOverviewLinks = {
   productionWorkers: {
     contact: ['contacts_id', 'materialContacts'],
     purpose: ['contact_purpose_id', 'contactCategories'],
+  },
+  productionItems: {
+    brand: ['brand_id', 'brands'],
+    product: ['product_type_list_id', 'productionProductTypes'],
   },
 };
 
