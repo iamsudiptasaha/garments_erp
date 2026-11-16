@@ -148,3 +148,49 @@ test('Employee Overview preserves read-only and denied access', async ({ page })
   await setAccess();
   await expect(table).toHaveCount(0);
 });
+
+for (const [route, title] of [
+  ['employeeBloodGroups', 'Blood groups'],
+  ['employeeEmploymentTypes', 'Employment types'],
+  ['employeeGender', 'Gender'],
+]) {
+  test(title + ' uses the shared table and existing reference form', async ({ page }) => {
+    test.skip(!!process.env.E2E_BASE_URL, 'Local preview only');
+    await page.goto('/fabric.html#' + route);
+    const table = page.getByRole('table', { name: title, exact: true });
+    await expect(table.getByText('No matching records')).toBeVisible();
+    await page.getByLabel('New value', { exact: true }).fill('Sample reference');
+    await page.getByRole('button', { name: 'Add value', exact: true }).click();
+    await table.getByRole('button', { name: 'Sample reference', exact: true }).press('Enter');
+    const edit = page.getByLabel('Edit value', { exact: true });
+    await expect(edit).toHaveValue('Sample reference');
+    await edit.fill('Edited reference');
+    await page.getByRole('button', { name: 'Save value', exact: true }).click();
+    const search = page.getByRole('searchbox', { name: 'Search ' + title, exact: true });
+    await search.fill('no such reference');
+    await expect(table.getByText('No matching records')).toBeVisible();
+    await search.fill('edited');
+    await expect(table.getByRole('row')).toHaveCount(2);
+    await expect(
+      table.getByRole('button', { name: 'Edited reference', exact: true }),
+    ).toBeVisible();
+
+    const access = initialAccess();
+    access.roles.find(({ id }) => id === 'admin').permissions.employees = { view: true };
+    await page.evaluate(
+      (data) => localStorage.setItem('garments-access-preview-v1', JSON.stringify(data)),
+      access,
+    );
+    await page.reload();
+    await expect(page.getByRole('searchbox', { name: 'Search ' + title, exact: true })).toHaveValue(
+      'edited',
+    );
+    await expect(table.getByRole('cell', { name: 'Edited reference', exact: true })).toBeVisible();
+    await table.getByRole('cell', { name: 'Edited reference', exact: true }).click();
+    await expect(table.getByRole('button', { name: 'Edited reference', exact: true })).toHaveCount(
+      0,
+    );
+    await expect(edit).toHaveCount(0);
+    await expect(page.getByLabel('New value', { exact: true })).toHaveCount(0);
+  });
+}

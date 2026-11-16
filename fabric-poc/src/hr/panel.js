@@ -1,6 +1,6 @@
 import { EmployeeAvatar } from './avatar.js';
 import { getAccessClient } from '../access/client.js';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { allowed, isAdministrator } from '../admin/model.js';
 import { followWorkspaceLink } from '../access/workspace-routes.js';
 import { OverviewTable } from '../fabric/overview-table.js';
@@ -9,13 +9,7 @@ import { WorkspaceViewToggle } from '../fabric/view-toggle.js';
 import { FabricSheet } from '../fabric/sheet.js';
 import { employeeCommands } from './live.js';
 import { EmployeeEditor } from './editor.js';
-import {
-  employeeReferences,
-  employeeRows,
-  employeeDraft,
-  employeeStatus,
-  hrPages,
-} from './model.js';
+import { employeeRows, employeeDraft, employeeStatus, hrPages } from './model.js';
 import './styles.css';
 const h = React.createElement;
 const spec = {
@@ -67,7 +61,7 @@ export function HRPanel({
   contactItems = [],
   onContacts,
 }) {
-  const tab = hrPages[page].table;
+  const { table: tab, title } = hrPages[page];
   const [snapshot, setSnapshot] = useState(() =>
       live ? null : preview(access, contactChoices, contactItems),
     ),
@@ -81,6 +75,7 @@ export function HRPanel({
     [referenceId, setReferenceId] = useState(null),
     [busy, setBusy] = useState(false),
     [selection, setSelection] = useState(null);
+  const referenceInput = useRef(null);
   const commands = useMemo(() => (live ? employeeCommands() : null), [!!live]);
   const can = (action) => allowed(access, actor, 'employees', action);
   async function reload() {
@@ -282,7 +277,7 @@ export function HRPanel({
     { className: 'hr-workspace' },
     h(RecordPageHeading, {
       eyebrow: 'EMPLOYEE / HR',
-      title: tab === 'employees' ? 'Employees' : employeeReferences[tab],
+      title,
       description:
         'Employee profiles, contacts and documents. Login access stays in Administration.',
       view,
@@ -318,6 +313,7 @@ export function HRPanel({
                   null,
                   referenceId ? 'Edit value' : 'New value',
                   h('input', {
+                    ref: referenceInput,
                     value: reference,
                     required: true,
                     maxLength: 100,
@@ -333,49 +329,29 @@ export function HRPanel({
                   referenceId ? 'Save value' : 'Add value',
                 ),
               ),
-            h(
-              'table',
-              { className: 'access-table' },
-              h(
-                'thead',
-                null,
-                h(
-                  'tr',
-                  null,
-                  h('th', null, 'Name'),
-                  h('th', null, 'Updated at'),
-                  h('th', null, 'Actions'),
-                ),
-              ),
-              h(
-                'tbody',
-                null,
-                snapshot[tab].map((r) =>
-                  h(
-                    'tr',
-                    { key: r.id },
-                    h('td', null, r.name),
-                    h('td', null, r.updated_at || '—'),
-                    h(
-                      'td',
-                      null,
-                      can('edit') &&
-                        h(
-                          'button',
-                          {
-                            onClick: () => {
-                              setReferenceId(r.id);
-                              setReference(r.name);
-                            },
-                          },
-                          'Edit',
-                        ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            !snapshot[tab].length && h('p', null, 'No values added yet.'),
+            h(OverviewTable, {
+              key: actor + ':' + page,
+              client: live ? getAccessClient() : null,
+              grid: 'overview-' + page,
+              title,
+              records: snapshot[tab],
+              opensDialog: false,
+              columns: [
+                { accessorKey: 'name', header: 'Name' },
+                { accessorKey: 'updated_at', header: 'Updated at' },
+              ],
+              onOpen:
+                can('edit') && !busy
+                  ? (id) => {
+                      const row = snapshot[tab].find((record) => record.id === id);
+                      if (row) {
+                        setReferenceId(row.id);
+                        setReference(row.name);
+                        referenceInput.current?.focus();
+                      }
+                    }
+                  : undefined,
+            }),
           )
         : h(
             React.Fragment,
