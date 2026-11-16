@@ -16,7 +16,12 @@ export function contactDraft(data, id, can = () => true) {
   return {
     header: contact
       ? { ...contact }
-      : Object.fromEntries(miscellaneousPages.materialContacts.header.map((f) => [f.key, ''])),
+      : Object.fromEntries(
+          miscellaneousPages.materialContacts.header.map((f) => [
+            f.key,
+            f.type === 'checkbox' ? false : '',
+          ]),
+        ),
     sections: Object.fromEntries(
       contactSections
         .filter((s) => can('view', s.resource))

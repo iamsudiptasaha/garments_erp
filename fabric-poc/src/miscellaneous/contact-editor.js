@@ -21,6 +21,7 @@ export function ContactEditor({ data, id, onSave, onReload, onClose, can = () =>
     [contactSaved, setContactSaved] = useState(false),
     [busy, setBusy] = useState(false);
   const editable = can(id ? 'edit' : 'create', 'materialContacts');
+  const originalHeader = data.contacts.find((row) => row.id === id);
   const visibleSections = contactSections.filter(
     ({ table }) => draft.sections[table] !== undefined,
   );
@@ -192,12 +193,33 @@ export function ContactEditor({ data, id, onSave, onReload, onClose, can = () =>
               'dl',
               { className: 'fabric-fields' },
               miscellaneousPages.materialContacts.header.map((f) => {
-                const original = data.contacts.find((row) => row.id === id)?.[f.key];
+                const original = originalHeader?.[f.key];
                 const value = draft.header[f.key];
+                if (!review && f.type === 'checkbox') {
+                  return h(
+                    'div',
+                    { key: f.key },
+                    h('dt', null, f.label),
+                    h(
+                      'dd',
+                      null,
+                      h('input', {
+                        type: 'checkbox',
+                        'aria-label': f.label,
+                        checked: value === true,
+                        disabled: true,
+                      }),
+                    ),
+                  );
+                }
+                if (
+                  f.key === 'gst' &&
+                  !draft.header.is_company &&
+                  !(review && originalHeader?.is_company && original)
+                )
+                  return null;
                 const display = (fieldValue) =>
-                  f.type === 'select'
-                    ? optionsFor(data, f.source).find(([key]) => key === fieldValue)?.[1] || '—'
-                    : fieldValue || '—';
+                  f.type === 'checkbox' ? (fieldValue === true ? 'Yes' : 'No') : fieldValue || '—';
                 return h(
                   'div',
                   { key: f.key },
@@ -215,15 +237,25 @@ export function ContactEditor({ data, id, onSave, onReload, onClose, can = () =>
           : h(
               'div',
               { className: 'fabric-fields' },
-              miscellaneousPages.materialContacts.header.map((f) =>
-                input(
-                  f,
-                  draft.header,
-                  (value) => change((d) => ({ ...d, header: { ...d.header, [f.key]: value } })),
-                  '',
-                  busy,
+              miscellaneousPages.materialContacts.header
+                .filter((f) => f.key !== 'gst' || draft.header.is_company)
+                .map((f) =>
+                  input(
+                    f,
+                    draft.header,
+                    (value) =>
+                      change((d) => ({
+                        ...d,
+                        header: {
+                          ...d.header,
+                          [f.key]: value,
+                          ...(f.key === 'is_company' && !value ? { gst: null } : {}),
+                        },
+                      })),
+                    '',
+                    busy,
+                  ),
                 ),
-              ),
             ),
       ),
       review &&

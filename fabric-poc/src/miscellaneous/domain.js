@@ -22,7 +22,8 @@ export function miscellaneousRows(data, page) {
     return data.contacts.map((r) => ({
       ...identity(r),
       name: r.company_name,
-      gst: dash(r.gst),
+      is_company: r.is_company === true ? 'Yes' : 'No',
+      gst: r.is_company === true ? dash(r.gst) : '—',
       alias: dash(r.search_term),
       people: data.contact_items.filter((p) => p.contact_id === r.id).length,
       details: data.contact_extra.filter((p) => p.contact_id === r.id).length,

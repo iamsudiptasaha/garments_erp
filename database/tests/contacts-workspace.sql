@@ -1,5 +1,25 @@
 -- Run on the isolated Supabase replay with database/ci/seed.mjs fixtures.
 begin;
+do $$
+declare
+ contact garments_erp.contacts;
+begin
+ insert into garments_erp.contacts(company_name,gst)
+ values ('Synthetic direct GST check','GST-IGNORED') returning * into contact;
+ if contact.is_company is distinct from false or contact.gst is not null then
+   raise exception 'Direct insert must default to non-company and clear GST';
+ end if;
+ update garments_erp.contacts set is_company=true, gst='GST-KEPT'
+ where id=contact.id returning * into contact;
+ if contact.gst is distinct from 'GST-KEPT' then
+   raise exception 'Direct update must keep company GST';
+ end if;
+ update garments_erp.contacts set is_company=false where id=contact.id returning * into contact;
+ if contact.gst is not null then
+   raise exception 'Direct update must clear GST when company flag is removed';
+ end if;
+end;
+$$;
 insert into garments_access.app_role_resource_permission(app_role_id, app_resource_id, can_view)
 select role.id, resource.id, true from garments_access.app_role role, garments_access.app_resource resource
 where role.key='ci_viewer' and resource.key='materialContacts';
@@ -20,7 +40,7 @@ declare
  ticket jsonb;
 begin
  snapshot := public.erp_save_contact_workspace('{
-   "header":{"company_name":"Synthetic contact integration"},
+   "header":{"company_name":"Synthetic contact integration","is_company":true,"gst":"GST-SAVED"},
    "sections":{
      "contact_items":[{"name":"Dispatch","phone":"0012","primary_phone":true,"email":"dispatch@example.test","primary_email":true}],
      "contact_extra":[{"key":"Website","value":"example.invalid"}],
@@ -29,6 +49,9 @@ begin
  }');
  select value into strict contact from jsonb_array_elements(snapshot->'contacts')
    where value->>'company_name'='Synthetic contact integration';
+ if contact->'is_company' is distinct from 'true'::jsonb or contact->>'gst' is distinct from 'GST-SAVED' then
+   raise exception 'Company GST was not saved by Contacts RPC';
+ end if;
  select value into strict item from jsonb_array_elements(snapshot->'contact_items')
    where value->>'contact_id'=contact->>'id';
  select value into strict detail from jsonb_array_elements(snapshot->'contact_extra')
@@ -41,7 +64,7 @@ begin
  end if;
 
  snapshot := public.erp_save_contact_workspace(jsonb_build_object(
-   'header',contact||'{"search_term":"Updated contact"}',
+   'header',contact||'{"search_term":"Updated contact","is_company":false}',
    'sections',jsonb_build_object(
      'contact_bank_account',jsonb_build_array(bank||'{"branch":"Updated branch","primary_bank_account":true}'),
      'contact_items',jsonb_build_array(
@@ -56,6 +79,10 @@ begin
    where value->>'id'=item->>'id' and value->>'email'='dispatch-updated@example.test') then
    raise exception 'Existing contact item email change did not persist';
  end if;
+ if not exists (
+   select 1 from jsonb_array_elements(public.erp_contacts_workspace()->'contacts') as r(value)
+   where value->>'id'=contact->>'id' and value->'is_company'='false'::jsonb and value->'gst'='null'::jsonb
+ ) then raise exception 'Contacts RPC did not clear the saved GST'; end if;
  select value into strict bank from jsonb_array_elements(public.erp_contacts_workspace()->'contact_bank_account')
    where value->>'id'=bank->>'id' and value->>'contact_id'=contact->>'id';
  if bank->>'branch' is distinct from 'Updated branch'
