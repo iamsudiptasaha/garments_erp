@@ -2,6 +2,10 @@ import { EmployeeAvatar } from './avatar.js';
 import { getAccessClient } from '../access/client.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { allowed, isAdministrator } from '../admin/model.js';
+import { followWorkspaceLink } from '../access/workspace-routes.js';
+import { OverviewTable } from '../fabric/overview-table.js';
+import { RecordPageHeading } from '../fabric/record-page.js';
+import { WorkspaceViewToggle } from '../fabric/view-toggle.js';
 import { FabricSheet } from '../fabric/sheet.js';
 import { employeeCommands } from './live.js';
 import { EmployeeEditor } from './editor.js';
@@ -61,6 +65,7 @@ export function HRPanel({
   page = 'employees',
   contactChoices = [],
   contactItems = [],
+  onContacts,
 }) {
   const tab = hrPages[page].table;
   const [snapshot, setSnapshot] = useState(() =>
@@ -233,7 +238,7 @@ export function HRPanel({
         ? employeeStatus(row) !== 'Archived'
         : employeeStatus(row).toLowerCase() === statusFilter,
     ),
-    query,
+    view === 'sheet' ? query : '',
   );
   async function removeEmployee(record) {
     await commands.archive(record.employee.id, record.revision);
@@ -242,24 +247,48 @@ export function HRPanel({
     setNotice('Employee removed and archived.');
     await reload();
   }
+  const overview = tab === 'employees' && view === 'overview';
+  const addEmployee =
+    statusFilter !== 'archived' && can('create')
+      ? h(
+          'button',
+          { className: 'primary', onClick: () => setEditor({ record: null }) },
+          '+ Add employee',
+        )
+      : null;
+  const recordScope =
+    live &&
+    h(
+      'label',
+      null,
+      'Employee records ',
+      h(
+        'select',
+        {
+          value: statusFilter,
+          onChange: (event) => {
+            setStatusFilter(event.target.value);
+            setSelection(null);
+          },
+        },
+        h('option', { value: 'current' }, 'Current'),
+        h('option', { value: 'active' }, 'Active'),
+        h('option', { value: 'inactive' }, 'Inactive'),
+        h('option', { value: 'archived' }, 'Archived'),
+      ),
+    );
   return h(
     'section',
     { className: 'hr-workspace' },
-    h(
-      'header',
-      { className: 'fabric-page-header' },
-      h(
-        'div',
-        null,
-        h('p', { className: 'eyebrow' }, 'EMPLOYEE / HR'),
-        h('h1', null, tab === 'employees' ? 'Employees' : employeeReferences[tab]),
-        h(
-          'p',
-          null,
-          'Employee profiles, contacts and documents. Login access stays in Administration.',
-        ),
-      ),
-    ),
+    h(RecordPageHeading, {
+      eyebrow: 'EMPLOYEE / HR',
+      title: tab === 'employees' ? 'Employees' : employeeReferences[tab],
+      description:
+        'Employee profiles, contacts and documents. Login access stays in Administration.',
+      view,
+      onView: overview && snapshot ? setView : undefined,
+      action: overview && snapshot ? addEmployee : undefined,
+    }),
     !live &&
       h(
         'p',
@@ -351,121 +380,103 @@ export function HRPanel({
         : h(
             React.Fragment,
             null,
-            h(
-              'div',
-              { className: 'fabric-actions' },
-              h('input', {
-                type: 'search',
-                'aria-label': 'Search employees',
-                placeholder: 'Search name, code or phone…',
-                value: query,
-                onChange: (e) => setQuery(e.target.value),
-              }),
-              h(
-                'div',
-                { className: 'fabric-view-toggle' },
-                ['overview', 'sheet'].map((v) =>
-                  h(
-                    'button',
-                    { key: v, 'aria-pressed': v === view, onClick: () => setView(v) },
-                    v === 'overview' ? 'Overview' : 'Sheet',
-                  ),
-                ),
-              ),
-              live &&
-                h(
-                  'label',
-                  null,
-                  'Employee records ',
-                  h(
-                    'select',
-                    {
-                      value: statusFilter,
-                      onChange: (event) => {
-                        setStatusFilter(event.target.value);
-                        setSelection(null);
-                      },
-                    },
-                    h('option', { value: 'current' }, 'Current'),
-                    h('option', { value: 'active' }, 'Active'),
-                    h('option', { value: 'inactive' }, 'Inactive'),
-                    h('option', { value: 'archived' }, 'Archived'),
-                  ),
-                ),
-              statusFilter !== 'archived' &&
-                can('create') &&
-                h(
-                  'button',
-                  { className: 'primary', onClick: () => setEditor({ record: null }) },
-                  '+ Add employee',
-                ),
-              view === 'sheet' &&
-                h(
-                  'button',
-                  {
-                    disabled: !selection,
-                    onClick: () => {
-                      const r = rows.find((r) => r.id === selection);
-                      if (r) setEditor({ record: r.record });
-                    },
-                  },
-                  'Open selected employee',
-                ),
-            ),
             view === 'sheet'
-              ? h(FabricSheet, {
-                  page: 'employees',
-                  spec,
-                  records: rows,
-                  client: live ? getAccessClient() : null,
-                  capabilities: { format: false, export: can('export'), print: can('print') },
-                  onSelect: (row) => setSelection(row?.id || null),
-                  onNotice: setNotice,
-                })
-              : h(
-                  'div',
-                  { className: 'hr-directory' },
-                  rows.map((r) =>
+              ? h(
+                  React.Fragment,
+                  null,
+                  h(
+                    'div',
+                    { className: 'fabric-actions' },
+                    h('input', {
+                      type: 'search',
+                      'aria-label': 'Search employees',
+                      placeholder: 'Search name, code or phone…',
+                      value: query,
+                      onChange: (e) => setQuery(e.target.value),
+                    }),
+                    h(WorkspaceViewToggle, { view, onChange: setView }),
+                    recordScope,
+                    addEmployee,
                     h(
-                      'article',
+                      'button',
                       {
-                        key: r.id,
-                        className: 'hr-person-card',
-                      },
-                      h(EmployeeAvatar, {
-                        className: 'hr-initials',
-                        photoId: live ? r.record.employee.employee_photo : null,
-                        name: r.name,
-                      }),
-                      h('strong', null, r.name),
-                      h('span', null, r.code),
-                      h('span', null, r.phone || 'Phone not set'),
-                      h(
-                        'span',
-                        {
-                          className: 'hr-status',
-                          'data-active': r.status === 'Active',
+                        disabled: !selection,
+                        onClick: () => {
+                          const r = rows.find((r) => r.id === selection);
+                          if (r) setEditor({ record: r.record });
                         },
-                        r.status,
-                      ),
-                      h('small', null, 'Verified by ' + r.verified),
-                      h(
-                        'div',
-                        { className: 'hr-card-actions' },
-                        h(
-                          'button',
-                          {
-                            className: 'hr-open',
-                            disabled: busy,
-                            onClick: () => setEditor({ record: r.record }),
-                          },
-                          'Open profile →',
-                        ),
-                      ),
+                      },
+                      'Open selected employee',
                     ),
                   ),
-                ),
-            !rows.length && h('p', null, 'No matching employees.'),
+                  h(FabricSheet, {
+                    page: 'employees',
+                    spec,
+                    records: rows,
+                    client: live ? getAccessClient() : null,
+                    capabilities: { format: false, export: can('export'), print: can('print') },
+                    onSelect: (row) => setSelection(row?.id || null),
+                    onNotice: setNotice,
+                  }),
+                  !rows.length && h('p', null, 'No matching employees.'),
+                )
+              : h(OverviewTable, {
+                  key: actor,
+                  client: live ? getAccessClient() : null,
+                  grid: 'overview-employees',
+                  title: 'Employees',
+                  records: rows,
+                  toolbar: recordScope,
+                  columns: [
+                    { accessorKey: 'code', header: 'Employee code' },
+                    {
+                      accessorKey: 'name',
+                      header: 'Employee',
+                      cell: ({ getValue, row }) =>
+                        h(
+                          'span',
+                          { className: 'hr-overview-name' },
+                          h(EmployeeAvatar, {
+                            className: 'hr-overview-avatar',
+                            photoId: live ? row.original.record.employee.employee_photo : null,
+                            name: getValue(),
+                          }),
+                          onContacts && row.original.record.employee.contacts_id
+                            ? h(
+                                'a',
+                                {
+                                  href:
+                                    '/fabric.html' + (live ? '?live=1' : '') + '#materialContacts',
+                                  onClick: (event) => followWorkspaceLink(event, onContacts),
+                                },
+                                getValue(),
+                              )
+                            : getValue(),
+                        ),
+                    },
+                    { accessorKey: 'phone', header: 'Phone' },
+                    {
+                      accessorKey: 'status',
+                      header: 'Status',
+                      cell: ({ getValue }) =>
+                        h(
+                          'span',
+                          {
+                            className: 'erp-overview-status hr-overview-status',
+                            'data-status': getValue(),
+                          },
+                          getValue(),
+                        ),
+                    },
+                    { accessorKey: 'verified', header: 'Verified by' },
+                  ],
+                  onOpen: busy
+                    ? undefined
+                    : (id) => {
+                        const row = rows.find((record) => record.id === id);
+                        if (row) setEditor({ record: row.record });
+                      },
+                }),
             editor &&
               h(EmployeeEditor, {
                 key: editor.record?.employee.id || 'new',

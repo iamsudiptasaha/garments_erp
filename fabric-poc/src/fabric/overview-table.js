@@ -181,7 +181,7 @@ function ColumnSettings({ table }) {
   });
 }
 
-export function OverviewTable({ client, grid, title, records, columns, onOpen }) {
+export function OverviewTable({ client, grid, title, records, columns, onOpen, toolbar }) {
   const { preferences, ready, save, error } = useGridPreferences(client, grid);
   const [panel, setPanel] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -309,6 +309,7 @@ export function OverviewTable({ client, grid, title, records, columns, onOpen })
           count > 0 && h('span', null, count),
         ),
       ),
+      toolbar,
       h(
         'span',
         { className: 'erp-overview-count', role: 'status' },

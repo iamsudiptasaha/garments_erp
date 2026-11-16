@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { initialAccess } from '../src/admin/model.js';
 test('employee details, references and review use the same protected form', async ({ page }) => {
   test.skip(!!process.env.E2E_BASE_URL, 'Never edit production records in browser tests');
   await page.goto('/fabric.html#employees');
@@ -31,7 +32,9 @@ test('employee details, references and review use the same protected form', asyn
       .getByText(emergencyName, { exact: true }),
   ).toBeVisible();
   await dialog.getByRole('button', { name: 'Confirm & save employee', exact: true }).click();
-  await expect(page.getByRole('article').filter({ hasText: name })).toBeVisible();
+  await expect(
+    page.getByRole('table', { name: 'Employees' }).getByRole('row').filter({ hasText: name }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Employment types', exact: true }).click();
   await expect(page).toHaveURL(/#employeeEmploymentTypes$/);
   await expect(page.locator('.hr-workspace > .fabric-view-toggle')).toHaveCount(0);
@@ -67,4 +70,81 @@ test('bank details and supporting document stay in the contact-owned screen', as
   await expect(dialog.getByLabel('Company / contact', { exact: true })).toBeVisible();
   await expect(dialog.getByLabel('Account number', { exact: true })).toBeVisible();
   await expect(dialog.getByLabel('Supporting document', { exact: true })).toBeVisible();
+});
+
+test('Employee Overview keeps the profile and linked Contacts actions separate', async ({
+  page,
+}) => {
+  test.skip(!!process.env.E2E_BASE_URL, 'Local preview only');
+  await page.goto('/fabric.html#employees');
+  const table = page.getByRole('table', { name: 'Employees' });
+  const add = page.getByRole('button', { name: '+ Add employee', exact: true });
+  const sheet = page.getByRole('button', { name: 'Sheet', exact: true });
+  expect((await add.boundingBox()).y).toBeGreaterThan((await sheet.boundingBox()).y);
+  const profile = table.getByRole('row').filter({ hasText: 'ADMIN-001' });
+  await profile.getByRole('cell', { name: 'Active', exact: true }).click();
+  const editor = page.getByRole('dialog');
+  await expect(editor.getByRole('heading', { name: 'Workspace owner' })).toBeVisible();
+  await editor.getByRole('button', { name: 'Close', exact: true }).click();
+
+  const search = page.getByRole('searchbox', { name: 'Search Employees', exact: true });
+  await search.fill('ADMIN-001');
+  await expect(table.getByRole('row')).toHaveCount(2);
+  await page.reload();
+  await expect(search).toHaveValue('ADMIN-001');
+  await expect(table.getByRole('row')).toHaveCount(2);
+  await sheet.click();
+  await expect(table).toHaveCount(0);
+  await expect(
+    page.getByRole('searchbox', { name: 'Search employees', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open selected employee' })).toBeDisabled();
+  await page.getByRole('main').getByRole('button', { name: 'Overview', exact: true }).click();
+  await expect(search).toHaveValue('ADMIN-001');
+
+  // Use an Employee linked to a seeded Contacts record.
+  await add.click();
+  await editor.getByRole('button', { name: 'Contact links', exact: true }).click();
+  await editor.getByRole('combobox', { name: 'Employee contact', exact: true }).click();
+  const option = editor.getByRole('option').first();
+  const contact = await option.textContent();
+  await option.click();
+  await editor.getByRole('button', { name: 'Review employee', exact: true }).click();
+  await editor.getByRole('button', { name: 'Confirm & save employee', exact: true }).click();
+  await search.fill(contact);
+  const link = table.getByRole('link', { name: contact, exact: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await link.click();
+  await expect(page).toHaveURL(/#materialContacts$/);
+  await expect(editor).toHaveCount(0);
+  await page.goBack();
+  await expect(table).toBeVisible();
+});
+
+test('Employee Overview preserves read-only and denied access', async ({ page }) => {
+  test.skip(!!process.env.E2E_BASE_URL, 'Local preview permissions only');
+  await page.goto('/fabric.html#employees');
+  const access = initialAccess();
+  const permissions = access.roles.find(({ id }) => id === 'admin').permissions;
+  permissions.employees = { view: true };
+  permissions.materialContacts = { view: false };
+  const setAccess = async () => {
+    await page.evaluate(
+      (data) => localStorage.setItem('garments-access-preview-v1', JSON.stringify(data)),
+      access,
+    );
+    await page.reload();
+  };
+  await setAccess();
+  const table = page.getByRole('table', { name: 'Employees' });
+  await expect(page.getByRole('button', { name: '+ Add employee' })).toHaveCount(0);
+  await expect(table.getByRole('link')).toHaveCount(0);
+  await table.getByRole('button', { name: 'ADMIN-001', exact: true }).press('Enter');
+  const editor = page.getByRole('dialog');
+  await expect(editor.getByRole('heading', { name: 'Workspace owner' })).toBeVisible();
+  await expect(editor.getByRole('button', { name: 'Review employee' })).toHaveCount(0);
+  permissions.employees.view = false;
+  await setAccess();
+  await expect(table).toHaveCount(0);
 });

@@ -330,11 +330,13 @@ async function employee() {
   const {
     rows: [record],
   } = await db.query('select id from garments_erp.employee where contacts_id=$1', [contact.id]);
-  await page.getByRole('searchbox', { name: 'Search employees', exact: true }).fill(candidate);
-  await button(
-    page.locator('.hr-person-card').filter({ hasText: candidate }),
-    'Open profile →',
-  ).click();
+  await page.getByRole('searchbox', { name: 'Search Employees', exact: true }).fill(candidate);
+  await page
+    .getByRole('table', { name: 'Employees' })
+    .getByRole('row')
+    .filter({ hasText: candidate })
+    .getByRole('button')
+    .click();
   await verifyPhotoPreview('employee-profile-saved');
   await b('Close').click();
   return record.id;
@@ -716,28 +718,28 @@ const nativeEditors = {
   ],
   employeePhoto: [
     'employees',
-    'employees',
+    'Employees',
     'company_name',
     'Browser candidate %',
-    'Open profile →',
+    null,
     'Review employee',
     'Confirm & save employee',
   ],
   employeeDocument1: [
     'employees',
-    'employees',
+    'Employees',
     'company_name',
     'Browser candidate %',
-    'Open profile →',
+    null,
     'Review employee',
     'Confirm & save employee',
   ],
   employeeDocument2: [
     'employees',
-    'employees',
+    'Employees',
     'company_name',
     'Browser candidate %',
-    'Open profile →',
+    null,
     'Review employee',
     'Confirm & save employee',
   ],
@@ -760,10 +762,14 @@ async function nativeRecordModal(target, createdId) {
   const open = async () => {
     await route(key);
     await page.getByRole('searchbox', { name: 'Search ' + title, exact: true }).fill(row.name);
-    await button(
-      page.locator(employee ? '.hr-person-card' : '.overview-card').filter({ hasText: row.name }),
-      action,
-    ).click();
+    const openRecord = employee
+      ? page
+          .getByRole('table', { name: title })
+          .getByRole('row')
+          .filter({ hasText: row.name })
+          .getByRole('button')
+      : button(page.locator('.overview-card').filter({ hasText: row.name }), action);
+    await openRecord.click();
     if (employee && target.key !== 'employeePhoto') await b('Documents').click();
   };
   const save = async (description) => {
