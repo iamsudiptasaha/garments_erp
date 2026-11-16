@@ -68,3 +68,61 @@ for (const [route, title, field] of [
     await expect(page.getByRole('combobox', { name: 'Sheet zoom' })).toBeVisible();
   });
 }
+
+for (const [route, title, identity, field, lineText] of [
+  ['orders', 'Yarn purchase orders', 'YPO-014', 'Purchase order number', '30S Shivam CCH'],
+  ['yarn', 'Yarn bills', 'YB-014', 'Invoice number', '30S Shivam CCH'],
+  ['knitting', 'Knitting bills', 'KB-026', 'Invoice number', 'Sinker'],
+  ['programs', 'Dyeing programs', 'DP-031', 'Program number', 'Soft finish'],
+  ['dyeBills', 'Dyed fabric bills', 'DF-031', 'Invoice number', 'Sinker'],
+]) {
+  test(
+    title + ' keeps document identity, searchable lines and the existing editor',
+    async ({ page }) => {
+      await page.goto('/fabric.html#' + route);
+      const table = page.getByRole('table', { name: title, exact: true });
+      const row = table.getByRole('row').filter({
+        has: page.getByRole('button', { name: identity, exact: true }),
+      });
+      await expect(row).toHaveCount(1);
+      await expect(page.getByRole('region', { name: title, exact: true })).toHaveAttribute(
+        'tabindex',
+        '0',
+      );
+      const search = page.getByRole('searchbox', { name: 'Search ' + title, exact: true });
+      await search.fill('no-matching-fabric-document');
+      await expect(table.getByText('No matching records')).toBeVisible();
+      await search.fill(lineText);
+      await expect(row).toBeVisible();
+      const details = row.locator('details');
+      await details.locator('summary').click();
+      await expect(details).toHaveAttribute('open', '');
+      await expect(details.getByText('Total', { exact: true })).toBeVisible();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await row
+        .getByRole('cell')
+        .first()
+        .click({ position: { x: 2, y: 2 } });
+      const editor = page.getByRole('dialog');
+      const documentNumber = editor.getByLabel(field, { exact: true });
+      if (route === 'orders' || route === 'programs') {
+        await expect(documentNumber).toHaveText(identity);
+      } else {
+        await expect(documentNumber).toHaveValue(identity);
+      }
+      await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await page.getByRole('button', { name: 'Sheet', exact: true }).click();
+      await expect(page.getByRole('combobox', { name: 'Sheet zoom' })).toBeVisible();
+    },
+  );
+}
+
+test('Fabric document links navigate without opening the editor', async ({ page }) => {
+  await page.goto('/fabric.html#yarn');
+  const table = page.getByRole('table', { name: 'Yarn bills', exact: true });
+  await table.getByRole('link', { name: 'YPO-014', exact: true }).click();
+  await expect(
+    page.getByRole('table', { name: 'Yarn purchase orders', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});

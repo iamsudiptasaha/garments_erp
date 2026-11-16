@@ -174,6 +174,40 @@ const recordOverviewColumns = {
   productionItems: ['name', 'brand', 'product', 'season', 'batch_number'],
 };
 
+const fabricDocumentOverview = {
+  orders: ['bill', 'supplier', 'quantity', 'received', 'left', 'lineCount'],
+  yarn: ['bill', 'date', 'supplier', 'source', 'quantity', 'lineCount'],
+  knitting: ['bill', 'date', 'supplier', 'source', 'quantity', 'lineCount'],
+  programs: ['bill', 'date', 'supplier', 'color', 'quantity', 'lineCount'],
+  dyeBills: ['bill', 'date', 'supplier', 'quantity', 'verified', 'lineCount'],
+};
+
+const fabricOverviewTargets = {
+  orders: { supplier: 'suppliers' },
+  yarn: { supplier: 'suppliers', source: 'orders' },
+  knitting: { supplier: 'suppliers', source: 'yarn' },
+  programs: { supplier: 'suppliers', color: 'colours' },
+  dyeBills: { supplier: 'suppliers' },
+};
+
+const fabricOverviewLabels = {
+  color: 'Colour',
+  lineCount: 'Line items',
+};
+
+const fabricDocumentTotals = new Set(['quantity', 'received', 'left']);
+function fabricDocumentSummary({ id, rows }, columns) {
+  const record = { ...rows[0], id, rows, lineCount: rows.length };
+  for (const key of columns) {
+    if (fabricDocumentTotals.has(key)) {
+      record[key] = rows.reduce((total, row) => total + Number(row[key] ?? 0), 0);
+    } else if (['supplier', 'source', 'color'].includes(key)) {
+      record[key] = [...new Set(rows.map((row) => row[key] || '—'))].join(', ');
+    }
+  }
+  return record;
+}
+
 const recordOverviewLinks = {
   suppliers: { purpose: ['contact_purpose_id', 'contactCategories'] },
   productionProductTypes: { gender: ['gender_id', 'productionGenders'] },
@@ -423,7 +457,9 @@ function App({ live, refreshWorkspaceAccess }) {
     preferences = state.preferences[page] || {},
     totals = useMemo(() => fabricTotals(data), [data]);
   const sheetQuery = useGridSearch(query);
-  const overviewColumns = view === 'overview' ? recordOverviewColumns[page] : undefined;
+  const documentOverviewColumns = fabricDocumentOverview[page];
+  const overviewColumns =
+    view === 'overview' ? (documentOverviewColumns ?? recordOverviewColumns[page]) : undefined;
   const recordQuery = view === 'sheet' ? sheetQuery : overviewColumns ? '' : query;
   const searchPlaceholder =
     page === 'productionJobs'
@@ -680,6 +716,42 @@ function App({ live, refreshWorkspaceAccess }) {
     if (!can(mode === 'edition' ? 'create' : 'edit', 'labDips')) return;
     setEditor({ page: 'labDips', id: mode === 'edition' ? null : id, sourceId: id, mode });
   }
+  function overviewLink(value, target) {
+    return target && value && value !== '—' && value !== 'Not selected' && can('view', target)
+      ? h(
+          'a',
+          {
+            href: '/fabric.html' + (live ? '?live=1' : '') + '#' + target,
+            onClick: (event) => followWorkspaceLink(event, () => navigate(target)),
+          },
+          value,
+        )
+      : value;
+  }
+  function lineDetails(rows, quantity) {
+    return h(
+      'details',
+      {
+        className: 'card-lines overview-line-details',
+        onClick: (event) => event.stopPropagation(),
+      },
+      h('summary', null, 'See line items (' + rows.length + ')'),
+      rows.map((row) =>
+        h(
+          'div',
+          { key: row.id },
+          h('span', null, row.name + (row.color ? ' · ' + row.color : '')),
+          h('strong', null, fmt(row.quantity) + ' kg'),
+        ),
+      ),
+      h(
+        'div',
+        { className: 'line-total' },
+        h('span', null, 'Total'),
+        h('strong', null, fmt(quantity) + ' kg'),
+      ),
+    );
+  }
   function overview() {
     if (overviewColumns) {
       const links = recordOverviewLinks[page];
@@ -695,39 +767,45 @@ function App({ live, refreshWorkspaceAccess }) {
         client: live ? getAccessClient() : null,
         grid: page === 'productionStatuses' ? 'overview-production-statuses' : 'overview-' + page,
         title: spec.title,
-        records: groups.map(({ id, rows: [record] }) =>
-          page === 'productionWorkers'
+        records: groups.map((group) => {
+          if (documentOverviewColumns) return fabricDocumentSummary(group, overviewColumns);
+          const {
+            id,
+            rows: [record],
+          } = group;
+          return page === 'productionWorkers'
             ? { ...record, id, contact: record.name }
-            : { ...record, id },
-        ),
+            : { ...record, id };
+        }),
         getSearchText:
-          page === 'productionStatuses' ? undefined : (record) => Object.values(record).join(' '),
+          page === 'productionStatuses'
+            ? undefined
+            : (record) => (record.rows ?? [record]).flatMap((row) => Object.values(row)).join(' '),
         columns: overviewColumns.map((key) => ({
           accessorKey: key,
           header:
             page === 'productionWorkers' && key === 'contact'
               ? 'Company / contact'
-              : spec.columns.find((column) => column.key === key).label,
+              : (spec.columns.find((column) => column.key === key)?.label ??
+                fabricOverviewLabels[key]),
           cell: ({ getValue, row }) => {
             const value = getValue();
-            const relation = links?.[key];
-            if (value && value !== '—' && value !== 'Not selected' && relation) {
-              const [field, target] = relation;
-              const record = sources.get(row.original.id);
-              if (record?.[field] != null && can('view', target)) {
-                return h(
-                  'a',
-                  {
-                    href: '/fabric.html' + (live ? '?live=1' : '') + '#' + target,
-                    onClick: (event) => followWorkspaceLink(event, () => navigate(target)),
-                  },
-                  value,
-                );
-              }
+            if (key === 'lineCount') return lineDetails(row.original.rows, row.original.quantity);
+            const target = fabricOverviewTargets[page]?.[key];
+            if (target && documentOverviewColumns) {
+              const values = [...new Set(row.original.rows.map((line) => line[key] || '—'))];
+              return values.map((label, index) =>
+                h(React.Fragment, { key: label }, index > 0 && ', ', overviewLink(label, target)),
+              );
             }
+            const relation = links?.[key];
+            if (relation && sources.get(row.original.id)?.[relation[0]] != null)
+              return overviewLink(value, relation[1]);
             return page === 'productionStatuses'
               ? h('span', { className: 'erp-overview-status' }, value ?? '—')
-              : (value ?? '—');
+              : documentOverviewColumns
+                ? (fmt(value) ?? '—')
+                : (value ?? '—');
           },
         })),
         onOpen: can('edit') ? edit : undefined,
