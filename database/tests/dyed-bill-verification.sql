@@ -4,7 +4,7 @@ do $$
 declare style bigint; body_type bigint; sleeve_type bigint; body bigint; sleeve bigint; size_type bigint; size bigint; variant bigint; sleeve_design bigint;
  body_variant bigint; sleeve_variant bigint; body_requirement bigint; sleeve_requirement bigint;
  yarn bigint; supplier bigint; po bigint; poi bigint; ybi bigint; fabric bigint; knit bigint;
- brand bigint; colour bigint; mapping bigint; dyer bigint; lab bigint; version bigint; program bigint; program_item bigint;
+ brand bigint; colour bigint; mapping bigint; dyer bigint; lab bigint; version bigint; program bigint; program_item bigint; alternate_program bigint; alternate_line bigint;
  payload jsonb; edit_payload jsonb; invalid_payload jsonb; proof uuid; result jsonb; root jsonb; saved_id bigint;
  actor uuid:='00000000-0000-4000-8000-000000000001'; claims jsonb;
  header_temp text:=gen_random_uuid()::text; line_temp text:=gen_random_uuid()::text; batch_temp text:=gen_random_uuid()::text;
@@ -101,6 +101,17 @@ begin
     or not exists(select 1 from garments_erp.fabric_plan_dyeing_surplus
       where dyeing_program_item_id=program_item and received_kg=8 and received_surplus_kg=0)
  then raise exception 'TEST inherited fractional demand and shared coverage';end if;
+ update garments_erp.dyeing_program_item set quantity=3 where id=program_item;
+ insert into garments_erp.dyeing_program(dyer_id) values(dyer) returning id into alternate_program;
+ insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity)
+ values(fabric,alternate_program,version,2.5) returning id into alternate_line;
+ insert into garments_erp.fabric_plan_dyeing_link(item_part_fabric_id,dyeing_program_item_id)
+ values(body_requirement,alternate_line);
+ if not exists(select 1 from garments_erp.fabric_plan_estimates where id=body_requirement
+     and estimated_ordered_kg=5.25 and order_shortage_kg=0)
+    or not exists(select 1 from garments_erp.fabric_plan_estimates where id=sleeve_requirement
+      and estimated_ordered_kg=0.25)
+ then raise exception 'TEST full coverage should precede partial coverage when supplies overlap';end if;
  begin perform public.erp_save_verified_dyed_bill(payload,proof);raise exception 'TEST reused proof';exception when insufficient_privilege then null;end;
  edit_payload:=jsonb_build_object('resource','dyeBills','action','edit','root',jsonb_build_object('table','dyed_fabric_bill','id',saved_id::text,'before',root),'changes',jsonb_build_array(jsonb_build_object('table','dyed_fabric_bill','id',saved_id::text,'before',root,'values',jsonb_build_object('invoice_number','VERIFY-EDIT','invoice_date',current_date))));
  invalid_payload:=jsonb_set(edit_payload,'{changes}',(edit_payload->'changes')||jsonb_build_array(jsonb_build_object('table','contacts','id',gen_random_uuid()::text,'before',null,'values',jsonb_build_object('company_name','FORBIDDEN'))));

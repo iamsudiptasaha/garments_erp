@@ -47,13 +47,16 @@ left join garments_erp.dyed_fabric_bill b on b.id = d.dyed_fabric_bill_id
 group by p.id, p.quantity;
 
 -- Allocate virtual quantities across the entire link graph before applying any
--- caller filters. Small requirements go first and less-shared supplies are
--- used first, so a single dyeing line cannot be counted for multiple plans.
+-- caller filters. Cover complete requirements first and draw on less-shared
+-- supplies first. Each dyeing line contributes at most its available quantity.
 create function garments_erp.fabric_plan_coverage(p_received boolean)
 returns table (item_part_fabric_id bigint, dyeing_program_item_id bigint, estimated_kg numeric)
 language plpgsql stable set search_path = '' as $$
 declare
   remaining_by_program jsonb;
+  covered bigint[] := array[]::bigint[];
+  full_only boolean;
+  linked_kg numeric;
   requirement record;
   supply record;
   required_remaining numeric;
@@ -68,30 +71,43 @@ begin
     where l.dyeing_program_item_id = q.dyeing_program_item_id
   );
 
-  for requirement in
-    select r.id, r.required_kg from garments_erp.fabric_plan_requirements r
-    where r.required_kg > 0 order by r.required_kg, r.id
-  loop
-    required_remaining := requirement.required_kg;
-    for supply in
-      select l.dyeing_program_item_id from garments_erp.fabric_plan_dyeing_link l
-      where l.item_part_fabric_id = requirement.id
-      order by (
-        select count(*) from garments_erp.fabric_plan_dyeing_link other
-        where other.dyeing_program_item_id = l.dyeing_program_item_id
-      ), l.dyeing_program_item_id
+  foreach full_only in array array[true, false] loop
+    for requirement in
+      select r.id, r.required_kg from garments_erp.fabric_plan_requirements r
+      where r.required_kg > 0 and r.id <> all (covered)
+      order by r.required_kg, r.id
     loop
-      supply_remaining := (remaining_by_program ->> supply.dyeing_program_item_id::text)::numeric;
-      if supply_remaining > 0 then
-        item_part_fabric_id := requirement.id;
-        dyeing_program_item_id := supply.dyeing_program_item_id;
-        estimated_kg := least(required_remaining, supply_remaining);
-        remaining_by_program := jsonb_set(remaining_by_program, array[supply.dyeing_program_item_id::text],
-          to_jsonb(supply_remaining - estimated_kg));
-        required_remaining := required_remaining - estimated_kg;
-        return next;
-        exit when required_remaining = 0;
+      if full_only then
+        select coalesce(sum((remaining_by_program ->> l.dyeing_program_item_id::text)::numeric), 0)
+          into linked_kg
+        from garments_erp.fabric_plan_dyeing_link l
+        where l.item_part_fabric_id = requirement.id;
+        if linked_kg < requirement.required_kg then
+          continue;
+        end if;
+        covered := array_append(covered, requirement.id);
       end if;
+      required_remaining := requirement.required_kg;
+      for supply in
+        select l.dyeing_program_item_id from garments_erp.fabric_plan_dyeing_link l
+        where l.item_part_fabric_id = requirement.id
+        order by (
+          select count(*) from garments_erp.fabric_plan_dyeing_link other
+          where other.dyeing_program_item_id = l.dyeing_program_item_id
+        ), l.dyeing_program_item_id
+      loop
+        supply_remaining := (remaining_by_program ->> supply.dyeing_program_item_id::text)::numeric;
+        if supply_remaining > 0 then
+          item_part_fabric_id := requirement.id;
+          dyeing_program_item_id := supply.dyeing_program_item_id;
+          estimated_kg := least(required_remaining, supply_remaining);
+          remaining_by_program := jsonb_set(remaining_by_program, array[supply.dyeing_program_item_id::text],
+            to_jsonb(supply_remaining - estimated_kg));
+          required_remaining := required_remaining - estimated_kg;
+          return next;
+          exit when required_remaining = 0;
+        end if;
+      end loop;
     end loop;
   end loop;
 end $$;
