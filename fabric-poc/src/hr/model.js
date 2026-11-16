@@ -35,11 +35,7 @@ export const employeeLinks = [
   },
 ];
 export const employeeRelations = {
-  employee: [
-    ...employeeLinks.map((x) => x.key),
-    'verified_by_employee_id',
-    ...employeeFields.map(([key]) => key),
-  ],
+  employee: [...employeeLinks.map((x) => x.key), ...employeeFields.map(([key]) => key)],
 };
 export function employeeDraft(record) {
   return {
@@ -63,6 +59,12 @@ export function validateEmployeeDraft(draft) {
   )
     throw Error('Date of birth cannot be in the future.');
 }
+export function employeeStatus(record) {
+  const status = record?.status ?? record?.employee;
+  if (status?.is_archived || status?.archived_at) return 'Archived';
+  if (status?.is_active === false) return 'Inactive';
+  return status?.is_active === true ? 'Active' : 'Unknown';
+}
 export function employeeRows(records, query = '') {
   return records
     .map((record) => ({
@@ -74,12 +76,7 @@ export function employeeRows(records, query = '') {
         .filter(Boolean)
         .join(', '),
       joined: record.employee.date_of_joining || '',
-      status:
-        record.employee.is_active === false
-          ? 'Inactive'
-          : record.employee.is_active === true
-            ? 'Active'
-            : 'Unknown',
+      status: employeeStatus(record),
       verified: record.verifier_name || 'Not recorded',
       updated: record.employee.updated_at || '',
       record,

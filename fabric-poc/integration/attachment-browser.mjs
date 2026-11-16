@@ -38,8 +38,12 @@ async function signIn(role) {
   const {
     rows: [employee],
   } = await db.query(
-    'insert into garments_erp.employee(employee_code,contacts_id,contact_purpose_id,is_verified,verified_by_employee_id) values($1,$2,900001,true,900001) returning id',
+    'insert into garments_erp.employee(employee_code,contacts_id,contact_purpose_id) values($1,$2,900001) returning id',
     ['SCE/8' + contact.id, contact.id],
+  );
+  await db.query(
+    'update garments_erp.employee_status set is_verified=true,verified_by_employee_id=900001 where employee_id=$1',
+    [employee.id],
   );
   await db.query(
     'insert into garments_access.app_user(user_id,employee_id,is_active) values($1,$2,true)',

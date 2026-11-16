@@ -14,6 +14,7 @@ export function useNavigationPreferences(client, root) {
     if (pending.current.owner !== owner) pending.current = { owner, patch: {} };
 
     for (const section of sidebar.querySelectorAll('details[data-nav-section]')) {
+      if (section.dataset.dismissed === 'true') continue;
       if (!defaults.current.has(section)) defaults.current.set(section, section.open);
       const key = section.dataset.navSection;
       const saved = pending.current.patch[key] ?? preferences[key];
@@ -36,6 +37,7 @@ export function useNavigationPreferences(client, root) {
       )
         return;
       event.preventDefault();
+      delete section.dataset.dismissed;
       section.open = !section.open;
       const key = section.dataset.navSection;
       if (ready) save({ [key]: section.open });

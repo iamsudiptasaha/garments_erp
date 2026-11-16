@@ -7,7 +7,7 @@ declare yarn bigint; supplier bigint; po bigint; poi bigint; ybi bigint; fabric 
  actor uuid:='00000000-0000-4000-8000-000000000001'; claims jsonb;
  header_temp text:=gen_random_uuid()::text; line_temp text:=gen_random_uuid()::text; batch_temp text:=gen_random_uuid()::text;
 begin
- update garments_erp.employee set is_verified=true,verified_by_employee_id=900001 where id=900001;
+ update garments_erp.employee_status set is_verified=true,verified_by_employee_id=900001 where employee_id=900001;
  insert into garments_erp.yarn_type(name) values('Verification yarn') returning id into yarn;
  insert into garments_erp.yarn_supplier(contacts_id,contact_purpose_id) values(900001,900001) returning id into supplier;
  insert into garments_erp.yarn_purchase_order(yarn_supplier_id) values(supplier) returning id into po;
@@ -57,7 +57,7 @@ begin
  proof:=public.erp_dyed_bill_attestation(actor,900001,edit_payload);
  begin perform public.erp_save_verified_dyed_bill(edit_payload,proof);raise exception 'TEST stale edit';exception when serialization_failure then null;end;
  perform set_config('request.jwt.claim.sub','',true);perform set_config('request.jwt.claims','{}',true);
- update garments_erp.employee set is_active=false where id=900001;
+ update garments_erp.employee_status set is_active=false where employee_id=900001;
  perform set_config('request.jwt.claim.sub',actor::text,true);perform set_config('request.jwt.claims',claims::text,true);
  begin perform public.erp_dyed_bill_attestation(actor,900001,edit_payload);raise exception 'TEST inactive verifier';exception when insufficient_privilege then null;end;
  if has_function_privilege('authenticated','garments_erp.save_fabric_document_core(text,jsonb,text,jsonb,bigint)','execute') or has_function_privilege('anon','public.erp_save_verified_dyed_bill(jsonb,uuid)','execute') then raise exception 'TEST exposed privileged function';end if;

@@ -67,10 +67,10 @@ try {
     record = saved.records.find(
       (r) => !before.records.some((b) => b.employee.id === r.employee.id),
     );
-  assert.match(record.employee.employee_code, /^SCE\/\d{5}$/);
-  assert.equal(record.employee.verified_by_employee_id, '900001');
-  assert.equal(record.employee.is_active, true);
-  assert.equal(record.employee.is_verified, true);
+  assert.match(record.employee.employee_code, /^SCE-\d{5}$/);
+  assert.equal(record.status.verified_by_employee_id, '900001');
+  assert.equal(record.status.is_active, true);
+  assert.equal(record.status.is_verified, true);
   assert.equal(record.employee.contacts_id, '900006');
   assert.equal(record.banks, undefined);
   assert.deepEqual(
@@ -86,9 +86,10 @@ try {
   ]);
   assert.equal(
     (
-      await c.query('select verified_by_employee_id from garments_erp.employee where id=$1', [
-        record.employee.id,
-      ])
+      await c.query(
+        'select verified_by_employee_id from garments_erp.employee_status where employee_id=$1',
+        [record.employee.id],
+      )
     ).rows[0].verified_by_employee_id,
     '900001',
   );

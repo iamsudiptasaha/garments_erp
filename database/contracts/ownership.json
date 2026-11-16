@@ -45,9 +45,22 @@
       "garments_access.app_user_role",
       "garments_access.employee_invitation",
       "garments_access.cancelled_employee_invitation",
+      "garments_access.pending_employee_email",
       "garments_access.app_activity_log"
     ],
     "scope": "A verified Administrator changes another account. The original Auth UUID stays available for history and ownership references. Employee and Contact records remain owned by HR and Contacts."
+  },
+  "employeeRemoval": {
+    "command": "public.erp_archive_employee",
+    "permissionScreen": "employees",
+    "writableTables": [
+      "garments_erp.employee_status",
+      "garments_access.app_activity_log",
+      "garments_access.employee_invitation",
+      "garments_access.cancelled_employee_invitation"
+    ],
+    "accountLifecycle": "garments_access.change_account_lifecycle",
+    "scope": "An Administrator with Employee edit access archives another employee. Account removal and unfinished invitation retirement reuse the protected Auth lifecycle. Attachments, Contacts and historical references retain their ownership."
   },
   "readOnlyScreens": {
     "finishedProducts": {
@@ -164,8 +177,14 @@
     "employees": {
       "root": "employee",
       "writableTables": [
-        "employee"
+        "employee",
+        "employee_status"
       ],
+      "statusRelationship": {
+        "table": "employee_status",
+        "link": "employee_status_id",
+        "owner": "employee_id"
+      },
       "referenceTables": [
         "contacts",
         "contact_purpose",

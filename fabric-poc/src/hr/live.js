@@ -8,6 +8,7 @@ export function employeeCommands(client = getAccessClient()) {
   return {
     load: () => rpc('erp_employee_snapshot'),
     save: (payload) => rpc('erp_save_employee', { p_payload: payload, p_proof: null }),
+    archive: (id, expected) => rpc('erp_archive_employee', { p_id: id, p_expected: expected }),
     setActive: (id, active, expected) =>
       rpc('erp_set_employee_active', { p_id: id, p_active: active, p_expected: expected }),
     reference: (table, id, name, expected) =>
