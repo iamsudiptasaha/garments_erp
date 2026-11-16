@@ -239,8 +239,18 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
   await page.getByRole('combobox', { name: 'Sheet zoom' }).selectOption('1.25');
   await priceView.getByRole('button', { name: 'Overview', exact: true }).click();
-  await expect(page.locator('.overview-grid').getByText('62.50', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'View contents →' }).click();
+  await expect(
+    page.locator('.erp-overview-table').getByText('62.50', { exact: true }),
+  ).toBeVisible();
+  const priceGrid = page.getByRole('table', { name: 'Item prices' });
+  await priceGrid.getByRole('link', { name: 'SHIRT-SET' }).click();
+  await expect(page.getByRole('heading', { name: 'Sellable products', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Sellable product contents' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'SHIRT-SET', exact: true }).press('Enter');
+  await expect(page.getByRole('dialog', { name: 'Sellable product contents' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await nav.getByRole('button', { name: 'Item prices', exact: true }).click();
+  await priceGrid.getByRole('cell', { name: '62.50', exact: true }).click();
   const contents = page.getByRole('dialog', { name: 'Sellable product contents' });
   await expect(contents.getByRole('cell', { name: '23', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -271,7 +281,7 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   await page.getByRole('combobox', { name: 'Verifying employee' }).selectOption('14');
   await page.getByLabel('Actual pieces · M').fill('10');
   await page.getByRole('button', { name: 'Verify', exact: true }).click();
-  await expect(page.locator('.overview-grid').getByText('31', { exact: true })).toBeVisible();
+  await expect(page.locator('.erp-overview-table').getByText('31', { exact: true })).toBeVisible();
   expect(stockWrites[0]).toMatchObject({ p_job_id: '22', p_pieces: { 13: 10 } });
 
   await nav.getByRole('button', { name: 'Stock adjustments', exact: true }).click();
@@ -282,14 +292,18 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   await page.getByLabel('Quantity change').fill('-2');
   await page.getByLabel('Reason').fill('Recount');
   await page.getByRole('button', { name: 'Verify', exact: true }).click();
-  await expect(page.locator('.overview-grid').getByText('Recount', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('.erp-overview-table').getByText('Recount', { exact: true }),
+  ).toBeVisible();
   expect(stockWrites[1]).toMatchObject({ p_delta: -2, p_size_id: '13' });
 
   await nav.getByRole('button', { name: 'Price types', exact: true }).click();
   await page.getByRole('button', { name: '+ Add price type', exact: true }).click();
   await page.getByLabel('Name', { exact: true }).fill('Retail');
   await page.getByRole('button', { name: 'Save price type' }).click();
-  await expect(page.locator('.overview-grid').getByText('Retail', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('.erp-overview-table').getByText('Retail', { exact: true }),
+  ).toBeVisible();
 
   await nav.getByRole('button', { name: 'Sellable products', exact: true }).click();
   await page.getByRole('button', { name: '+ Add sellable product', exact: true }).click();
@@ -303,7 +317,7 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   await page.getByRole('option', { name: 'E-14' }).click();
   await page.getByRole('button', { name: 'Verify composition' }).click();
   await expect(
-    page.locator('.overview-grid').getByText('SHIRT-TRIO', { exact: true }),
+    page.locator('.erp-overview-table').getByText('SHIRT-TRIO', { exact: true }),
   ).toBeVisible();
   expect(entries.at(-1).p_entry.components).toEqual([{ size_id: '13', pieces: 3 }]);
 
@@ -340,11 +354,12 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
       await nav.getByRole('button', { name: title, exact: true }).click();
       const views = page.getByRole('group', { name: title + ' view' });
       await views.getByRole('button', { name: 'Overview' }).click();
-      const cards = page.locator('.overview-grid');
-      await expect(cards).toBeVisible();
+      const grid = page.getByRole('table', { name: title });
+      await expect(grid.locator('tbody tr').first()).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Columns', exact: true })).toBeEnabled();
       const screenshot = { animations: 'disabled', caret: 'hide' };
       await page.mouse.move(0, 0);
-      const overview = await cards.screenshot(screenshot);
+      const overview = await grid.screenshot(screenshot);
       await views.getByRole('button', { name: 'Sheet' }).click();
       const selected = page.getByRole('button', { name: action, exact: true });
       await expect(selected).toBeDisabled();
@@ -388,7 +403,8 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
       await page.setViewportSize({ width: 1280, height: 720 });
       await views.getByRole('button', { name: 'Overview' }).click();
       await page.mouse.move(0, 0);
-      expect(await cards.screenshot(screenshot)).toEqual(overview);
+      await expect(page.getByRole('button', { name: 'Columns', exact: true })).toBeEnabled();
+      expect((await grid.screenshot(screenshot)).equals(overview)).toBe(true);
       await views.getByRole('button', { name: 'Sheet' }).click();
       await expect(zoom).toHaveValue('1.5');
       await expect(selected).toBeDisabled();
@@ -405,7 +421,7 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
   ]) {
     await nav.getByRole('button', { name: title, exact: true }).click();
     await expect(
-      page.locator('.overview-grid').getByText(readValue, { exact: true }),
+      page.locator('.erp-overview-table').getByText(readValue, { exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: writeAction })).toHaveCount(0);
     await page
@@ -423,9 +439,9 @@ test('signed-in Finished Goods keeps manual price independent of costing and fin
     'true',
   );
   await valuation.getByRole('button', { name: 'Overview' }).click();
-  const valuationCard = page.locator('.overview-card').filter({ hasText: 'TEST-SHIRT' });
-  await expect(valuationCard).toContainText('16-20');
-  await expect(valuationCard).toContainText('Stock value230');
+  const valuationRow = page.getByRole('row').filter({ hasText: 'TEST-SHIRT' });
+  await expect(valuationRow.getByRole('cell', { name: '16-20' })).toBeVisible();
+  await expect(valuationRow.getByRole('cell', { name: '230' })).toBeVisible();
 
   permission = { view: false };
   await page.reload();

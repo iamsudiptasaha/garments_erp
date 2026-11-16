@@ -192,6 +192,7 @@ export function OverviewTable({
   toolbar,
   searchLabel = 'Search ' + title,
   getSearchText,
+  onSearch,
   defaultVisibility,
 }) {
   const { preferences, ready, save, error } = useGridPreferences(
@@ -210,6 +211,9 @@ export function OverviewTable({
     save({ search: query });
     setDraft(null);
   }, [draft, query, save]);
+  useEffect(() => {
+    if (ready) onSearch?.(query.trim());
+  }, [onSearch, query, ready]);
   useEffect(() => {
     if (panel && !dialog.current.open) dialog.current.showModal();
   }, [panel]);
@@ -243,7 +247,7 @@ export function OverviewTable({
       );
     },
     state: {
-      globalFilter: query,
+      globalFilter: onSearch ? undefined : query,
       columnFilters,
       grouping,
       sorting,
@@ -565,21 +569,21 @@ export function OverviewTable({
       panel === 'Filter' &&
         h(Rules, {
           kind: panel,
-          columns: table.getAllLeafColumns(),
+          columns: table.getAllLeafColumns().filter((column) => column.getCanFilter()),
           rules,
           onChange: (value) => save({ filters: value }),
         }),
       panel === 'Sort' &&
         h(Rules, {
           kind: panel,
-          columns: table.getAllLeafColumns(),
+          columns: table.getAllLeafColumns().filter((column) => column.getCanSort()),
           rules: sorting,
           onChange: (value) => save({ sorting: value }),
         }),
       panel === 'Group' &&
         h(Rules, {
           kind: panel,
-          columns: table.getAllLeafColumns(),
+          columns: table.getAllLeafColumns().filter((column) => column.getCanGroup()),
           rules: grouping.map((id) => ({ id })),
           onChange: (value) => {
             save({ expanded: {}, grouping: value.map(({ id }) => id) });

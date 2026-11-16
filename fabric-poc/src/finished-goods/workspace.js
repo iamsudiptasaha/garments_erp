@@ -1,11 +1,12 @@
 import { createElement as h, useEffect, useMemo, useState } from 'react';
 
-import { GridSearch, useGridSearch } from '../fabric/grid-toolbar.js';
+import { useGridSearch } from '../fabric/grid-toolbar.js';
 import { WorkspaceViewToggle } from '../fabric/view-toggle.js';
 import { FinishedCatalogue } from './catalogue.js';
 import { ItemCostingPreview } from './costing-preview.js';
 import { CostingHistory } from './item-costing.js';
-import { FinishedGoodsCards, FinishedGoodsEditor, FinishedGoodsSheetView } from './sheet-view.js';
+import { FinishedGoodsEditor, FinishedGoodsSheetView } from './sheet-view.js';
+import { FinishedGoodsOverview } from './overview.js';
 import { finishedGoodsPages } from './pages.js';
 import { StockForm } from './stock-form.js';
 import './styles.css';
@@ -86,7 +87,7 @@ const descriptions = {
   priceTypes: 'Maintain the shared price type reference list.',
 };
 
-export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes' }) {
+export function FinishedGoods({ client, canCreate, capabilities, link, screen = 'sizes' }) {
   const [display, setDisplay] = useState(
     ['sizes', 'variations', 'valuation'].includes(screen) ? 'sheet' : 'overview',
   );
@@ -101,7 +102,8 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
   const sku = useGridSearch(searchText.trim());
   const exactSearch = screen === 'sizes' || screen === 'variations';
   const [pagination, setPagination] = useState({ offset: 0, sku: '', revision: 0 });
-  const serverSku = exactSearch ? sku : '';
+  const [overviewSku, setOverviewSku] = useState('');
+  const serverSku = exactSearch ? (display === 'sheet' ? sku : overviewSku) : '';
   const offset = pagination.sku === serverSku ? pagination.offset : 0;
   const revision = pagination.revision;
   const [result, setResult] = useState(null);
@@ -237,7 +239,7 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
     ),
     client &&
       ['products', 'prices', 'priceTypes'].includes(screen) &&
-      h(FinishedCatalogue, { client, screen, canCreate, capabilities, view: display }),
+      h(FinishedCatalogue, { client, screen, canCreate, capabilities, view: display, link }),
     client &&
       command === 'costing' &&
       h(
@@ -259,9 +261,6 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
       h(
         'div',
         null,
-        client &&
-          display === 'overview' &&
-          h('div', { className: 'fabric-actions' }, h(GridSearch, search)),
         loading && result && h('p', { role: 'status' }, 'Updating finished stock…'),
         !client
           ? h('p', { role: 'status' }, 'Local preview. Connect to the ERP to load finished stock.')
@@ -274,51 +273,41 @@ export function FinishedGoods({ client, canCreate, capabilities, screen = 'sizes
               )
             : !result
               ? h('p', { role: 'status' }, 'Loading finished stock…')
-              : h(
-                  FinishedGoodsSheetView,
-                  {
-                    page: screen,
-                    title,
-                    columns,
-                    rows,
-                    capabilities,
-                    view: display,
-                    client,
-                    paged: true,
-                    search,
-                    add,
-                    source,
-                    searchPending: loading || searchText.trim() !== sku,
-                  },
-                  rows.length
-                    ? h(FinishedGoodsCards, {
-                        title: pageTitle,
-                        columns,
-                        rows,
-                        headline: screen === 'receipt' ? 'item' : undefined,
-                        actions:
-                          view === 'variations'
-                            ? (row) =>
-                                h(
-                                  'button',
-                                  {
-                                    className: 'open-document',
-                                    disabled: !row.components?.length,
-                                    onClick: () => {
-                                      setCostingItemIds([
-                                        ...new Set(
-                                          row.components.map(({ item_id }) => String(item_id)),
-                                        ),
-                                      ]);
-                                      setCommand('costing');
-                                    },
-                                  },
-                                  'Costing history',
-                                )
-                            : undefined,
-                      })
-                    : h('p', null, 'No finished stock records on this page.'),
-                ),
+              : h(FinishedGoodsSheetView, {
+                  page: screen,
+                  title,
+                  columns,
+                  rows,
+                  capabilities,
+                  view: display,
+                  client,
+                  paged: true,
+                  search,
+                  add,
+                  source,
+                  searchPending: loading || searchText.trim() !== sku,
+                }),
+        client &&
+          display === 'overview' &&
+          h(FinishedGoodsOverview, {
+            client,
+            screen,
+            title: pageTitle,
+            columns,
+            rows: error ? emptyRows : rawRows,
+            link,
+            searchLabel: search.label,
+            onSearch: exactSearch ? setOverviewSku : undefined,
+            onCosting:
+              view === 'variations'
+                ? (row) => {
+                    setCostingItemIds([
+                      ...new Set(row.components.map(({ item_id }) => String(item_id))),
+                    ]);
+                    setCommand('costing');
+                  }
+                : undefined,
+          }),
         h(
           'button',
           {

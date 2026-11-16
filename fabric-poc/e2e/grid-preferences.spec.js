@@ -204,6 +204,36 @@ test('Finished Goods Sheet and Fabric Overview restore private grid settings acr
     await expect(other.getByLabel('Sheet zoom')).toHaveValue('1');
     await expect(other.getByLabel('Sort direction')).toHaveValue('asc');
 
+    const stockOverview = (device) =>
+      device
+        .getByRole('group', { name: 'Item stock summary view' })
+        .getByRole('button', { name: 'Overview' });
+    const exactOverview = (device) => device.getByRole('searchbox', { name: 'Exact SKU' });
+    const stockTable = (device) => device.getByRole('table', { name: 'Item stock summary' });
+    await stockOverview(page).click();
+    await exactOverview(page).fill('SHIRT-B');
+    await expect(stockTable(page).getByText('SHIRT-A', { exact: true })).toHaveCount(0);
+    await expect(stockTable(page).getByText('SHIRT-B', { exact: true })).toBeVisible();
+    expect(searches.at(-1)).toBe('SHIRT-B');
+    await expect
+      .poll(() => saved.get(first + ':overview-finished-goods-sizes')?.search)
+      .toBe('SHIRT-B');
+    await stockOverview(phone).click();
+    await expect(exactOverview(phone)).toHaveValue('SHIRT-B');
+    await expect(stockTable(phone).getByText('SHIRT-A', { exact: true })).toHaveCount(0);
+    await expect(stockTable(phone).getByText('SHIRT-B', { exact: true })).toBeVisible();
+    await stockOverview(other).click();
+    await expect(exactOverview(other)).toHaveValue('');
+    await expect(stockTable(other).getByText('SHIRT-A', { exact: true })).toBeVisible();
+
+    const produced = stockTable(other).getByRole('columnheader', { name: 'Total produced' });
+    await produced.getByRole('button', { name: 'Total produced' }).click();
+    await expect(produced).toHaveAttribute('aria-sort', 'ascending');
+    await expect(stockTable(other).locator('tbody tr').first()).toContainText('SHIRT-A');
+    await produced.getByRole('button', { name: 'Total produced' }).click();
+    await expect(produced).toHaveAttribute('aria-sort', 'descending');
+    await expect(stockTable(other).locator('tbody tr').first()).toContainText('SHIRT-B');
+
     const yarnTypes = '/fabric.html?live=1#yarnTypes';
     await page.goto(yarnTypes);
     const overviewSearch = (device) => device.getByRole('searchbox', { name: 'Search Yarn types' });

@@ -1,8 +1,10 @@
-import { GridSearch, useGridSearch } from '../fabric/grid-toolbar.js';
-import { createElement as h, useEffect, useState } from 'react';
+import { useGridSearch } from '../fabric/grid-toolbar.js';
+import { createElement as h, useCallback, useEffect, useState } from 'react';
 
 import { RecordSelect } from '../fabric/record-select.js';
-import { FinishedGoodsCards, FinishedGoodsEditor, FinishedGoodsSheetView } from './sheet-view.js';
+import { FinishedGoodsEditor, FinishedGoodsSheetView } from './sheet-view.js';
+
+import { FinishedGoodsOverview } from './overview.js';
 
 const emptyComponent = { size_id: '', pieces: '1' };
 
@@ -185,11 +187,13 @@ function ProductForm({ data, components, setComponents }) {
   );
 }
 
-export function FinishedCatalogue({ client, screen, canCreate, capabilities, view }) {
+export function FinishedCatalogue({ client, screen, canCreate, capabilities, view, link }) {
   const [data, setData] = useState(null);
   const [revision, setRevision] = useState(0);
   const [searchText, setSearchText] = useState('');
   const query = useGridSearch(searchText.trim().toLowerCase());
+  const [openId, setOpenId] = useState(null);
+  const closeContents = useCallback(() => setOpenId(null), []);
   const [productId, setProductId] = useState('');
   const [components, setComponents] = useState([emptyComponent]);
   const [error, setError] = useState('');
@@ -255,14 +259,15 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities, vie
   if (!data)
     return h('p', { role: error ? 'alert' : 'status' }, error || 'Loading Finished Goods…');
   const product = data.products.find(({ id }) => id === productId);
-  const rows = {
+  const overviewRows = {
     products: data.products.map((row) => ({
       ...row,
       status: (row.active ? 'Active' : 'Retired') + (row.verified ? ' · Verified' : ''),
     })),
     prices: data.prices,
     priceTypes: data.types,
-  }[screen].filter(
+  }[screen];
+  const rows = overviewRows.filter(
     (row) =>
       !query ||
       columns[screen].some(([key]) =>
@@ -297,25 +302,6 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities, vie
       ),
       product && productContents(product, true),
     );
-
-  function recordActions(row) {
-    const record =
-      screen === 'products' ? row : data.products.find(({ sku }) => sku === row.product);
-    return (
-      record &&
-      h(
-        FinishedGoodsEditor,
-        { record: true, label: 'View contents →', title: 'Sellable product contents' },
-        () =>
-          h(
-            'div',
-            null,
-            h('p', null, record.sku + ' · ' + record.name),
-            productContents(record, screen === 'prices'),
-          ),
-      )
-    );
-  }
 
   const add =
     canCreate &&
@@ -404,11 +390,23 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities, vie
     },
   };
 
+  const opened = openId === null ? null : overviewRows.find(({ id }) => id === openId);
   return h(
     'div',
     null,
+    view === 'overview' &&
+      opened &&
+      h(
+        FinishedGoodsEditor,
+        {
+          key: opened.id,
+          record: true,
+          title: source.title,
+          onDismiss: closeContents,
+        },
+        () => source.resolve(opened),
+      ),
     view === 'overview' && add,
-    view === 'overview' && h('div', { className: 'fabric-actions' }, h(GridSearch, search)),
     h(
       FinishedGoodsSheetView,
       {
@@ -424,14 +422,22 @@ export function FinishedCatalogue({ client, screen, canCreate, capabilities, vie
         source,
         searchPending: searchText.trim().toLowerCase() !== query,
       },
-      rows.length
-        ? h(FinishedGoodsCards, {
-            title,
-            columns: columns[screen],
-            rows,
-            actions: screen === 'priceTypes' ? undefined : recordActions,
-          })
-        : h('p', null, 'No records yet.'),
+      h(FinishedGoodsOverview, {
+        client,
+        screen,
+        title,
+        columns:
+          screen === 'prices'
+            ? [columns.prices[2], ...columns.prices.filter(([key]) => key !== 'version')]
+            : columns[screen],
+        rows: overviewRows,
+        link,
+        onOpen: screen === 'priceTypes' ? undefined : setOpenId,
+        canOpen:
+          screen === 'prices'
+            ? (row) => data.products.some(({ sku }) => sku === row.product)
+            : undefined,
+      }),
     ),
     notice && h('p', { role: 'status' }, notice),
     !canCreate && costingLookup,
