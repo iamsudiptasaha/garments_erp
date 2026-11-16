@@ -57,6 +57,10 @@ async function createLinkedAccount(name, role, phone, prefix = '') {
     [name],
   );
   await db.query(
+    'update garments_erp.employee_status set is_verified=true,verified_by_employee_id=900001 where employee_id=$1',
+    [employee.id],
+  );
+  await db.query(
     'insert into garments_access.app_user(user_id,employee_id,is_active) values($1,$2,true)',
     [identity.id, employee.id],
   );
