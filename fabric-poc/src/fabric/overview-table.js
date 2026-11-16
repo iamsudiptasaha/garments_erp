@@ -191,8 +191,13 @@ export function OverviewTable({
   toolbar,
   searchLabel = 'Search ' + title,
   getSearchText,
+  defaultVisibility,
 }) {
-  const { preferences, ready, save, error } = useGridPreferences(client, grid);
+  const { preferences, ready, save, error } = useGridPreferences(
+    client,
+    grid,
+    defaultVisibility ? { visibility: defaultVisibility } : undefined,
+  );
   const [panel, setPanel] = useState(null);
   const [draft, setDraft] = useState(null);
   const dialog = useRef(null);

@@ -888,9 +888,14 @@ async function shadeModal(target) {
   const open = async () => {
     await route('labDips');
     await page
-      .locator('.lab-card-open')
-      .filter({ hasText: new RegExp('LAB DIP · EDITION ' + row.edition + '\\b') })
-      .filter({ hasText: 'Verification colour' })
+      .getByRole('table', { name: 'Lab dips', exact: true })
+      .getByRole('row')
+      .filter({
+        has: page
+          .locator('td:nth-child(3)')
+          .filter({ hasText: new RegExp('^' + row.edition + '$') }),
+      })
+      .getByRole('button', { name: 'Verification colour', exact: true })
       .click();
     await b('Update version 1').click();
   };

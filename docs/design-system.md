@@ -34,7 +34,7 @@ The workspace shell has a 235px sidebar and 34px × 38px main padding. Page head
 | Buttons and tabs | Shared buttons have 8px radii and 10px × 14px padding. Disabled controls use 0.45 opacity. Use `.primary` for the main action and [WorkspaceViewToggle](../fabric-poc/src/fabric/view-toggle.js) for Overview and Sheet. `.fabric-view-toggle` uses 9px radius, 4px inset and white selected buttons with `0 1px 5px #25445b10` shadow. [Controls CSS](../fabric-poc/src/fabric/styles.css) |
 | Inputs and dropdowns | Label controls and use `.fabric-fields`. Native fields have 7px radius and 10px × 12px padding. Use the existing [RecordSelect](../fabric-poc/src/fabric/record-select.js) for richer relational options and [LabRecordSelect](../fabric-poc/src/fabric/lab-record-select.js) as the searchable picker example. |
 | Tables and sheets | Use a semantic table in `.lab-record-table-wrap` for compact record lists. Cells use 11px × 12px padding and `#e4edf5` horizontal dividers. Use [FabricSheet](../fabric-poc/src/fabric/sheet.js) for sheet workflows. Its 600px frame has a 1px border and 10px radius. |
-| Legacy Overview cards | Existing sections awaiting migration use `.overview-grid` and `.overview-card`, with 15px card radius, 25px padding and subtle `0 3px 12px #416d8a04` shadow. Lab cards use a full-width button with a translucent hover and a status pill. [LabOverview](../fabric-poc/src/colours/cards.js) · [OverviewPanel](../fabric-poc/src/overview/panel.js) |
+| Legacy Overview cards | Existing sections awaiting migration use `.overview-grid` and `.overview-card`, with 15px card radius, 25px padding and subtle `0 3px 12px #416d8a04` shadow. [OverviewPanel](../fabric-poc/src/overview/panel.js) |
 | Forms and dialogs | Group document lines with `.fabric-line` (22px padding, 10px radius) and align actions with `.editor-actions`. Native `.fabric-dialog` uses 15px radius, 28px padding, 90vh max height, width `min(1000px, 94vw)` and `#17344966` backdrop. Follow [LabEditor](../fabric-poc/src/colours/editor.js) and [BillEditor](../fabric-poc/src/fabric/editor.js) for heading, fields and actions. |
 | Print | Use the workspace print rules as the starting point. Keep the record and hide navigation and interactive controls. [Print CSS](../fabric-poc/src/fabric/styles.css) |
 
@@ -78,6 +78,8 @@ Migrate one section per phase. Review record ownership and links, compare visibl
 
 Migrated Overview sections:
 
+- Colours → Colour library, Colour mappings and Lab dips. Library and mapping rows open the existing editors by record ID with edit permission. Mappings show readable Pantone and brand references and link permitted destinations. Lab dips show Colour, Pantone, Edition, Latest version and Current status. Brand and Dyer are available in Columns. Each row opens the existing progress dialog by edition ID for viewers. Its existing permissions control version and edition actions. Library, mapping and edition grids keep separate Overview preferences, and their Sheet views keep the existing search, selection and editing workflows.
+
 - Fabric → Yarn types, Fabric types and Suppliers. Tables show existing name and usage projections. The existing editors receive the yarn type ID, fabric type ID or composite supplier key. Supplier contact purpose links to Contact Categories when permitted.
 
 - Fabric → Yarn purchase orders, Yarn bills, Knitting bills, Dyeing programs and Dyed fabric bills. One Overview row represents the existing document key. Overview search includes all document lines. Quantities sum the existing line values, and the line item disclosure works independently of the row editor. Related supplier, document and colour labels link only where the destination is permitted.
@@ -106,19 +108,15 @@ Use Suppliers and Colours as the reference for selection and the transition from
 
 ## Colours browser verification
 
-Chromium measurements at 1440, 1024 and 390 CSS pixels confirm the shared shell padding of `34px 38px`, `25px` and `20px 15px`, respectively. The Lab dips title stays `29px / 600` with `-0.6px` tracking at all three widths. Its eyebrow is `10px / 600` with `1.3px` tracking and `14px` bottom margin. The header gap and bottom margin stay `20px` and `27px`.
+Chromium measurements at 1440, 1024 and 390 CSS pixels confirm the shared shell padding of `34px 38px`, `25px` and `20px 15px`, respectively. The Lab dips title stays `29px / 600` with `-0.6px` tracking at all three widths. Its eyebrow is `10px / 600` with `1.3px` tracking and `14px` bottom margin. The header gap is `10px` in Overview and `20px` in Sheet. The bottom margin stays `27px`.
 
 | Component | Computed in Colours |
 | --- | --- |
 | View selector | `#e7eff7` background, `9px` radius, `4px` inset. Selected button is white with `8px 16px` padding, `8px` radius and `12px` text. |
-| Search and actions | `10px` gap and `16px` bottom margin. Search has `13px` text, `10px 12px` padding and `7px` radius. Its width is `370px` at desktop and `360px` in the tested phone viewport. |
-| Lab overview | `18px` grid gap, `15px` card radius and `25px` inset on the full-card button. First card background is `#e3f0fb`. Card title is `23px / 600` with `-0.5px` tracking. |
-| Lab status | The sample unrecorded status uses `#e7f2fd` and `#2c719e`, `12px` text, `6px 12px` padding and `20px` radius. |
-| Lab progress dialog | `15px` radius with `28px` inset at 1440 and 1024 and `20px` at 390. Clicking the card opens the native dialog. Escape dismisses it. |
+| Lab Overview | The shared record table shows a five-column default with the same labelled, keyboard-focusable scroll region at all three widths. The Create edition action is below the view selector. |
+| Lab progress dialog | `15px` radius with `28px` inset at 1440 and 1024 and `20px` at 390. The identity button opens the original progress dialog. Escape dismisses it. |
 
-Repeated Chromium screenshots at those widths matched for Lab overview, progress dialog and Colour mappings. The Sheet screenshot varied in small regions of the spreadsheet canvas at 1440 and 390 pixels, so exact whole-sheet pixel equality is unverified. Switching views and exposing the Sheet zoom control were checked separately. Six Colours unit tests and three existing browser interaction tests passed. [Unit tests](../fabric-poc/tests/colours.test.js) · [Browser tests](../fabric-poc/e2e/fabric-selection.spec.js)
-
-The [approved Finished Goods preview](../fabric-poc/public/finished-goods-preview.html) uses the same title size and card radius but a `14px` card gap, `7px 12px` toggle button padding and a `12px` dialog radius with a `680px` cap. Its sample worksheet is an HTML table. The production UI uses FabricSheet for spreadsheet controls.
+The Colours visual check compares the record table before and after switching to Sheet at each width. Worksheet tests cover existing selection, actions and zoom separately. [Colours visual checks](../fabric-poc/e2e/colours-visual.spec.js) · [Worksheet checks](../fabric-poc/e2e/worksheet-actions.spec.js)
 
 ## Automated drift checks
 
