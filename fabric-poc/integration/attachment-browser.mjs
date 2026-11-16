@@ -988,10 +988,7 @@ async function contactBankModal(target) {
   const open = async () => {
     await route('materialContacts');
     await page.getByRole('searchbox', { name: 'Search Contacts', exact: true }).fill(name);
-    const card = page.locator('.overview-card').filter({
-      has: page.getByRole('heading', { name, exact: true }),
-    });
-    await button(card, 'View/Edit →').click();
+    await button(page.getByRole('table', { name: 'Contacts', exact: true }), name).click();
     await b('Bank accounts').click();
   };
   const save = async (description) => {
