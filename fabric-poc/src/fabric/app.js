@@ -156,7 +156,14 @@ function workspaceRoute() {
 }
 
 // Overview columns use the existing worksheet projections and record editor IDs.
-const productionOverviewColumns = {
+const recordOverviewColumns = {
+  yarnTypes: ['name', 'count', 'uses'],
+  fabricTypes: ['name', 'knitting', 'programs'],
+  suppliers: ['name', 'kind', 'purpose', 'orders'],
+  dyed: ['batch', 'name', 'color', 'bill', 'quantity', 'price', 'wastage'],
+  yarnLeft: ['bill', 'name', 'supplier', 'quantity', 'consumed', 'left'],
+  greige: ['bill', 'name', 'supplier', 'dyers', 'quantity', 'left'],
+  batches: ['batch', 'name', 'color', 'bill', 'quantity'],
   productionStatuses: ['name'],
   productionStageTypes: ['name'],
   productionPartTypes: ['name'],
@@ -171,7 +178,46 @@ const productionOverviewColumns = {
   productionItems: ['name', 'brand', 'product', 'season', 'batch_number'],
 };
 
-const productionOverviewLinks = {
+const fabricDocumentOverview = {
+  orders: ['bill', 'supplier', 'quantity', 'received', 'left', 'lineCount'],
+  yarn: ['bill', 'date', 'supplier', 'source', 'quantity', 'lineCount'],
+  knitting: ['bill', 'date', 'supplier', 'source', 'quantity', 'lineCount'],
+  programs: ['bill', 'date', 'supplier', 'color', 'quantity', 'lineCount'],
+  dyeBills: ['bill', 'date', 'supplier', 'quantity', 'verified', 'lineCount'],
+};
+
+const fabricOverviewTargets = {
+  orders: { supplier: 'suppliers' },
+  yarn: { supplier: 'suppliers', source: 'orders' },
+  knitting: { supplier: 'suppliers', source: 'yarn' },
+  programs: { supplier: 'suppliers', color: 'colours' },
+  dyeBills: { supplier: 'suppliers' },
+  dyed: { bill: 'dyeBills', color: 'colours' },
+  yarnLeft: { bill: 'yarn', name: 'yarnTypes', supplier: 'suppliers' },
+  greige: { bill: 'knitting', supplier: 'suppliers', dyers: 'suppliers' },
+  batches: { bill: 'dyeBills', color: 'colours' },
+};
+
+const fabricOverviewLabels = {
+  color: 'Colour',
+  lineCount: 'Line items',
+};
+
+const fabricDocumentTotals = new Set(['quantity', 'received', 'left']);
+function fabricDocumentSummary({ id, rows }, columns) {
+  const record = { ...rows[0], id, rows, lineCount: rows.length };
+  for (const key of columns) {
+    if (fabricDocumentTotals.has(key)) {
+      record[key] = rows.reduce((total, row) => total + Number(row[key] ?? 0), 0);
+    } else if (['supplier', 'source', 'color'].includes(key)) {
+      record[key] = [...new Set(rows.map((row) => row[key] || '—'))].join(', ');
+    }
+  }
+  return record;
+}
+
+const recordOverviewLinks = {
+  suppliers: { purpose: ['contact_purpose_id', 'contactCategories'] },
   productionProductTypes: { gender: ['gender_id', 'productionGenders'] },
   brands: {
     contact: ['contacts_id', 'materialContacts'],
@@ -419,7 +465,9 @@ function App({ live, refreshWorkspaceAccess }) {
     preferences = state.preferences[page] || {},
     totals = useMemo(() => fabricTotals(data), [data]);
   const sheetQuery = useGridSearch(query);
-  const overviewColumns = view === 'overview' ? productionOverviewColumns[page] : undefined;
+  const documentOverviewColumns = fabricDocumentOverview[page];
+  const overviewColumns =
+    view === 'overview' ? (documentOverviewColumns ?? recordOverviewColumns[page]) : undefined;
   const recordQuery = view === 'sheet' ? sheetQuery : overviewColumns ? '' : query;
   const searchPlaceholder =
     page === 'productionJobs'
@@ -608,23 +656,28 @@ function App({ live, refreshWorkspaceAccess }) {
     });
     return [...result.values()];
   }, [spec, records, page]);
-  function trail(row) {
+  function reportDetails(row) {
     if (page === 'batches')
       return h(
-        'div',
-        { className: 'batch-journey' },
-        [
-          ['Yarn', row.yarnBill, row.yarn],
-          ['Knitting', row.knitBill, row.knitter],
-          ['Dyeing', row.program, row.supplier],
-          ['Received', row.bill, `${fmt(row.quantity)} kg`],
-        ].map(([label, title, detail], i) =>
-          h(
-            'div',
-            { className: 'journey-step', key: label },
-            h('span', null, `0${i + 1} · ${label}`),
-            h('strong', null, title),
-            h('small', null, detail),
+        'details',
+        { className: 'overview-line-details' },
+        h('summary', null, 'See batch journey'),
+        h(
+          'div',
+          { className: 'batch-journey' },
+          [
+            ['Yarn', row.yarnBill, row.yarn, 'yarn'],
+            ['Knitting', row.knitBill, row.knitter, 'knitting'],
+            ['Dyeing', row.program, row.supplier, 'programs'],
+            ['Received', row.bill, fmt(row.quantity) + ' kg', 'dyeBills'],
+          ].map(([label, title, detail, target], i) =>
+            h(
+              'div',
+              { className: 'journey-step', key: label },
+              h('span', null, `0${i + 1} · ${label}`),
+              h('strong', null, overviewLink(title, target)),
+              h('small', null, detail),
+            ),
           ),
         ),
       );
@@ -640,7 +693,7 @@ function App({ live, refreshWorkspaceAccess }) {
         }));
     if (page === 'greige') {
       const lineIds = data.knitting_bill_item
-        .filter((k) => s.knit(k).bill.invoice_number === row.bill && s.knit(k).name === row.name)
+        .filter((k) => k.knitting_bill_id + '|' + s.knit(k).name === row.id)
         .map((k) => k.id);
       movements = data.dyed_fabric_item
         .filter((d) => lineIds.includes(d.knitting_bill_item_id))
@@ -654,7 +707,7 @@ function App({ live, refreshWorkspaceAccess }) {
       movements.length > 0 &&
       h(
         'details',
-        { className: 'movement-details' },
+        { className: 'overview-line-details' },
         h('summary', null, 'See consumption by bill'),
         movements.map((m, i) =>
           h(
@@ -676,51 +729,106 @@ function App({ live, refreshWorkspaceAccess }) {
     if (!can(mode === 'edition' ? 'create' : 'edit', 'labDips')) return;
     setEditor({ page: 'labDips', id: mode === 'edition' ? null : id, sourceId: id, mode });
   }
+  function overviewLink(value, target) {
+    return target && value && value !== '—' && value !== 'Not selected' && can('view', target)
+      ? h(
+          'a',
+          {
+            href: '/fabric.html' + (live ? '?live=1' : '') + '#' + target,
+            onClick: (event) => followWorkspaceLink(event, () => navigate(target)),
+          },
+          value,
+        )
+      : value;
+  }
+  function lineDetails(rows, quantity) {
+    return h(
+      'details',
+      {
+        className: 'overview-line-details',
+        onClick: (event) => event.stopPropagation(),
+      },
+      h('summary', null, 'See line items (' + rows.length + ')'),
+      rows.map((row) =>
+        h(
+          'div',
+          { key: row.id },
+          h('span', null, row.name + (row.color ? ' · ' + row.color : '')),
+          h('strong', null, fmt(row.quantity) + ' kg'),
+        ),
+      ),
+      h(
+        'div',
+        { className: 'line-total' },
+        h('span', null, 'Total'),
+        h('strong', null, fmt(quantity) + ' kg'),
+      ),
+    );
+  }
   function overview() {
     if (overviewColumns) {
-      const links = productionOverviewLinks[page];
-      const sources = new Map(links ? data[spec.entity].map((record) => [record.id, record]) : []);
+      const links = recordOverviewLinks[page];
+      const sources = new Map(
+        links && page !== 'suppliers' ? data[spec.entity].map((record) => [record.id, record]) : [],
+      );
+      if (page === 'suppliers') {
+        for (const table of ['yarn_supplier', 'knitter', 'dyer'])
+          for (const record of data[table]) sources.set(table + ':' + record.id, record);
+      }
       return h(OverviewTable, {
         key: actor + ':' + page,
         client: live ? getAccessClient() : null,
         grid: page === 'productionStatuses' ? 'overview-production-statuses' : 'overview-' + page,
         title: spec.title,
-        records: groups.map(({ id, rows: [record] }) =>
-          page === 'productionWorkers'
+        records: groups.map((group) => {
+          if (documentOverviewColumns) return fabricDocumentSummary(group, overviewColumns);
+          const {
+            id,
+            rows: [record],
+          } = group;
+          return page === 'productionWorkers'
             ? { ...record, id, contact: record.name }
-            : { ...record, id },
-        ),
+            : { ...record, id };
+        }),
         getSearchText:
-          page === 'productionStatuses' ? undefined : (record) => Object.values(record).join(' '),
+          page === 'productionStatuses'
+            ? undefined
+            : (record) => (record.rows ?? [record]).flatMap((row) => Object.values(row)).join(' '),
         columns: overviewColumns.map((key) => ({
           accessorKey: key,
           header:
             page === 'productionWorkers' && key === 'contact'
               ? 'Company / contact'
-              : spec.columns.find((column) => column.key === key).label,
+              : (spec.columns.find((column) => column.key === key)?.label ??
+                fabricOverviewLabels[key]),
           cell: ({ getValue, row }) => {
             const value = getValue();
-            const relation = links?.[key];
-            if (value && value !== '—' && value !== 'Not selected' && relation) {
-              const [field, target] = relation;
-              const record = sources.get(row.original.id);
-              if (record?.[field] != null && can('view', target)) {
-                return h(
-                  'a',
-                  {
-                    href: '/fabric.html' + (live ? '?live=1' : '') + '#' + target,
-                    onClick: (event) => followWorkspaceLink(event, () => navigate(target)),
-                  },
-                  value,
-                );
-              }
+            if (key === 'lineCount') return lineDetails(row.original.rows, row.original.quantity);
+            const target = fabricOverviewTargets[page]?.[key];
+            if (target && documentOverviewColumns) {
+              const values = [...new Set(row.original.rows.map((line) => line[key] || '—'))];
+              return values.map((label, index) =>
+                h(React.Fragment, { key: label }, index > 0 && ', ', overviewLink(label, target)),
+              );
             }
+            if (target) return overviewLink(value, target);
+            if (
+              (page === 'batches' && key === 'batch') ||
+              ((page === 'greige' || page === 'yarnLeft') && key === 'left')
+            ) {
+              return h(React.Fragment, null, fmt(value) ?? '—', reportDetails(row.original));
+            }
+            const relation = links?.[key];
+            if (relation && sources.get(row.original.id)?.[relation[0]] != null)
+              return overviewLink(value, relation[1]);
             return page === 'productionStatuses'
               ? h('span', { className: 'erp-overview-status' }, value ?? '—')
-              : (value ?? '—');
+              : documentOverviewColumns || spec.readonly
+                ? (fmt(value) ?? '—')
+                : (value ?? '—');
           },
         })),
-        onOpen: can('edit') ? edit : undefined,
+        onOpen: !spec.readonly && can('edit') ? edit : undefined,
       });
     }
 
@@ -788,112 +896,30 @@ function App({ live, refreshWorkspaceAccess }) {
     return h(
       'section',
       { className: 'overview-grid' },
-      groups.map((g, i) => {
-        const first = g.rows[0],
-          quantity =
-            page === 'greige' || page === 'yarnLeft'
-              ? first.left
-              : g.rows.reduce((s, r) => s + Number(r.quantity || 0), 0),
-          colour = page === 'batches' || page === 'dyed' ? first.color : null;
-        return h(
+      groups.map(({ id, title, supplier, rows: [first] }, index) =>
+        h(
           'article',
-          { className: `overview-card tone-${i % 4}`, key: g.id },
+          { className: `overview-card tone-${index % 4}`, key: id },
           h(
             'div',
             { className: 'card-top' },
-            h(
-              'span',
-              { className: 'card-kicker' },
-              page === 'suppliers' ? first.kind : colour || first.supplier || spec.title,
-            ),
+            h('span', { className: 'card-kicker' }, first.supplier || spec.title),
             h('span', { className: 'card-dots' }, '•••'),
           ),
-          h('h2', null, page === 'batches' ? first.batch : g.title),
+          h('h2', null, title),
+          h('p', { className: 'card-subtitle' }, supplier || first.name),
           h(
-            'p',
-            { className: 'card-subtitle' },
-            spec.reference
-              ? 'Shared reference'
-              : spec.readonly
-                ? first.name
-                : g.supplier || first.name,
+            'div',
+            { className: 'colour-card-details' },
+            h('p', null, first.pantone === '—' ? 'Pantone not set' : `Pantone ${first.pantone}`),
+            page === 'colours'
+              ? h('p', null, `${first.mappings} brand mappings`)
+              : h('p', null, `Brand: ${first.brand}`),
           ),
-          spec.reference
-            ? h(
-                'div',
-                { className: 'colour-card-details' },
-                spec.columns
-                  .filter((c) => c.key !== 'name')
-                  .map((c) => h('p', { key: c.key }, `${c.label}: ${fmt(first[c.key])}`)),
-                h('small', null, 'Used by linked records'),
-              )
-            : spec.master
-              ? h(
-                  'div',
-                  { className: 'colour-card-details' },
-                  h(
-                    'p',
-                    null,
-                    first.pantone === '—' ? 'Pantone not set' : `Pantone ${first.pantone}`,
-                  ),
-                  page === 'colours'
-                    ? h('p', null, `${first.mappings} brand mappings`)
-                    : h('p', null, `Brand: ${first.brand}`),
-                )
-              : page === 'suppliers'
-                ? h(
-                    'p',
-                    { className: 'card-measure' },
-                    first.orders,
-                    h('small', null, ' linked documents'),
-                  )
-                : h(
-                    'p',
-                    { className: 'card-measure' },
-                    fmt(quantity),
-                    h('small', null, page === 'greige' || page === 'yarnLeft' ? ' kg left' : ' kg'),
-                  ),
-          g.rows.length > 1 &&
-            h('p', { className: 'card-subtitle' }, `${g.rows.length} lines on this document`),
-          page === 'dyed' &&
-            h(
-              'p',
-              { className: 'price-chip' },
-              `₹ ${fmt(first.price)} / kg · ${fmt(first.wastage)}% wastage`,
-            ),
-          trail(first),
-          !spec.readonly &&
-            can('edit') &&
-            h(
-              'button',
-              { className: 'open-document', onClick: () => edit(g.id) },
-              spec.master ? 'Edit →' : page === 'suppliers' ? 'Edit supplier →' : 'Open document →',
-            ),
-          !spec.readonly &&
-            !spec.master &&
-            g.rows.length > 0 &&
-            page !== 'suppliers' &&
-            h(
-              'details',
-              { className: 'card-lines' },
-              h('summary', null, 'See line items'),
-              g.rows.map((r) =>
-                h(
-                  'div',
-                  { key: r.id },
-                  h('span', null, `${r.name}${r.color ? ' · ' + r.color : ''}`),
-                  h('strong', null, `${fmt(r.quantity)} kg`),
-                ),
-              ),
-              h(
-                'div',
-                { className: 'line-total' },
-                h('span', null, 'Total'),
-                h('strong', null, `${fmt(quantity)} kg`),
-              ),
-            ),
-        );
-      }),
+          can('edit') &&
+            h('button', { className: 'open-document', onClick: () => edit(id) }, 'Edit →'),
+        ),
+      ),
     );
   }
   function fabricHome() {
@@ -1271,7 +1297,10 @@ function App({ live, refreshWorkspaceAccess }) {
                                       ? h(
                                           'button',
                                           { className: 'primary', onClick: () => edit(null) },
-                                          spec.newLabel,
+                                          spec.newLabel ||
+                                            (page === 'suppliers'
+                                              ? '+ Add supplier'
+                                              : '+ New document'),
                                         )
                                       : overviewColumns
                                         ? null

@@ -4,7 +4,7 @@ test('Lab Dip record search shows exact edition/version and latest review fields
 }) => {
   test.skip(!!process.env.E2E_BASE_URL, 'Local sample-only interaction');
   await page.goto('/fabric.html#programs');
-  await page.getByRole('button', { name: 'Open document →', exact: true }).first().click();
+  await page.locator('.erp-overview-table tbody tr').first().getByRole('button').first().click();
   const picker = page.getByRole('combobox', { name: 'Lab dip', exact: true }).first();
   await picker.fill('Navy');
   const option = page.getByRole('listbox').getByRole('option').filter({ hasText: 'Navy' });
@@ -19,7 +19,7 @@ test('dyed bills show detailed searchable program records and require verificati
 }) => {
   test.skip(!!process.env.E2E_BASE_URL, 'Local sample-only save');
   await page.goto('/fabric.html#dyeBills');
-  await page.getByRole('button', { name: 'Open document →', exact: true }).first().click();
+  await page.locator('.erp-overview-table tbody tr').first().getByRole('button').first().click();
   const picker = page.getByRole('combobox', { name: 'Line 1 Dyeing program line', exact: true });
   await picker.fill('Navy');
   const option = page
@@ -52,7 +52,7 @@ test('dyed bills show detailed searchable program records and require verificati
   expect(
     await page.evaluate(() => localStorage.getItem('garments-fabric-workspace-v1')),
   ).not.toContain('synthetic-preview-password');
-  await page.getByRole('button', { name: 'Open document →', exact: true }).first().click();
+  await page.locator('.erp-overview-table tbody tr').first().getByRole('button').first().click();
   await page.getByRole('button', { name: 'Review document →', exact: true }).click();
   await expect(save).toBeDisabled();
   await expect(page.getByLabel('Verification password', { exact: true })).toHaveValue('');
@@ -63,13 +63,9 @@ test('colour comments preserve rich formatting across review, save and reopen', 
 }) => {
   test.skip(!!process.env.E2E_BASE_URL, 'Local sample-only save');
   await page.goto('/fabric.html#programs');
-  const programName = await page.locator('article.overview-card h2').first().textContent();
-  const openProgram = () =>
-    page
-      .locator('article.overview-card')
-      .filter({ has: page.getByRole('heading', { name: programName, exact: true }) })
-      .getByRole('button', { name: 'Open document →', exact: true })
-      .click();
+  const program = page.getByRole('table', { name: 'Dyeing programs', exact: true });
+  const programName = await program.locator('tbody tr').first().getByRole('button').innerText();
+  const openProgram = () => program.getByRole('button', { name: programName, exact: true }).click();
   await openProgram();
   const comment = page
     .getByRole('textbox', { name: 'Comments for this colour', exact: true })
