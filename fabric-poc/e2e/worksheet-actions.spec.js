@@ -77,7 +77,6 @@ async function documentFixtures(page, referencePages = {}) {
     { token, actor, exp },
   );
   const permissions = {
-    view: true,
     create: true,
     edit: true,
     delete: true,
@@ -340,7 +339,6 @@ for (const [route, title, open, edit, add, record] of [
       }
       await page.setViewportSize({ width: 1280, height: 720 });
       Object.assign(permissions, {
-        view: true,
         create: false,
         edit: false,
         format: false,

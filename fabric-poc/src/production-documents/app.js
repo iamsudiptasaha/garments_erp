@@ -1065,7 +1065,7 @@ function mountDocuments(root, editor, billing, changes, update, updateSelection)
       ?.addEventListener('click', () => dialog.close());
   }
   function openRecord(key) {
-    if (busy || !permissions.view) return;
+    if (busy || !snapshot?.pages[billing ? 'billing' : 'challans']) return;
     if (billing) {
       const bill = bills.find((record) => record.key === key);
       if (bill) viewBill(bill);
