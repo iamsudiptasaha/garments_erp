@@ -209,16 +209,11 @@ for (const [route, title, open, edit, add, record] of [
       await page.goto('/production-challan.html#' + route);
       const overview = page.getByRole('region', { name: title + ' Overview', exact: true });
       const table = overview.getByRole('table', { name: title, exact: true });
-      await overview.getByRole('searchbox').fill(route === 'challans' ? 'Description 2' : 'INV-2');
-      await expect(table.getByRole('button', { name: record, exact: true })).toBeVisible();
-      await expect(table.getByRole('row')).toHaveCount(2);
-      await table.getByRole('button', { name: record, exact: true }).click();
-      const detail = page.getByRole('dialog');
-      await expect(detail.getByRole('heading', { name: record, exact: true })).toBeVisible();
-      await detail.getByRole('button', { name: 'Close' }).click();
-      await overview.getByRole('button', { name: 'Clear search' }).click();
-      await expect(table.getByRole('row')).toHaveCount(3);
-      await expect(overview).toBeVisible();
+      const selectView = (name) =>
+        page
+          .getByRole('region', { name: 'Production documents' })
+          .getByRole('button', { name, exact: true })
+          .click();
       const captureOverview = async () => {
         await page.mouse.move(0, 0);
         await page.evaluate(async () => {
@@ -228,52 +223,14 @@ for (const [route, title, open, edit, add, record] of [
         });
         return overview.screenshot({ animations: 'disabled', caret: 'hide' });
       };
-      const before = await captureOverview();
-      await page.getByRole('button', { name: 'Sheet', exact: true }).click();
-      const editSelected = page.getByRole('button', { name: edit, exact: true });
-      const openSelected = page.getByRole('button', { name: open, exact: true });
-      await page.getByRole('button', { name: add }).click();
-      if (route === 'challans') {
-        await expect(page.getByRole('heading', { name: 'New challan' })).toBeVisible();
-        await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-      } else {
-        const create = page.getByRole('dialog', { name: 'New worker bill' });
-        await expect(create.getByLabel('Invoice number')).toBeVisible();
-        await create.getByRole('button', { name: 'Close' }).click();
-      }
-      await expect(openSelected).toBeDisabled();
-      await expect(editSelected).toBeDisabled();
-      await page.getByLabel('Sort direction').selectOption('desc');
-      const selectFirst = () =>
-        page.locator('.fortune-sheet-overlay').click({ position: { x: 85, y: 82 } });
-      await selectFirst();
-      await openSelected.click();
-      await expect(page.getByRole('dialog').getByRole('heading', { name: record })).toBeVisible();
-      await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
-      await expect(page.getByRole('dialog')).toHaveCount(0);
-      expect(errors).toEqual([]);
-      await selectFirst();
-      await editSelected.click();
-      if (route === 'challans') {
-        await expect(page.getByRole('heading', { name: 'Edit challan' })).toBeVisible();
-        await expect(page.getByLabel('Description')).toHaveValue('Description 2');
-        await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-      } else {
-        await expect(page.getByLabel('Invoice number')).toHaveValue('INV-2');
-      }
-      await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
-      const search = page.getByRole('searchbox', { name: 'Search ' + title.toLowerCase() });
-      await search.fill('no-match');
-      await expect(page.getByText('No matching records.')).toBeVisible();
-      await expect(openSelected).toBeDisabled();
+      await selectView('Sheet');
       await expect(page.getByLabel('Sheet zoom')).toBeVisible();
-      await search.clear();
-      await expect(page.getByText('2 rows', { exact: true })).toBeVisible();
-      await page.getByLabel('Sheet zoom').selectOption('1.25');
-      await page
-        .getByRole('region', { name: 'Production documents' })
-        .getByRole('button', { name: 'Overview', exact: true })
-        .click();
+      await selectView('Overview');
+      await expect(table.getByRole('row')).toHaveCount(3);
+      const before = await captureOverview();
+      await selectView('Sheet');
+      await expect(page.getByLabel('Sheet zoom')).toBeVisible();
+      await selectView('Overview');
       await expect
         .poll(async () => {
           const after = await captureOverview();
@@ -323,7 +280,57 @@ for (const [route, title, open, edit, add, record] of [
           );
         })
         .toBeNull();
-      await page.getByRole('button', { name: 'Sheet', exact: true }).click();
+      await overview.getByRole('searchbox').fill(route === 'challans' ? 'Description 2' : 'INV-2');
+      await expect(table.getByRole('button', { name: record, exact: true })).toBeVisible();
+      await expect(table.getByRole('row')).toHaveCount(2);
+      await table.getByRole('button', { name: record, exact: true }).click();
+      const detail = page.getByRole('dialog');
+      await expect(detail.getByRole('heading', { name: record, exact: true })).toBeVisible();
+      await detail.getByRole('button', { name: 'Close' }).click();
+      await overview.getByRole('button', { name: 'Clear search' }).click();
+      await expect(table.getByRole('row')).toHaveCount(3);
+      await expect(overview).toBeVisible();
+      await selectView('Sheet');
+      const editSelected = page.getByRole('button', { name: edit, exact: true });
+      const openSelected = page.getByRole('button', { name: open, exact: true });
+      await page.getByRole('button', { name: add }).click();
+      if (route === 'challans') {
+        await expect(page.getByRole('heading', { name: 'New challan' })).toBeVisible();
+        await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+      } else {
+        const create = page.getByRole('dialog', { name: 'New worker bill' });
+        await expect(create.getByLabel('Invoice number')).toBeVisible();
+        await create.getByRole('button', { name: 'Close' }).click();
+      }
+      await expect(openSelected).toBeDisabled();
+      await expect(editSelected).toBeDisabled();
+      await page.getByLabel('Sort direction').selectOption('desc');
+      const selectFirst = () =>
+        page.locator('.fortune-sheet-overlay').click({ position: { x: 85, y: 82 } });
+      await selectFirst();
+      await openSelected.click();
+      await expect(page.getByRole('dialog').getByRole('heading', { name: record })).toBeVisible();
+      await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      expect(errors).toEqual([]);
+      await selectFirst();
+      await editSelected.click();
+      if (route === 'challans') {
+        await expect(page.getByRole('heading', { name: 'Edit challan' })).toBeVisible();
+        await expect(page.getByLabel('Description')).toHaveValue('Description 2');
+        await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+      } else {
+        await expect(page.getByLabel('Invoice number')).toHaveValue('INV-2');
+      }
+      await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
+      const search = page.getByRole('searchbox', { name: 'Search ' + title.toLowerCase() });
+      await search.fill('no-match');
+      await expect(page.getByText('No matching records.')).toBeVisible();
+      await expect(openSelected).toBeDisabled();
+      await expect(page.getByLabel('Sheet zoom')).toBeVisible();
+      await search.clear();
+      await expect(page.getByText('2 rows', { exact: true })).toBeVisible();
+      await page.getByLabel('Sheet zoom').selectOption('1.25');
       for (const width of [1024, 390]) {
         await page.setViewportSize({ width, height: 900 });
         const toolbar = page.locator('.worksheet-actions');
