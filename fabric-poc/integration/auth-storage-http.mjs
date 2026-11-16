@@ -174,13 +174,14 @@ try {
       }),
       'Register employee with no email',
     );
-    const employeeRecord = registered.records.find(
+    const { employee: employeeRecord, status: employeeStatus } = registered.records.find(
       (r) => r.employee.contacts_id === '900004',
-    ).employee;
+    );
     createdEmployeeId = employeeRecord.id;
     assert.match(createdEmployeeId, /^\d+$/);
-    assert.match(employeeRecord.employee_code, /^SCE\/\d{5}$/);
-    assert.equal(employeeRecord.verified_by_employee_id, '900003');
+    assert.match(employeeRecord.employee_code, /^SCE-\d{5}$/);
+    assert.equal(employeeRecord.employee_status_id, employeeStatus.id);
+    assert.equal(employeeStatus.verified_by_employee_id, '900003');
     const invite = {
       action: 'invite',
       employeeId: createdEmployeeId,
