@@ -123,7 +123,8 @@ end;
 $$;
 
 drop trigger stamp_employee_operator on garments_erp.employee;
-create trigger stamp_employee_operator after insert or update on garments_erp.employee
+-- Order status creation before the internal FK trigger when constraints are immediate.
+create trigger "00_stamp_employee_operator" after insert or update on garments_erp.employee
 for each row execute function garments_erp.stamp_employee_operator();
 
 create function garments_erp.assign_employee_status_id() returns trigger
