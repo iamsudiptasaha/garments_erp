@@ -88,6 +88,11 @@ test('authenticated Challan and Worker Bill CRUD with real Supabase', async ({ p
   await expect(page.getByRole('cell', { name: '24', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: '8', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Save challan' }).click();
+  const billRow = (invoiceNumber) =>
+    page
+      .getByRole('table', { name: 'Worker bills', exact: true })
+      .getByRole('row')
+      .filter({ has: page.getByRole('cell', { name: invoiceNumber, exact: true }) });
   const detail = page.getByRole('dialog');
   await expect(detail.getByRole('button', { name: 'Edit challan' })).toBeVisible();
   const challanNumber = await detail.locator('h2').first().textContent();
@@ -119,7 +124,7 @@ test('authenticated Challan and Worker Bill CRUD with real Supabase', async ({ p
   await page.getByRole('button', { name: 'Review worker bill' }).click();
   await page.getByRole('button', { name: 'Confirm save', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'New worker bill' })).toBeHidden();
-  await page.getByRole('button', { name: new RegExp(invoice) }).click();
+  await billRow(invoice).getByRole('button').click();
   await expect(detail.getByRole('cell', { name: challanNumber, exact: true })).toBeVisible();
   await expect(detail.getByRole('cell', { name: issued[0].id, exact: true })).toBeVisible();
   let attachmentId;
@@ -144,7 +149,7 @@ test('authenticated Challan and Worker Bill CRUD with real Supabase', async ({ p
   await page.getByRole('button', { name: 'Review worker bill' }).click();
   await page.getByRole('button', { name: 'Confirm save', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: new RegExp(editedInvoice) }).click();
+  await billRow(editedInvoice).getByRole('button').click();
   if (attachmentId) {
     await expect(detail.getByText('No attachment')).toBeVisible();
     const detached = await rpc('erp_file_read', { p_id: attachmentId });
@@ -152,7 +157,7 @@ test('authenticated Challan and Worker Bill CRUD with real Supabase', async ({ p
   }
   page.once('dialog', (dialog) => dialog.accept());
   await detail.getByRole('button', { name: 'Delete bill' }).click();
-  await expect(page.getByRole('button', { name: new RegExp(editedInvoice) })).toHaveCount(0);
+  await expect(billRow(editedInvoice)).toHaveCount(0);
 
   const claim = { lines: [{ line: issued[1].lines[0].id, rate: '5' }] };
   const outcomes = await Promise.all([save(true, 'create', claim), save(true, 'create', claim)]);
@@ -161,7 +166,10 @@ test('authenticated Challan and Worker Bill CRUD with real Supabase', async ({ p
   const winnerBill = (await read(true)).bills.find((bill) => bill.key === winner);
   expect((await save(true, 'delete', winnerBill)).ok()).toBeTruthy();
   await page.getByRole('link', { name: 'Challans', exact: true }).click();
-  await page.getByRole('button', { name: new RegExp('Challan ' + challanNumber + ' ') }).click();
+  await page
+    .getByRole('table', { name: 'Challans', exact: true })
+    .getByRole('button', { name: challanNumber, exact: true })
+    .click();
   page.once('dialog', (dialog) => dialog.accept());
   await detail.getByRole('button', { name: 'Delete challan' }).click();
   await expect(detail).toHaveCount(0);
