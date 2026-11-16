@@ -97,3 +97,12 @@
   background: #f1f3f5;
   color: #536372;
 }
+
+.hr-reference-editor:modal {
+  overscroll-behavior: contain;
+}
+
+.hr-reference-editor::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}

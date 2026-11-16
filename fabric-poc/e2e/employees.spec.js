@@ -37,11 +37,8 @@ test('employee details, references and review use the same protected form', asyn
   ).toBeVisible();
   await page.getByRole('button', { name: 'Employment types', exact: true }).click();
   await expect(page).toHaveURL(/#employeeEmploymentTypes$/);
-  await expect(page.locator('.hr-workspace > .fabric-view-toggle')).toHaveCount(0);
-  await page.getByLabel('New value', { exact: true }).fill('Synthetic employment type');
-  await page.getByRole('button', { name: 'Add value', exact: true }).click();
   await expect(
-    page.getByRole('cell', { name: 'Synthetic employment type', exact: true }),
+    page.getByRole('button', { name: '+ Add employment type', exact: true }),
   ).toBeVisible();
 });
 test('cross-page sidebar links match navigation button typography', async ({ page }) => {
@@ -149,23 +146,56 @@ test('Employee Overview preserves read-only and denied access', async ({ page })
   await expect(table).toHaveCount(0);
 });
 
-for (const [route, title] of [
-  ['employeeBloodGroups', 'Blood groups'],
-  ['employeeEmploymentTypes', 'Employment types'],
-  ['employeeGender', 'Gender'],
+for (const [route, title, singular] of [
+  ['employeeBloodGroups', 'Blood groups', 'blood group'],
+  ['employeeEmploymentTypes', 'Employment types', 'employment type'],
+  ['employeeGender', 'Gender', 'gender'],
 ]) {
-  test(title + ' uses the shared table and existing reference form', async ({ page }) => {
+  test(title + ' uses the shared Overview, Sheet and review workflow', async ({ page }) => {
     test.skip(!!process.env.E2E_BASE_URL, 'Local preview only');
     await page.goto('/fabric.html#' + route);
     const table = page.getByRole('table', { name: title, exact: true });
     await expect(table.getByText('No matching records')).toBeVisible();
-    await page.getByLabel('New value', { exact: true }).fill('Sample reference');
-    await page.getByRole('button', { name: 'Add value', exact: true }).click();
+    const add = page.getByRole('button', { name: '+ Add ' + singular, exact: true });
+    const dialog = page.getByRole('dialog');
+    const name = dialog.getByLabel('Name', { exact: true });
+    const review = dialog.getByRole('button', { name: 'Review details →', exact: true });
+    const confirm = dialog.getByRole('button', { name: 'Confirm save', exact: true });
+    await add.click();
+    await expect(dialog).toHaveAccessibleName('New ' + singular);
+    await expect(name).toBeFocused();
+    await name.fill('Sample reference');
+    await review.click();
+    await expect(dialog.getByText('Sample reference', { exact: true })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Back to edit', exact: true }).click();
+    await expect(name).toHaveValue('Sample reference');
+    await review.click();
+    await confirm.click();
+    await expect(page.locator('dialog.hr-reference-editor')).toHaveCount(0);
+
     await table.getByRole('button', { name: 'Sample reference', exact: true }).press('Enter');
-    const edit = page.getByLabel('Edit value', { exact: true });
-    await expect(edit).toHaveValue('Sample reference');
-    await edit.fill('Edited reference');
-    await page.getByRole('button', { name: 'Save value', exact: true }).click();
+    await expect(dialog).toHaveAccessibleName('Edit ' + singular);
+    await expect(name).toHaveValue('Sample reference');
+    await name.fill('Unsaved change');
+    await review.click();
+    await page.keyboard.press('Escape');
+    await expect(
+      table.getByRole('button', { name: 'Sample reference', exact: true }),
+    ).toBeFocused();
+
+    await page.getByRole('button', { name: 'Sheet', exact: true }).click();
+    const edit = page.getByRole('button', { name: 'Edit selected record', exact: true });
+    await expect(edit).toBeDisabled();
+    await expect(add).toBeVisible();
+    await page.locator('.fortune-sheet-overlay').click({ position: { x: 85, y: 82 } });
+    await edit.click();
+    await expect(dialog).toHaveAccessibleName('Edit ' + singular);
+    await expect(name).toHaveValue('Sample reference');
+    await name.fill('Edited reference');
+    await review.click();
+    await confirm.click();
+    await expect(page.locator('dialog.hr-reference-editor')).toHaveCount(0);
+    await page.getByRole('main').getByRole('button', { name: 'Overview', exact: true }).click();
     const search = page.getByRole('searchbox', { name: 'Search ' + title, exact: true });
     await search.fill('no such reference');
     await expect(table.getByText('No matching records')).toBeVisible();
@@ -190,7 +220,7 @@ for (const [route, title] of [
     await expect(table.getByRole('button', { name: 'Edited reference', exact: true })).toHaveCount(
       0,
     );
-    await expect(edit).toHaveCount(0);
-    await expect(page.getByLabel('New value', { exact: true })).toHaveCount(0);
+    await expect(dialog).toHaveCount(0);
+    await expect(add).toHaveCount(0);
   });
 }
