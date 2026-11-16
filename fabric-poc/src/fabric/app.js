@@ -166,6 +166,7 @@ const productionOverviewColumns = {
   productionFlags: ['name'],
   productionGenders: ['name'],
   brands: ['name', 'contact', 'purpose'],
+  productionStages: ['name', 'abbr', 'order', 'type', 'track'],
 };
 
 const productionOverviewLinks = {
@@ -174,6 +175,7 @@ const productionOverviewLinks = {
     contact: ['contacts_id', 'materialContacts'],
     purpose: ['contact_purpose_id', 'contactCategories'],
   },
+  productionStages: { type: ['stage_type_id', 'productionStageTypes'] },
 };
 
 function isManagementPage(page, live) {
