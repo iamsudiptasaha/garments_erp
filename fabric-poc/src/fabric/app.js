@@ -2,6 +2,7 @@ import { contactsCommands } from '../miscellaneous/live.js';
 import { AccessApp } from '../access/app.js';
 import { FilesWorkspace } from '../files/app.js';
 import { adminTabs, workspacePath, workspacePathPage } from '../access/workspace-routes.js';
+import { OverviewTable } from './overview-table.js';
 import { useGridSearch } from './grid-toolbar.js';
 import {
   productionDocumentPath,
@@ -380,7 +381,8 @@ function App({ live, refreshWorkspaceAccess }) {
     preferences = state.preferences[page] || {},
     totals = useMemo(() => fabricTotals(data), [data]);
   const sheetQuery = useGridSearch(query);
-  const recordQuery = view === 'sheet' ? sheetQuery : query;
+  const jobStatusesOverview = page === 'productionStatuses' && view === 'overview';
+  const recordQuery = view === 'sheet' ? sheetQuery : jobStatusesOverview ? '' : query;
   const searchPlaceholder =
     page === 'productionJobs'
       ? 'Scan QR / enter item style code…'
@@ -637,6 +639,23 @@ function App({ live, refreshWorkspaceAccess }) {
     setEditor({ page: 'labDips', id: mode === 'edition' ? null : id, sourceId: id, mode });
   }
   function overview() {
+    if (jobStatusesOverview)
+      return h(OverviewTable, {
+        key: actor + ':' + page,
+        client: live ? getAccessClient() : null,
+        grid: 'overview-production-statuses',
+        title: spec.title,
+        records: groups.map(({ id, title }) => ({ id, name: title })),
+        columns: [
+          {
+            accessorKey: 'name',
+            header: 'Status',
+            cell: ({ getValue }) => h('span', { className: 'erp-overview-status' }, getValue()),
+          },
+        ],
+        onOpen: can('edit') ? edit : undefined,
+      });
+
     if (page === 'labDips')
       return h(LabOverview, {
         data,
@@ -1176,54 +1195,65 @@ function App({ live, refreshWorkspaceAccess }) {
                                   title: spec.title,
                                   description: spec.subtitle,
                                   view,
+                                  action:
+                                    jobStatusesOverview && can('create')
+                                      ? h(
+                                          'button',
+                                          { className: 'primary', onClick: () => edit(null) },
+                                          spec.newLabel,
+                                        )
+                                      : jobStatusesOverview
+                                        ? null
+                                        : undefined,
                                   onView: (mode) => {
                                     setView(mode);
                                     setSelected(null);
                                   },
                                 }),
-                                h(
-                                  RecordPageActions,
-                                  {
-                                    view,
-                                    label: 'Search ' + spec.title,
-                                    placeholder: searchPlaceholder,
-                                    value: query,
-                                    onSearch: (value) => {
-                                      setQuery(value);
-                                      setSelected(null);
-                                    },
-                                  },
-                                  !spec.readonly &&
-                                    can('create') &&
-                                    h(
-                                      'button',
-                                      { className: 'primary', onClick: () => edit(null) },
-                                      spec.newLabel ||
-                                        (page === 'suppliers'
-                                          ? '+ Add supplier'
-                                          : '+ New document'),
-                                    ),
-                                  !spec.readonly &&
-                                    can(page === 'materialContacts' ? 'view' : 'edit') &&
-                                    view === 'sheet' &&
-                                    h(
-                                      'button',
-                                      {
-                                        disabled:
-                                          query !== sheetQuery ||
-                                          !selected?.documentId ||
-                                          !records.includes(selected),
-                                        onClick: () => edit(selected.documentId),
+                                !jobStatusesOverview &&
+                                  h(
+                                    RecordPageActions,
+                                    {
+                                      view,
+                                      label: 'Search ' + spec.title,
+                                      placeholder: searchPlaceholder,
+                                      value: query,
+                                      onSearch: (value) => {
+                                        setQuery(value);
+                                        setSelected(null);
                                       },
-                                      page === 'materialContacts'
-                                        ? can('edit')
-                                          ? 'View/Edit'
-                                          : 'View'
-                                        : spec.master
-                                          ? 'Edit selected record'
-                                          : 'Edit selected document',
-                                    ),
-                                ),
+                                    },
+                                    !spec.readonly &&
+                                      can('create') &&
+                                      h(
+                                        'button',
+                                        { className: 'primary', onClick: () => edit(null) },
+                                        spec.newLabel ||
+                                          (page === 'suppliers'
+                                            ? '+ Add supplier'
+                                            : '+ New document'),
+                                      ),
+                                    !spec.readonly &&
+                                      can(page === 'materialContacts' ? 'view' : 'edit') &&
+                                      view === 'sheet' &&
+                                      h(
+                                        'button',
+                                        {
+                                          disabled:
+                                            query !== sheetQuery ||
+                                            !selected?.documentId ||
+                                            !records.includes(selected),
+                                          onClick: () => edit(selected.documentId),
+                                        },
+                                        page === 'materialContacts'
+                                          ? can('edit')
+                                            ? 'View/Edit'
+                                            : 'View'
+                                          : spec.master
+                                            ? 'Edit selected record'
+                                            : 'Edit selected document',
+                                      ),
+                                  ),
                                 page === 'materialStock' &&
                                   view === 'sheet' &&
                                   can('create', 'materialIssues') &&
@@ -1241,6 +1271,7 @@ function App({ live, refreshWorkspaceAccess }) {
                                   onRefresh: live ? refreshLive : undefined,
                                 }),
                                 view === 'overview' &&
+                                  !jobStatusesOverview &&
                                   records.length === 0 &&
                                   h(RecordPageEmpty, {
                                     query,

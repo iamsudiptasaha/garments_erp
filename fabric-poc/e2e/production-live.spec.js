@@ -1,11 +1,18 @@
 import { test, expect } from '@playwright/test';
 import { productionFixture } from '../tests/fixtures/production-live.js';
 
-async function liveWorkspace(page, { rejectMovement = false, authenticated = true } = {}) {
+async function liveWorkspace(
+  page,
+  {
+    rejectMovement = false,
+    authenticated = true,
+    actor = '00000000-0000-4000-8000-000000000003',
+    overviewPreferences = new Map(),
+  } = {},
+) {
   const snapshot = productionFixture(),
     calls = [];
   let studioPreferences = {};
-  const actor = '00000000-0000-4000-8000-000000000003';
   const encode = (x) => Buffer.from(JSON.stringify(x)).toString('base64url');
   const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: actor, role: 'authenticated', aal: 'aal2', exp: Math.floor(Date.now() / 1000) + 3600 })}.synthetic`;
   const session = {
@@ -47,12 +54,17 @@ async function liveWorkspace(page, { rejectMovement = false, authenticated = tru
             'productionStages',
             'productionFlags',
             'productionGenders',
+            'productionStatuses',
           ].map((k) => [k, { view: true, edit: true, create: true }]),
         ),
       };
     else if (name === 'erp_production_workspace') body = snapshot;
     else if (name === 'erp_grid_preferences' && args.p_grid === 'workspace-navigation') body = {};
-    else if (name === 'erp_grid_preferences') {
+    else if (name === 'erp_grid_preferences' && args.p_grid === 'overview-production-statuses') {
+      expect(args.p_owner).toBe(actor);
+      body = { ...overviewPreferences.get(actor), ...args.p_patch };
+      if (args.p_patch) overviewPreferences.set(actor, body);
+    } else if (name === 'erp_grid_preferences') {
       expect(args).toMatchObject({ p_grid: 'production-studio', p_owner: actor });
       if (args.p_patch) studioPreferences = { ...studioPreferences, ...args.p_patch };
       body = studioPreferences;
@@ -297,4 +309,43 @@ test('signed-out live floor QR retains the task URL through the sign-in document
   await expect(page).toHaveURL(new URL(path, page.url()).href);
   await expect(page.locator('.operator-context')).toContainText('Cotton polo');
   await expect(page.getByRole('combobox', { name: 'Design / task', exact: true })).toHaveCount(0);
+});
+
+test('Job statuses restores existing account preferences across browsers and isolates another account', async ({
+  browser,
+}) => {
+  const overviewPreferences = new Map();
+  const actor = '00000000-0000-4000-8000-000000000003';
+  const first = await browser.newPage();
+  const second = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const other = await browser.newPage();
+  try {
+    const url = '/fabric.html?live=1#productionStatuses';
+    await liveWorkspace(first, { actor, overviewPreferences });
+    await first.goto(url);
+    await first.getByRole('searchbox', { name: 'Search Job statuses' }).fill('complete');
+    await expect.poll(() => overviewPreferences.get(actor)?.search).toBe('complete');
+    await expect(first.getByRole('table', { name: 'Job statuses' }).getByRole('row')).toHaveCount(
+      2,
+    );
+    await liveWorkspace(second, { actor, overviewPreferences });
+    await second.goto(url);
+    await expect(second.getByRole('searchbox', { name: 'Search Job statuses' })).toHaveValue(
+      'complete',
+    );
+    await expect(second.getByRole('table', { name: 'Job statuses' }).getByRole('row')).toHaveCount(
+      2,
+    );
+    await liveWorkspace(other, {
+      actor: '00000000-0000-4000-8000-000000000004',
+      overviewPreferences,
+    });
+    await other.goto(url);
+    await expect(other.getByRole('searchbox', { name: 'Search Job statuses' })).toHaveValue('');
+    await expect(other.getByRole('table', { name: 'Job statuses' }).getByRole('row')).toHaveCount(
+      3,
+    );
+  } finally {
+    await Promise.all([first.close(), second.close(), other.close()]);
+  }
 });

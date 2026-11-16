@@ -14,10 +14,18 @@ export function WorkspaceConnectionBanner({ ready }) {
   );
 }
 
-export function RecordPageHeading({ eyebrow, title, description, view, onView, viewLabel }) {
+export function RecordPageHeading({
+  eyebrow,
+  title,
+  description,
+  view,
+  onView,
+  viewLabel,
+  action,
+}) {
   return h(
     'header',
-    { className: 'fabric-page-header' },
+    { className: 'fabric-page-header' + (action === undefined ? '' : ' erp-overview-heading') },
     h(
       'div',
       null,
@@ -25,7 +33,15 @@ export function RecordPageHeading({ eyebrow, title, description, view, onView, v
       h('h1', null, title),
       description && h('p', null, description),
     ),
-    onView && h(WorkspaceViewToggle, { view, onChange: onView, label: viewLabel }),
+    onView &&
+      (action !== undefined
+        ? h(
+            'div',
+            { className: 'erp-overview-heading-actions' },
+            h(WorkspaceViewToggle, { view, onChange: onView, label: viewLabel }),
+            action,
+          )
+        : h(WorkspaceViewToggle, { view, onChange: onView, label: viewLabel })),
   );
 }
 
