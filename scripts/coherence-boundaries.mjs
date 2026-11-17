@@ -47,6 +47,22 @@ export function inspectBoundaries({schema,catalogue,policy,functions,links=emplo
    errors.push('Finished Goods: catalogue write boundary differs from its reviewed contract');
   }
  }
+ const purpose = policy.contactPurpose;
+ if (purpose) {
+  const read = functions.get(purpose.readFunction);
+  const save = functions.get(purpose.saveFunction);
+  const permission = action => `has_screen_permission('${purpose.permissionScreen}', ${action})`;
+  const writes = code => [...(code || '').matchAll(/\b(insert\s+into|update|delete\s+from)\s+(?:garments_erp|garments_access|public)\.(\w+)/gi)];
+  const mapping = catalogue.mappings.filter(entry => entry.resource_key === purpose.permissionScreen);
+  if (!read?.includes(permission("'view'")) || writes(read).length)
+   errors.push('Contact Purpose: unreviewed read boundary');
+  if (!save?.includes(permission("'view'")) ||
+      !save.includes(permission("case when p_id is null then 'create' else 'edit' end")) ||
+      /\bexecute\b/i.test(save) || writes(save).length !== 2 ||
+      writes(save).some(([, action, table]) => /delete/i.test(action) || table !== purpose.writableTable) ||
+      mapping.length !== 1 || mapping[0].table_name !== purpose.writableTable || mapping[0].can_delete)
+   errors.push('Contact Purpose: unreviewed write boundary');
+ }
  for (const [name, contract] of Object.entries(policy.billingPortal || {})) {
   const entry = functions.get(name);
   if (!entry?.includes(`garments_erp.billing_employee('${contract.permissionScreen}')`))
@@ -120,9 +136,9 @@ export function inspectBoundaries({schema,catalogue,policy,functions,links=emplo
   }
   for(const child of contract.children)if(!sections.some(s=>s.table===child.table))errors.push(`${screen}: missing section ${child.table}`);
  }
- const fabric=functions.get('garments_access.fabric_contract');
+ const fabric=functions.get('garments_erp.fabric_contract')??functions.get('garments_access.fabric_contract');
  if(fabric){const literal=fabric.match(/select\s+'((?:[^']|'')*)'::jsonb/i);if(!literal)errors.push('Fabric: SQL contract is not inspectable');else if(JSON.stringify(JSON.parse(literal[1].replaceAll("''","'")))!==JSON.stringify(fabricContract))errors.push('Fabric: backend writable contract differs from UI contract');}
- const production=functions.get('garments_access.production_setup_contract');
+ const production=functions.get('garments_erp.production_setup_contract')??functions.get('garments_access.production_setup_contract');
  if(production){const literal=production.match(/select\s+'((?:[^']|'')*)'::jsonb/i);if(!literal)errors.push('Production: SQL contract is not inspectable');else if(JSON.stringify(JSON.parse(literal[1].replaceAll("''","'")))!==JSON.stringify(productionContract))errors.push('Production: backend writable contract differs from UI contract');}
  return [...new Set(errors)];
 }

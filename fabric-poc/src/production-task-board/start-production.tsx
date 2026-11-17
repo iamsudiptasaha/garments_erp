@@ -21,6 +21,7 @@ export function StartProduction({ data, onSave, onClose, onStart }: Props) {
   const options = data.item_part
     .filter(
       (p) =>
+        !p.parent_item_part_id &&
         !(data.production || []).some((r) => r.item_part_id === p.id) &&
         !data.job.some((j) => j.item_part_id === p.id),
     )

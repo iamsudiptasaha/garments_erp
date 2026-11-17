@@ -44,6 +44,7 @@ export function BillEditor({
   onDelete,
   canEditFiles,
   onFilesSaved,
+  onOpenPlanner,
   onClose,
   verifiers = [],
 }) {
@@ -939,6 +940,8 @@ export function BillEditor({
             'div',
             { className: 'editor-actions' },
             h('button', { type: 'button', onClick: onClose }, 'Cancel'),
+            onOpenPlanner &&
+              h('button', { type: 'button', onClick: onOpenPlanner }, 'Open Fabric Planner'),
             onDelete &&
               h(
                 'button',

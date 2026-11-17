@@ -79,6 +79,7 @@ import {
   WorkspaceConnectionBanner,
 } from './record-page.js';
 import { BillEditor } from './editor.js';
+import { FabricPlanner } from './planner.js';
 import './styles.css';
 import { ProductionDocumentWorkspace } from '../production-documents/app.js';
 import { adminPages, initialAccess, allowed, upgradeAccess } from '../admin/model.js';
@@ -104,7 +105,7 @@ function load() {
 }
 const pageFromHash = () => {
   const key = location.hash.slice(1);
-  if (key === 'fabricOverview') return key;
+  if (['fabricOverview', 'fabricPlanner'].includes(key)) return key;
   if (key === 'adminUsers') return 'employees';
   return Object.hasOwn(pages, key) || Object.hasOwn(adminPages, key) || Object.hasOwn(hrPages, key)
     ? key
@@ -159,6 +160,7 @@ function workspaceRoute() {
     finishedGoodsPage: Object.hasOwn(finishedGoodsPages, finishedGoods) ? finishedGoods : 'sizes',
     floor: location.pathname === '/fabric.html' && params.get('floor') === '1',
     task: params.get('task'),
+    plannerProgram: params.get('plannerProgram'),
   };
 }
 
@@ -169,7 +171,7 @@ const recordOverviewColumns = {
   colourMappings: ['name', 'pantone', 'brand'],
   labDips: ['name', 'pantone', 'edition', 'version', 'status', 'brand', 'dyer'],
   yarnTypes: ['name', 'count', 'uses'],
-  fabricTypes: ['name', 'knitting', 'programs'],
+  fabricTypes: ['name', 'series', 'knitting', 'programs'],
   suppliers: ['name', 'kind', 'purpose', 'orders'],
   dyed: ['batch', 'name', 'color', 'bill', 'quantity', 'price', 'wastage'],
   yarnLeft: ['bill', 'name', 'supplier', 'quantity', 'consumed', 'left'],
@@ -257,7 +259,8 @@ function App({ live, refreshWorkspaceAccess }) {
   const [billingPO, setBillingPO] = useState(null);
   const [billingTransport, setBillingTransport] = useState(null);
   const [billingFormalPO, setBillingFormalPO] = useState(null);
-  const [{ page, finishedGoodsPage, floor, task }, setRoute] = useState(workspaceRoute);
+  const [{ page, finishedGoodsPage, floor, task, plannerProgram }, setRoute] =
+    useState(workspaceRoute);
   const [workspaceDataStarted, setWorkspaceDataStarted] = useState(
     () => !isManagementPage(page, live),
   );
@@ -279,6 +282,13 @@ function App({ live, refreshWorkspaceAccess }) {
       ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(key) ? 'productionJobs' : key,
       action,
     );
+  const plannerView = Boolean(live && can('view', 'productionItems') && can('view', 'programs'));
+  function openProgramPlanner(id) {
+    const url = new URL(location.href);
+    url.searchParams.set('plannerProgram', id);
+    url.hash = 'fabricPlanner';
+    navigate('fabricPlanner', undefined, url.pathname + url.search + url.hash);
+  }
   function saveAccess(next) {
     try {
       localStorage.setItem('garments-access-preview-v1', JSON.stringify(next));
@@ -340,7 +350,8 @@ function App({ live, refreshWorkspaceAccess }) {
     [liveError, setLiveError] = useState(''),
     [productionError, setProductionError] = useState(''),
     [inventoryError, setInventoryError] = useState(''),
-    [contactsError, setContactsError] = useState('');
+    [contactsError, setContactsError] = useState(''),
+    [contactPurposeError, setContactPurposeError] = useState('');
   const commands = useMemo(
     () => (live ? liveFabricCommands(getAccessClient(), createVerificationClient) : null),
     [Boolean(live)],
@@ -359,6 +370,7 @@ function App({ live, refreshWorkspaceAccess }) {
   );
   const connectedPage = (key) =>
     key === 'materialContacts' ||
+    key === 'contactCategories' ||
     liveFabricPage(key) ||
     liveProductionPage(key) ||
     liveInventoryPage(key);
@@ -367,15 +379,17 @@ function App({ live, refreshWorkspaceAccess }) {
     (live.administrator ||
       Object.entries(live.permissions || {}).some(([key, p]) => check(key) && p.view));
   async function loadLive() {
-    const [fabricResult, productionResult, inventoryResult, contactsResult] =
+    const [fabricResult, productionResult, inventoryResult, contactsResult, purposeResult] =
       await Promise.allSettled([
         allowedModule(liveFabricPage) ? commands.load() : {},
         allowedModule(liveProductionPage) || can('view', 'productionJobs') ? production.load() : {},
         allowedModule(liveInventoryPage) ? inventory.load() : {},
         can('view', 'materialContacts') ? contacts.load() : {},
+        can('view', 'contactCategories') ? contacts.loadPurposes() : null,
       ]);
     setLiveError(fabricResult.status === 'rejected' ? fabricResult.reason.message : '');
     setContactsError(contactsResult.status === 'rejected' ? contactsResult.reason.message : '');
+    setContactPurposeError(purposeResult.status === 'rejected' ? purposeResult.reason.message : '');
     const contactData = contactsResult.status === 'fulfilled' ? contactsResult.value : {};
     setProductionError(
       productionResult.status === 'rejected' ? productionResult.reason.message : '',
@@ -391,6 +405,7 @@ function App({ live, refreshWorkspaceAccess }) {
     return {
       ...mergeProductionSnapshot(base, { ...stock, employee: [...employees.values()] }),
       ...contactData,
+      contactPurposeRows: purposeResult.status === 'fulfilled' ? purposeResult.value : null,
     };
   }
   async function applyProduction(
@@ -473,6 +488,7 @@ function App({ live, refreshWorkspaceAccess }) {
   const data = useMemo(
     () => ({
       ...state.data,
+      contact_purpose: state.data.contactPurposeRows ?? state.data.contact_purpose,
       employee: live
         ? state.data.employee
         : access.users.map(({ id, name, employeeCode }) => ({ id, name, employeeCode })),
@@ -544,6 +560,7 @@ function App({ live, refreshWorkspaceAccess }) {
       }
       url.searchParams.delete('floor');
       url.searchParams.delete('task');
+      url.searchParams.delete('plannerProgram');
       if (finishedGoods) url.searchParams.set('finishedGoods', finishedGoods);
       url.hash = key === 'home' ? '' : key;
       if (url.href !== location.href) history.pushState(null, '', url);
@@ -553,6 +570,16 @@ function App({ live, refreshWorkspaceAccess }) {
   }
   function edit(id) {
     if (live && (!liveReady || !connectedPage(page))) return;
+    if (
+      live &&
+      page === 'materialReceipts' &&
+      data.raw_material_check_in?.some(
+        (receipt) => receipt.id === id && receipt.automatic_dyed_receipt,
+      )
+    ) {
+      setNotice('This stock receipt is maintained by its verified dyed fabric bill.');
+      return;
+    }
     if (!can(id && page === 'materialContacts' ? 'view' : id ? 'edit' : 'create')) {
       setNotice('Your role does not allow this action.');
       return;
@@ -582,6 +609,27 @@ function App({ live, refreshWorkspaceAccess }) {
     }
     if (live) {
       if (!liveReady) throw Error('Wait for live data to load.');
+      if (editor.page === 'contactCategories') {
+        const original = data.contact_purpose;
+        const draft = next.contact_purpose.find((entry) =>
+          editor.id ? entry.id === editor.id : !original.some(({ id }) => id === entry.id),
+        );
+        const saved = await contacts.savePurpose(editor.id, draft);
+        setState((previous) => ({
+          ...previous,
+          data: {
+            ...previous.data,
+            contactPurposeRows: editor.id
+              ? previous.data.contactPurposeRows.map((row) =>
+                  row.id === saved.id ? { ...row, ...saved } : row,
+                )
+              : [...previous.data.contactPurposeRows, { ...saved, uses: 0 }],
+          },
+        }));
+        setSelected(null);
+        setNotice('Contact Purpose saved to Supabase');
+        return saved.id;
+      }
       if (liveProductionPage(editor.page)) {
         const { _saved_id, ...snapshot } = await production.saveSetup({
           resource: editor.page,
@@ -1085,11 +1133,13 @@ function App({ live, refreshWorkspaceAccess }) {
   const activeLiveError =
     page === 'materialContacts'
       ? contactsError
-      : liveInventoryPage(page)
-        ? inventoryError
-        : liveProductionPage(page)
-          ? productionError
-          : liveError;
+      : page === 'contactCategories'
+        ? contactPurposeError
+        : liveInventoryPage(page)
+          ? inventoryError
+          : liveProductionPage(page)
+            ? productionError
+            : liveError;
   function renderFloor() {
     if (live && (!liveReady || productionError))
       return h(
@@ -1124,6 +1174,26 @@ function App({ live, refreshWorkspaceAccess }) {
   const administrationPage = live && Object.hasOwn(adminTabs, page);
   const filesPage = page === 'files' || page === 'files-admin';
   function renderWorkspace() {
+    if (page === 'fabricPlanner') {
+      return plannerView
+        ? h(FabricPlanner, {
+            key: plannerProgram || 'all',
+            client: getAccessClient(),
+            program: plannerProgram,
+            canEdit: can('edit', 'productionItems'),
+            canLink: can('edit', plannerProgram ? 'programs' : 'productionItems'),
+            capabilities: {
+              format: can('format', 'productionItems'),
+              export: can('export', 'productionItems'),
+              print: can('print', 'productionItems'),
+            },
+          })
+        : h(
+            'section',
+            { className: 'access-denied' },
+            h('h1', null, 'Fabric Planner access restricted'),
+          );
+    }
     if (administrationPage)
       return h(AccessApp, {
         key: actor,
@@ -1559,6 +1629,10 @@ function App({ live, refreshWorkspaceAccess }) {
           reconciliation: editor.reconciliation,
           canEditFiles: can('edit', editor.page),
           onFilesSaved: refreshLive,
+          onOpenPlanner:
+            plannerView && editor.page === 'programs' && editor.id
+              ? () => openProgramPlanner(editor.id)
+              : undefined,
           onSave: live && editor.page === 'materialContacts' ? saveLiveContact : saveData,
           onReload: live && editor.page === 'materialContacts' ? reloadContacts : undefined,
           verifiers: live

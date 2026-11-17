@@ -78,6 +78,13 @@ export function contactsCommands(client) {
   }
   return {
     load: () => rpc('erp_contacts_workspace'),
+    loadPurposes: () => rpc('erp_contact_purpose_workspace'),
+    savePurpose: (id, { type, updated_at }) =>
+      rpc('erp_save_contact_purpose', {
+        p_id: id ?? null,
+        p_type: type,
+        p_expected: updated_at ?? null,
+      }),
     save: (document) => rpc('erp_save_contact_workspace', { p_document: document }),
   };
 }

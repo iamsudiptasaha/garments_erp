@@ -467,6 +467,7 @@ export function fabricRows(data, page) {
       id: r.id,
       documentId: r.id,
       name: r.name,
+      series: r.series,
       knitting: data.knitting_bill_item.filter((l) => l.fabric_type_id === r.id).length,
       programs: data.dyeing_program_item.filter((l) => l.fabric_type_id === r.id).length,
     }));
@@ -916,7 +917,7 @@ export function saveDocument(data, page, draft) {
       next[spec.entity].some(
         (r) =>
           r.id !== id &&
-          r[spec.identity].trim().toLowerCase() === header[spec.identity].toLowerCase(),
+          (r[spec.identity] ?? '').trim().toLowerCase() === header[spec.identity].toLowerCase(),
       )
     )
       throw Error('This name already exists. Edit the existing record.');

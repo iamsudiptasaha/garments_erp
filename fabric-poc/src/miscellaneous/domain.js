@@ -64,15 +64,17 @@ export function miscellaneousRows(data, page) {
   if (page === 'contactCategories')
     return data.contact_purpose.map((r) => ({
       ...identity(r),
-      name: r.type,
-      uses: ['raw_material_supplier_list', 'yarn_supplier', 'knitter', 'dyer', 'employee'].reduce(
-        (n, table) =>
-          n +
-          (data[table] || []).filter(
-            (x) => x.contact_purpose_id === r.id || x.contact_purpose_emergency_id === r.id,
-          ).length,
-        0,
-      ),
+      name: dash(r.type),
+      uses:
+        r.uses ??
+        ['raw_material_supplier_list', 'yarn_supplier', 'knitter', 'dyer', 'employee'].reduce(
+          (n, table) =>
+            n +
+            (data[table] || []).filter(
+              (x) => x.contact_purpose_id === r.id || x.contact_purpose_emergency_id === r.id,
+            ).length,
+          0,
+        ),
     }));
   if (page === 'bankAccountTypes')
     return data.bank_account_type.map((r) => ({ ...identity(r), name: r.name }));

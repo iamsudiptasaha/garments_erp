@@ -11,7 +11,13 @@ Source: [Fabric domain](fabric-poc/src/fabric/domain.js). The [legacy workbook](
 | Yarn consumed and balance, kg | Sum linked knitting consumption for the yarn bill item. Subtract consumption from its billed yarn quantity. |
 | Greige balance, kg | Group by knitting bill and fabric name. Sum knitting billed quantities, then subtract gross quantities from linked dyeing lines. |
 | Dyeing wastage, % | 100 × (gross quantity − billed quantity) ÷ gross quantity. Display to two decimal places. A zero gross quantity yields no wastage or derived price. |
-| Derived dyed-fabric price per kg | (Yarn billed rate + knitting billed rate + dyeing rate) × (1 + wastage as a fraction). The portal rounds to two decimals after calculation. |
+| Derived dyed-fabric price per kg | (Yarn billed rate + knitting billed rate + dyeing rate) × (1 + wastage as a fraction). Round to two decimal places after calculation in the portal and in `garments_erp.dyed_fabric_receipt_price`. The verified bill writes the result to `raw_material_check_in.billed_price` (₹/kg). Its receipt uses the dyed line’s final physical kg for `raw_material_check_in.billed_quantity`. |
+
+### Fabric Planner estimates
+
+- Required kg = planned variant pieces × consumption kg per piece. Each part uses the planned size totals of its root’s item. Distribute each size’s cut-ratio pieces equally across the variants configured on that part, giving remainder pieces to the first variant-item IDs. A dependent part can use its own variants and inherits its root’s Production ID.
+- Ordered and received kg are virtual coverage of required kg across compatible linked dyeing program items. Use program quantity for ordered supply and the final physical quantity of verified dyed lines for received supply. Cover requirements that can be filled in full before allocating partial coverage. Within each pass, evaluate smaller requirements first and use the least-shared supply first. Each supply quantity is counted at most once per estimate. Shortages and surpluses are the remaining demand and supply.
+- Consumed kg is manual outward quantity on dyed inventory assigned to the same variant part and fabric type, excluding stock reconciliation. The estimates create no inventory movement. [Planner SQL](supabase/migrations/20261117103000_fabric_planner_quantities.sql)
 
 ## Raw material inventory
 

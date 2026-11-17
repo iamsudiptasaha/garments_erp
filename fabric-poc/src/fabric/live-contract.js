@@ -4,7 +4,7 @@ export const fabricContract = {
     yarn_type: ['name', 'yarn_count'],
   },
   fabricTypes: {
-    fabric_type: ['name'],
+    fabric_type: ['name', 'series'],
   },
   brands: {
     brand_list: ['brand', 'contacts_id', 'contact_purpose_id'],
@@ -101,6 +101,7 @@ export const fabricColumnTypes = {
   },
   fabric_type: {
     id: 'bigint',
+    series: 'smallint',
     name: 'text',
     created_at: 'timestamp with time zone',
     updated_at: 'timestamp with time zone',

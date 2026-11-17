@@ -173,9 +173,13 @@ export const pages = {
     subtitle: 'The fabric constructions used in knitting and dyeing',
     entity: 'fabric_type',
     identity: 'name',
-    header: [field('name', 'Fabric type name')],
+    header: [
+      field('name', 'Fabric type name'),
+      field('series', 'SKU series', 'number', { required: false, min: 1, max: 9, step: 1 }),
+    ],
     columns: [
       column('name', 'Fabric type', false, 260),
+      column('series', 'SKU series', true),
       column('knitting', 'Knitting lines', true),
       column('programs', 'Dyeing program lines', true),
     ],

@@ -35,3 +35,5 @@ curl --silent --fail -X OPTIONS http://127.0.0.1:55426/ >/dev/null
 curl --silent --fail http://127.0.0.1:18766/fabric.html >/dev/null
 ATTACHMENT_FILES_SERVICE=http://127.0.0.1:55426 node fabric-poc/integration/attachment-browser.mjs
 ATTACHMENT_FILES_SERVICE=http://127.0.0.1:55426 node fabric-poc/integration/attachment-browser.mjs --owning-modal
+ATTACHMENT_FILES_SERVICE=http://127.0.0.1:55426 node fabric-poc/integration/attachment-browser.mjs --fabric-planner
+node fabric-poc/integration/attachment-browser.mjs --contact-purpose

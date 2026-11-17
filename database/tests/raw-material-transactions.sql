@@ -18,7 +18,7 @@ declare
   receipt_values jsonb := '{"inward_date":"2026-11-08","billed_quantity":10,"billed_price":2}';
   issue_values jsonb := '{"date":"2026-11-08","quantity":4}';
 begin
-  category := public.erp_save_raw_material_setup('materialCategories',null,null,'{"name":"Inventory test category"}',null)->'row';
+  category := public.erp_save_raw_material_setup('materialCategories',null,null,'{"name":"Inventory test category","type":"Accessory","type_abbr":"ACC","series":9}',null)->'row';
   unit := public.erp_save_raw_material_setup('materialUnits',null,null,'{"unit":"Inventory test piece"}',null)->'row';
   supplier := public.erp_save_raw_material_setup('materialSuppliers',null,null,
     '{"contacts_id":"900001","contact_purpose_id":"985001"}',null)->'row';
@@ -34,6 +34,9 @@ begin
 
   receipt := public.erp_save_raw_material_transaction('materialReceipts',null,null,
     receipt_values || jsonb_build_object('material_category_id',category->>'id'));
+  if receipt->>'sku' not like 'ACC-9___' then
+    raise exception 'TEST: receipt SKU did not use the material category series';
+  end if;
   if receipt->>'material_category_id' is distinct from category->>'id' then
     raise exception 'TEST: receipt category did not persist on create';
   end if;

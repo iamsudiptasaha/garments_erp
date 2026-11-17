@@ -135,6 +135,9 @@ test('navigation disclosures survive refresh, sign-out and separate sessions per
             pages: { challans: true, billing: true },
           };
           break;
+        case 'erp_contact_purpose_workspace':
+          json = [];
+          break;
         case 'erp_contacts_workspace':
           json = {
             contacts: [{ id: '11', company_name: 'Navigation fixture contact' }],
