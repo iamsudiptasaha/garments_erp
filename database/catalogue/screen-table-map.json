@@ -620,6 +620,15 @@
       "route": "/fabric.html#billingReturns",
       "sort_order": 68,
       "admin_only": false
+    },
+    {
+      "key": "transferableMaterials",
+      "name": "Transferable Materials",
+      "resource_type": "screen",
+      "parent": "section:inventory",
+      "route": "fabric.html#transferableMaterials",
+      "sort_order": 36,
+      "admin_only": false
     }
   ],
   "tables": [
@@ -926,6 +935,14 @@
     {
       "schema_name": "garments_access",
       "table_name": "app_activity_log"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "transferable_item_movement"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "transferable_item_movement_type"
     }
   ],
   "mappings": [
@@ -5524,6 +5541,76 @@
       "schema_name": "garments_access",
       "table_name": "app_resource",
       "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "transferableMaterials",
+      "schema_name": "garments_erp",
+      "table_name": "transferable_item_movement",
+      "relation_type": "primary",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "transferableMaterials",
+      "schema_name": "garments_erp",
+      "table_name": "transferable_item_movement_type",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "transferableMaterials",
+      "schema_name": "garments_erp",
+      "table_name": "raw_material_check_in",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "transferableMaterials",
+      "schema_name": "garments_erp",
+      "table_name": "raw_material_item",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "transferableMaterials",
+      "schema_name": "garments_erp",
+      "table_name": "job_worker",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "transferableMaterials",
+      "schema_name": "garments_erp",
+      "table_name": "item",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "transferableMaterials",
+      "schema_name": "garments_erp",
+      "table_name": "employee",
+      "relation_type": "lookup",
       "can_view": true,
       "can_create": false,
       "can_edit": false,

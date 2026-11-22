@@ -134,6 +134,8 @@ jobs:
         run: bash scripts/ci/test-attachments-browser.sh
       - name: Verify Administration in Chromium against local Supabase
         run: bash scripts/ci/test-administration-browser.sh
+      - name: Verify Transferable Materials with real Auth, TOTP and PostgreSQL in Chromium
+        run: bash scripts/ci/test-transferable-browser.sh
       - name: Lint database functions in the isolated instance
         run: npx --yes supabase@2.122.0 db lint --local --schema garments_erp,garments_access --fail-on error --workdir database/ci/project
       - name: Stop and discard local database

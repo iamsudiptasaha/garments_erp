@@ -1,3 +1,4 @@
+import {transferableReleaseSchema} from './transferable-contract.mjs';
 import {productionReferenceSchema} from './production-reference-contract.mjs';
 import {fabricBatchReleaseSchema,inspectFabricBatch} from './fabric-batch-contract.mjs';
 import {employeePhotoReleaseSchema} from './employee-photo-contract.mjs';
@@ -78,7 +79,7 @@ export function inspect(schema, catalogue, screens=pages){
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
  const captured=JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url)));
- const schema=fabricPlannerReleaseSchema(checkoutReleaseSchema(productionReferenceSchema(fabricBatchReleaseSchema(employeePhotoReleaseSchema(contactReleaseSchema(captured))))));
+ const schema=transferableReleaseSchema(fabricPlannerReleaseSchema(checkoutReleaseSchema(productionReferenceSchema(fabricBatchReleaseSchema(employeePhotoReleaseSchema(contactReleaseSchema(captured)))))));
  const catalogue=JSON.parse(readFileSync(new URL('../database/catalogue/screen-table-map.json',import.meta.url)));
  const errors=[...inspect(schema,catalogue),...inspectFabricBatch(schema)];
  try{console.log(checkBoundaries());}catch(e){errors.push(e.message)}

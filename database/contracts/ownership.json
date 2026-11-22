@@ -266,12 +266,6 @@
       "fabric-poc/src/production/item-editor.js": "822b9689587d01eeda246a5f1a9ff1d4e76ffc1ba48af8e0c80e81070d761152",
       "fabric-poc/src/production/item-model.js": "4c20fd119f43f5b5e4be1f0f55b2df6d3580152325a5e677fcf7ee23cf37eb23",
       "fabric-poc/src/production/schema.js": "e219a720cd73141489f1a11a7e016b29ac92b53a07197d7d6ab83d5cba61e998"
-    },
-    "fabric-poc/src/inventory": {
-      "fabric-poc/src/inventory/cards.js": "4ff1af22fb4eb8bceeb6851b71abe8a4fd73640239928cf91457e65d16002780",
-      "fabric-poc/src/inventory/catalog.js": "dec51325ac27bcf73dc291ebf03c2fa241556d3d313aa8cdeea6b83a058c9ef0",
-      "fabric-poc/src/inventory/domain.js": "0877d456c25fab62a5bb4eb68ec75167a4d778abdaa84402a203e17ec6afb315",
-      "fabric-poc/src/inventory/receipts.js": "f297a680bf732f286d2e0b1a7509e00580a736696d75418ee91a29df89cf3655"
     }
   },
   "aggregates": {
@@ -494,5 +488,25 @@
     ],
     "release": "Migration and portal release through reviewed main Actions workflows; no direct live SQL.",
     "imageAccess": "Existing private Files read path; Production viewers can read itemImage only for items linked to Production. No upload permission added."
+  },
+  "transferableInventory": {
+    "reviewedMigration": "20261122155813_transferable_materials.sql",
+    "resource": "transferableMaterials",
+    "receiptOwner": "materialReceipts",
+    "receiptFlag": "raw_material_check_in.is_transferable",
+    "root": "raw_material_check_in",
+    "history": "transferable_item_movement",
+    "lookup": "transferable_item_movement_type",
+    "saveFunction": "garments_erp.record_transferable_movement",
+    "readFunction": "garments_erp.raw_material_transaction_snapshot",
+    "foreignKeys": {
+      "raw_material_check_in_id": "raw_material_check_in",
+      "transferable_item_movement_type_id": "transferable_item_movement_type",
+      "job_worker_id": "job_worker",
+      "item_id": "item",
+      "employee_id": "employee"
+    },
+    "ownership": "Receipt selects existing PO/material; movement references whole receipt, existing worker, garment item and employee. No child record editors or material registry.",
+    "state": "Derived in PostgreSQL from immutable ordered events; the frontend consumes state, available actions and flag restrictions."
   }
 }

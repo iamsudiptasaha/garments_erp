@@ -142,6 +142,7 @@ export const inventoryPages = {
         'materialOrderLines',
         false,
       ),
+      f('is_transferable', 'Transferable', 'checkbox', opt),
       f('invoice_number', 'Invoice number', 'text', opt),
       select('verified_by_employee_id', 'Received by employee', 'employees', false),
     ],
@@ -158,6 +159,15 @@ export const inventoryPages = {
       c('employee', 'Received by'),
       c('attachment', 'Bill attachment reference'),
     ],
+  },
+  transferableMaterials: {
+    section: 'inventory',
+    readonly: true,
+    title: 'Transferable Materials',
+    subtitle: 'Receipt-level custody and complete movement history',
+    header: [],
+    columns: [],
+    permissionActions: ['view', 'create', 'format', 'export', 'print'],
   },
   materialIssues: {
     ...base,
