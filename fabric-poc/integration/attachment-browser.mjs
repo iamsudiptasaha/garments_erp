@@ -1196,6 +1196,7 @@ async function fabricPlannerWorkflow() {
     .getByLabel('Dyeing program item', { exact: true })
     .selectOption(String(isolatedLine.id));
   await b('Review link').click();
+  await dialog.getByText('Main sleeve', { exact: true }).waitFor();
   await b('Confirm save').click();
   await hidden();
   const {

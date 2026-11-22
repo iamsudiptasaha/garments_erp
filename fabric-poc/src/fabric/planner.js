@@ -98,6 +98,16 @@ function FabricPlanEdit({
         },
         [
           ['Variant / part', variantLabel(row)],
+          [
+            'Fabric sub-part',
+            requirement.sub_part_name ||
+              snapshot.sub_parts.find((p) => p.id === requirement.sub_part_list_id)?.part ||
+              'Unspecified',
+          ],
+          [
+            'Component lab dip',
+            snapshot.lab_dips.find((l) => l.id === requirement.lab_dip_id)?.name ?? '—',
+          ],
           ['Fabric', snapshot.fabric_types.find((f) => f.id === requirement.fabric_type_id)?.name],
           [linked ? 'Unlink program item' : 'Link program item', programLabel(programItem)],
         ],
