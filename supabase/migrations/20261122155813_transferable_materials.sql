@@ -427,22 +427,22 @@ begin
   end if;
 
   if can_issue then tables := tables || array['stage']; end if;
-  if can_transfer or can_receive or can_issue or can_read_stock or can_move then
+  if can_receive or can_issue or can_read_stock or can_move then
     tables := tables || array['raw_material_check_out'];
   end if;
-  if can_transfer or can_receive or can_issue or can_read_stock or can_move or can_material or can_order then
+  if can_receive or can_issue or can_read_stock or can_move or can_material or can_order then
     tables := tables || array['raw_material_check_in','raw_material_item','raw_material_purchase_order_item'];
   end if;
-  if can_transfer or can_receive or can_issue or can_read_stock or can_move or can_order or can_supplier then
+  if can_receive or can_issue or can_read_stock or can_move or can_order or can_supplier then
     tables := tables || array['raw_material_purchase_order'];
   end if;
-  if can_transfer or can_receive or can_issue or can_read_stock or can_move or can_material or can_order or can_supplier then
+  if can_receive or can_issue or can_read_stock or can_move or can_material or can_order or can_supplier then
     tables := tables || array['raw_material_supplier_list'];
   end if;
-  if can_transfer or can_receive or can_issue or can_read_stock or can_move or can_material or can_category then
+  if can_receive or can_issue or can_read_stock or can_move or can_material or can_category then
     tables := tables || array['category_list'];
   end if;
-  if can_transfer or can_receive or can_issue or can_read_stock or can_move or can_material or can_order or can_unit then
+  if can_receive or can_issue or can_read_stock or can_move or can_material or can_order or can_unit then
     tables := tables || array['unit_of_measure'];
   end if;
   if can_issue or can_move or can_issue_type then
@@ -461,6 +461,31 @@ begin
     ) into rows using relation_name;
     result := result || jsonb_build_object(relation_name, rows);
   end loop;
+  -- Transfer-only viewers receive only eligible receipt identities and lookup
+  -- labels, not ordinary inventory, PO prices, invoice metadata or attachments.
+  if can_transfer then
+    if not (result ? 'raw_material_check_in') then
+      result:=result || jsonb_build_object('raw_material_check_in',(
+        select coalesce(jsonb_agg(jsonb_build_object('id',r.id::text,'sku',r.sku,
+          'raw_material_item_id',r.raw_material_item_id::text,'is_transferable',true,
+          'inward_date',r.inward_date,'billed_quantity',r.billed_quantity,'updated_at',r.updated_at)
+          order by r.id),'[]') from garments_erp.raw_material_check_in r where r.is_transferable));
+    end if;
+    if not (result ? 'raw_material_item') then
+      result:=result || jsonb_build_object('raw_material_item',(
+        select coalesce(jsonb_agg(jsonb_build_object('id',m.id::text,'name',m.name,
+          'unit_of_measure_id',m.unit_of_measure_id::text) order by m.id),'[]')
+        from garments_erp.raw_material_item m where exists(select 1 from garments_erp.raw_material_check_in r
+          where r.is_transferable and r.raw_material_item_id=m.id)));
+    end if;
+    if not (result ? 'unit_of_measure') then
+      result:=result || jsonb_build_object('unit_of_measure',(
+        select coalesce(jsonb_agg(jsonb_build_object('id',u.id::text,'unit',u.unit) order by u.id),'[]')
+        from garments_erp.unit_of_measure u where exists(select 1 from garments_erp.raw_material_item m
+          join garments_erp.raw_material_check_in r on r.raw_material_item_id=m.id
+          where r.is_transferable and m.unit_of_measure_id=u.id)));
+    end if;
+  end if;
   return result || jsonb_build_object(
     'transferable_receipt_state',garments_erp.transferable_receipt_projection(),
     'transferable_item_movement_type',(select coalesce(jsonb_agg(jsonb_build_object('id',id::text,'type',type) order by id),'[]') from garments_erp.transferable_item_movement_type where can_transfer),

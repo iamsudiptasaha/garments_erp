@@ -125,6 +125,25 @@ do $$ declare snapshot jsonb; locked jsonb; begin
  end if;
 end $$;
 reset role;
+-- Transfer-only viewers cannot use the new screen to read unrelated inventory or prices.
+update garments_access.app_role_resource_permission p set can_view=false
+ from garments_access.app_role role,garments_access.app_resource r
+ where p.app_role_id=role.id and p.app_resource_id=r.id and role.key='ci_viewer' and r.key='materialReceipts';
+insert into garments_access.app_role_resource_permission(app_role_id,app_resource_id,can_view)
+ select role.id,r.id,true from garments_access.app_role role,garments_access.app_resource r
+ where role.key='ci_viewer' and r.key='transferableMaterials';
+set local role authenticated;
+do $$ declare snapshot jsonb; begin
+ snapshot:=public.erp_raw_material_transaction_snapshot();
+ if exists(select 1 from jsonb_array_elements(snapshot->'raw_material_check_in') r
+     where r->>'is_transferable'<>'true' or r ? 'billed_price' or r ? 'bill_attachment')
+   or snapshot ? 'raw_material_purchase_order' or snapshot ? 'raw_material_check_out'
+   or exists(select 1 from jsonb_array_elements(snapshot->'transferable_receipt_state') r
+     where r->'allowed_actions'<>'[]'::jsonb) then
+  raise exception 'Transfer-only viewer gained inventory details or write actions';
+ end if;
+end $$;
+reset role;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
 select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal1","session_id":"10000000-0000-4000-8000-000000000001"}',true);
 select pg_temp.expect_error('select public.erp_record_transferable_movement(995001,null,null,1,995001,995001,900001,null)','42501');
