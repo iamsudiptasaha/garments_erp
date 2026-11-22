@@ -443,6 +443,8 @@
     }
   },
   "fabricPlanner": {
+    "presentationSource": "fabric-poc/src/fabric/planner-workspace.js",
+    "presentationIdentity": "item_part_fabric.id is the requirement key; variant_item.id resolves style, shared variant and production part. SQL fabric_plan_estimates.required_kg is authoritative; presentation only sums these values. Independent Overview and Sheet preferences. Existing requirement editor and write RPCs unchanged.",
     "source": "fabric-poc/src/fabric/planner.js",
     "readCommand": "public.erp_fabric_planner_snapshot",
     "requirementCommand": "public.erp_save_fabric_requirement",

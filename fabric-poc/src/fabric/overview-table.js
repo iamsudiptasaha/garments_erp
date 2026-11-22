@@ -23,10 +23,15 @@ const text = (value) =>
   String(value ?? '')
     .trim()
     .toLowerCase();
-const filterRules = (row, key, rules) =>
+export const matchesOverviewRules = (record, rules) =>
   rules.every(
-    ({ operator, value }) =>
-      !text(value) || filters[operator](text(row.getValue(key)), text(value)),
+    ({ id, operator, value }) =>
+      !text(value) || (filters[operator] ?? filters.contains)(text(record[id]), text(value)),
+  );
+const filterRules = (row, key, rules) =>
+  matchesOverviewRules(
+    { [key]: row.getValue(key) },
+    rules.map((rule) => ({ ...rule, id: key })),
   );
 
 function Rules({ kind, columns, rules, onChange }) {
@@ -195,26 +200,30 @@ export function OverviewTable({
   getSearchText,
   onSearch,
   defaultVisibility,
+  initialPreferences,
+  renderBody,
+  tableClassName,
+  externalSearch,
 }) {
   const { preferences, ready, save, error } = useGridPreferences(
     client,
     grid,
-    defaultVisibility ? { visibility: defaultVisibility } : undefined,
+    initialPreferences ?? (defaultVisibility ? { visibility: defaultVisibility } : undefined),
   );
   const [panel, setPanel] = useState(null);
   const [draft, setDraft] = useState(null);
   const dialog = useRef(null);
   const captionId = useId();
   const expanded = preferences.expanded ?? {};
-  const query = useGridSearch(draft ?? preferences.search ?? '');
+  const query = useGridSearch(externalSearch ?? draft ?? preferences.search ?? '');
   useEffect(() => {
     if (draft === null || draft !== query) return;
     save({ search: query });
     setDraft(null);
   }, [draft, query, save]);
   useEffect(() => {
-    if (ready) onSearch?.(query.trim());
-  }, [onSearch, query, ready]);
+    if (ready && externalSearch === undefined) onSearch?.(query.trim());
+  }, [onSearch, query, ready, externalSearch]);
   useEffect(() => {
     if (panel && !dialog.current.open) dialog.current.showModal();
   }, [panel]);
@@ -248,7 +257,7 @@ export function OverviewTable({
       );
     },
     state: {
-      globalFilter: onSearch ? undefined : query,
+      globalFilter: onSearch && externalSearch === undefined ? undefined : query,
       columnFilters,
       grouping,
       sorting,
@@ -299,9 +308,11 @@ export function OverviewTable({
   ];
   function changeSearch(value) {
     setDraft(value);
+    if (externalSearch !== undefined) onSearch?.(value);
   }
   function clearSearch() {
     setDraft('');
+    if (externalSearch !== undefined) onSearch?.('');
     save({ search: '' });
   }
   return h(
@@ -316,7 +327,7 @@ export function OverviewTable({
         h(Search, { size: 16, 'aria-hidden': true }),
         h(GridSearch, {
           label: searchLabel,
-          value: draft ?? preferences.search ?? '',
+          value: externalSearch ?? draft ?? preferences.search ?? '',
           onChange: changeSearch,
           sheet: false,
         }),
@@ -396,6 +407,7 @@ export function OverviewTable({
       h(
         'table',
         {
+          className: tableClassName,
           style: fixedWidth ? { width: fixedWidth, tableLayout: 'fixed' } : undefined,
         },
         h('caption', { id: captionId, className: 'erp-overview-caption' }, title),
@@ -475,72 +487,74 @@ export function OverviewTable({
             ),
           ),
         ),
-        h(
-          'tbody',
-          null,
-          rows.length === 0 &&
-            h('tr', null, h('td', { colSpan: visible.length }, 'No matching records')),
-          rows.map((row) => {
-            if (row.getIsGrouped())
-              return h(
-                'tr',
-                { key: row.id, className: 'overview-group' },
-                h(
-                  'td',
-                  { colSpan: visible.length },
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      'aria-expanded': row.getIsExpanded(),
-                      onClick: row.getToggleExpandedHandler(),
-                      style: { marginInlineStart: row.depth * 16 },
-                    },
-                    row.getIsExpanded() ? '▾ ' : '▸ ',
-                    String(row.groupingValue ?? '—'),
-                    ' · ',
-                    row.getLeafRows().filter((child) => !child.getIsGrouped()).length,
-                  ),
-                ),
-              );
-            const openable = onOpen && (canOpen?.(row.original) ?? true);
-            return h(
-              'tr',
-              {
-                key: row.id,
-                className: openable ? 'overview-open-row' : undefined,
-                onClick: openable
-                  ? (event) => {
-                      if (
-                        !event.target.closest(
-                          'a,button,input,select,textarea,summary,[role="button"]',
-                        )
-                      )
-                        onOpen(row.original.id);
-                    }
-                  : undefined,
-              },
-              row.getVisibleCells().map((cell) => {
-                const value = flexRender(cell.column.columnDef.cell, cell.getContext());
-                return h(
-                  'td',
-                  { key: cell.id },
-                  openable && cell.column.id === identity.accessorKey
-                    ? h(
+        renderBody
+          ? renderBody({ table, preferences, save })
+          : h(
+              'tbody',
+              null,
+              rows.length === 0 &&
+                h('tr', null, h('td', { colSpan: visible.length }, 'No matching records')),
+              rows.map((row) => {
+                if (row.getIsGrouped())
+                  return h(
+                    'tr',
+                    { key: row.id, className: 'overview-group' },
+                    h(
+                      'td',
+                      { colSpan: visible.length },
+                      h(
                         'button',
                         {
                           type: 'button',
-                          'aria-haspopup': opensDialog ? 'dialog' : undefined,
-                          onClick: () => onOpen(row.original.id),
+                          'aria-expanded': row.getIsExpanded(),
+                          onClick: row.getToggleExpandedHandler(),
+                          style: { marginInlineStart: row.depth * 16 },
                         },
-                        value,
-                      )
-                    : value,
+                        row.getIsExpanded() ? '▾ ' : '▸ ',
+                        String(row.groupingValue ?? '—'),
+                        ' · ',
+                        row.getLeafRows().filter((child) => !child.getIsGrouped()).length,
+                      ),
+                    ),
+                  );
+                const openable = onOpen && (canOpen?.(row.original) ?? true);
+                return h(
+                  'tr',
+                  {
+                    key: row.id,
+                    className: openable ? 'overview-open-row' : undefined,
+                    onClick: openable
+                      ? (event) => {
+                          if (
+                            !event.target.closest(
+                              'a,button,input,select,textarea,summary,[role="button"]',
+                            )
+                          )
+                            onOpen(row.original.id);
+                        }
+                      : undefined,
+                  },
+                  row.getVisibleCells().map((cell) => {
+                    const value = flexRender(cell.column.columnDef.cell, cell.getContext());
+                    return h(
+                      'td',
+                      { key: cell.id },
+                      openable && cell.column.id === identity.accessorKey
+                        ? h(
+                            'button',
+                            {
+                              type: 'button',
+                              'aria-haspopup': opensDialog ? 'dialog' : undefined,
+                              onClick: () => onOpen(row.original.id),
+                            },
+                            value,
+                          )
+                        : value,
+                    );
+                  }),
                 );
               }),
-            );
-          }),
-        ),
+            ),
       ),
     ),
     h(

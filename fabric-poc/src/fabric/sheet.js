@@ -84,6 +84,7 @@ function GridWorkbook({
       title: spec.title,
       columns,
       records,
+      grouping: spec.grouping,
       styles: saved.styles || {},
       layout: {
         ...saved.layout,

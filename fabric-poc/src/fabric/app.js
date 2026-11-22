@@ -80,7 +80,8 @@ import {
   WorkspaceConnectionBanner,
 } from './record-page.js';
 import { BillEditor } from './editor.js';
-import { FabricPlanner } from './planner.js';
+import { ProgramFabricPlanner } from './planner.js';
+import { FabricPlanner } from './planner-workspace.js';
 import './styles.css';
 import { ProductionDocumentWorkspace } from '../production-documents/app.js';
 import { adminPages, initialAccess, allowed, upgradeAccess } from '../admin/model.js';
@@ -1183,7 +1184,7 @@ function App({ live, refreshWorkspaceAccess }) {
   function renderWorkspace() {
     if (page === 'fabricPlanner') {
       return plannerView
-        ? h(FabricPlanner, {
+        ? h(plannerProgram ? ProgramFabricPlanner : FabricPlanner, {
             key: plannerProgram || 'all',
             client: getAccessClient(),
             program: plannerProgram,
