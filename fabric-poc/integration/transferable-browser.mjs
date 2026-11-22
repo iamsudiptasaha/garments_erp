@@ -102,10 +102,19 @@ try {
   const go = async (page) => {
     await p.goto(app + '/fabric.html?live=1#' + page);
   };
-  const choose = async (label, name) => {
+  const choose = async (label, name, workerId) => {
     const field = dlg().getByRole('combobox', { name: label, exact: true });
     await field.fill(name);
-    await p.getByRole('option', { name, exact: true }).click();
+    const options = p.getByRole('option', { name, exact: true });
+    if (workerId) {
+      // Other acceptance suites may create workers sharing this Contact name.
+      // The picker preserves the authorized projection's order; select its exact FK record.
+      const snapshot = ok(await owner.client.rpc('erp_raw_material_transaction_snapshot'));
+      const matches = snapshot.transferable_workers.filter((worker) => worker.name === name);
+      const index = matches.findIndex((worker) => worker.id === workerId);
+      assert(index >= 0, 'Intended worker record is available');
+      await options.nth(index).click();
+    } else await options.click();
   };
   let receipt;
   await check(
@@ -211,7 +220,7 @@ try {
       for (const type of types) {
         await dlg().getByRole('button', { name: type, exact: true }).click();
         if (type === 'Transfer') {
-          await choose('Job worker', 'Synthetic CI administrator');
+          await choose('Job worker', 'Synthetic CI administrator', '995001');
           await choose('Garment item', 'TR-204 · Cotton overshirt');
         }
         await choose('Recorded by employee', 'Synthetic CI administrator');
