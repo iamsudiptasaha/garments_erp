@@ -2,6 +2,7 @@ import { createElement as h, useEffect, useMemo, useRef, useState } from 'react'
 import { useGridSearch, WorksheetToolbar } from './grid-toolbar.js';
 import { RecordPageHeading, RecordPageStatus } from './record-page.js';
 import { ReviewForm, useSaveReview } from './save-review.js';
+import { FabricRequirementFields } from './requirement-fields.js';
 import { FabricSheet } from './sheet.js';
 
 const measures = [
@@ -9,14 +10,13 @@ const measures = [
   ['estimated_ordered_kg', 'Estimated ordered'],
   ['estimated_received_kg', 'Estimated received'],
   ['receipt_shortage_kg', 'Receipt shortage'],
-  ['consumed_kg', 'Consumed'],
 ];
 const column = (key, label, numeric = false) => ({ key, label, numeric });
 const kg = (value) =>
   value == null ? '—' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 6 });
 const variantLabel = (row) => [row.style_code, row.variant, row.part].filter(Boolean).join(' · ');
 const programLabel = (row) =>
-  `${row.program_number} · Lab dip v${row.lab_dip_version} · ${kg(row.ordered_kg)} kg ordered`;
+  `${row.program_number} · ${row.program_status} · Lab dip v${row.lab_dip_version} · ${kg(row.ordered_kg)} kg ordered`;
 
 async function call(client, name, args) {
   const result = await client.rpc(name, args);
@@ -47,7 +47,7 @@ function FabricPlanEdit({
   client,
   snapshot,
   row,
-  initialFabric,
+  requirement: initialRequirement,
   program,
   canEdit,
   canLink,
@@ -55,19 +55,23 @@ function FabricPlanEdit({
   onClose,
 }) {
   const dialog = useRef(null);
-  const [fabricId, setFabricId] = useState(initialFabric);
-  const [consumption, setConsumption] = useState(null);
+  const requirement = initialRequirement;
+  const [draft, setDraft] = useState(() => ({
+    fabric_type_id: requirement?.fabric_type_id ?? '',
+    sub_part_list_id: requirement?.sub_part_list_id ?? null,
+    sub_part_name: requirement?.sub_part_name ?? '',
+    lab_dip_id: requirement?.lab_dip_id ?? row.lab_dip_id,
+    consumption_per_piece_kg: requirement?.consumption_per_piece_kg ?? '',
+    item_part_fabric_status_id: requirement?.manual_status_id ?? null,
+  }));
   const [programId, setProgramId] = useState('');
   const review = useSaveReview();
-  const requirement = snapshot.requirements.find(
-    (entry) => entry.variant_item_id === row.id && entry.fabric_type_id === fabricId,
-  );
-  const fabric = snapshot.fabric_types.find(({ id }) => id === fabricId);
+  const fabric = snapshot.fabric_types.find(({ id }) => id === draft.fabric_type_id);
   const programs = snapshot.program_items.filter(
     (entry) =>
-      row.lab_dip_id &&
-      entry.lab_dip_id === row.lab_dip_id &&
-      entry.fabric_type_id === fabricId &&
+      requirement?.lab_dip_id &&
+      entry.lab_dip_id === requirement.lab_dip_id &&
+      entry.fabric_type_id === requirement.fabric_type_id &&
       (!program || program === entry.dyeing_program_id),
   );
   const programItem = programs.find(
@@ -77,7 +81,6 @@ function FabricPlanEdit({
     (link) =>
       link.item_part_fabric_id === requirement?.id && link.dyeing_program_item_id === programId,
   );
-  const value = consumption ?? requirement?.consumption_per_piece_kg ?? '';
   useEffect(() => {
     dialog.current.showModal();
   }, []);
@@ -95,7 +98,17 @@ function FabricPlanEdit({
         },
         [
           ['Variant / part', variantLabel(row)],
-          ['Fabric', fabric.name],
+          [
+            'Fabric sub-part',
+            requirement.sub_part_name ||
+              snapshot.sub_parts.find((p) => p.id === requirement.sub_part_list_id)?.part ||
+              'Unspecified',
+          ],
+          [
+            'Component lab dip',
+            snapshot.lab_dips.find((l) => l.id === requirement.lab_dip_id)?.name ?? '—',
+          ],
+          ['Fabric', snapshot.fabric_types.find((f) => f.id === requirement.fabric_type_id)?.name],
           [linked ? 'Unlink program item' : 'Link program item', programLabel(programItem)],
         ],
         async (args) => onSave(await call(client, 'erp_set_fabric_plan_dyeing_link', args)),
@@ -103,21 +116,40 @@ function FabricPlanEdit({
       );
       return;
     }
-    if (!canEdit || !fabricId || (value !== '' && !(Number(value) > 0))) return;
-    const next = value === '' ? null : Number(value);
+    if (!canEdit || !fabric || !(Number(draft.consumption_per_piece_kg) > 0)) return;
+    const removing = event.nativeEvent.submitter?.value === 'remove';
     review.prepare(
       {
+        p_requirement: requirement?.id ?? null,
         p_variant: row.id,
-        p_fabric_type: fabricId,
-        p_expected_kg: requirement?.consumption_per_piece_kg ?? null,
-        p_consumption_kg: next,
+        p_expected: requirement?.revision ?? null,
+        p_values: removing
+          ? null
+          : {
+              ...draft,
+              consumption_per_piece_kg: Number(draft.consumption_per_piece_kg),
+            },
       },
       [
         ['Variant / part', variantLabel(row)],
+        [
+          'Sub-part type',
+          snapshot.sub_parts.find((p) => p.id === draft.sub_part_list_id)?.part ?? 'Unspecified',
+        ],
+        ['Sub-part name', draft.sub_part_name || 'Unnamed'],
         ['Fabric', fabric.name],
         [
+          'Component lab dip',
+          snapshot.lab_dips.find((l) => l.id === draft.lab_dip_id)?.name ?? '—',
+        ],
+        [
           'Consumption per piece · kg',
-          `${kg(requirement?.consumption_per_piece_kg)} → ${kg(next)}`,
+          `${kg(requirement?.consumption_per_piece_kg)} → ${removing ? 'Remove' : kg(draft.consumption_per_piece_kg)}`,
+        ],
+        [
+          'Manual status',
+          snapshot.statuses.find((s) => s.id === draft.item_part_fabric_status_id)?.type ??
+            'Automatic',
         ],
       ],
       async (args) => onSave(await call(client, 'erp_save_fabric_requirement', args)),
@@ -143,31 +175,24 @@ function FabricPlanEdit({
       h(
         'div',
         { className: 'fabric-fields' },
-        picker(
-          'planner-edit-fabric-type',
-          'Fabric type',
-          fabricId,
-          snapshot.fabric_types.map(({ id, name }) => [id, name]),
-          (id) => {
-            setFabricId(id);
-            setConsumption(null);
-            setProgramId('');
+        h(FabricRequirementFields, {
+          prefix: 'planner-component',
+          row: draft,
+          options: {
+            fabrics: snapshot.fabric_types.map((f) => [f.id, f.name]),
+            parts: snapshot.sub_parts.map((p) => [p.id, p.part]),
+            labs: snapshot.lab_dips.map((l) => [l.id, l.name]),
+            statuses: snapshot.statuses.map((s) => [s.id, s.type]),
           },
-          'Choose fabric',
-        ),
-        fabric &&
+          onChange: setDraft,
+          disabled: !canEdit || Boolean(program),
+        }),
+        requirement &&
           h(
-            'label',
+            'p',
             null,
-            'Consumption per piece · kg',
-            h('input', {
-              type: 'number',
-              step: 'any',
-              min: '0',
-              value,
-              disabled: !canEdit || Boolean(program),
-              onChange: (event) => setConsumption(event.target.value),
-            }),
+            'Status: ',
+            snapshot.statuses.find((s) => s.id === requirement.item_part_fabric_status_id)?.type,
           ),
         requirement &&
           picker(
@@ -190,10 +215,14 @@ function FabricPlanEdit({
             {
               type: 'submit',
               className: 'primary',
-              disabled: !fabric || (value === '' && !requirement),
+              disabled: !fabric,
             },
             'Review consumption',
           ),
+        canEdit &&
+          !program &&
+          requirement &&
+          h('button', { type: 'submit', value: 'remove', formNoValidate: true }, 'Review removal'),
         canLink &&
           programItem &&
           h(
@@ -237,10 +266,6 @@ export function FabricPlanner({ client, canEdit, canLink, program, capabilities 
   const programItems = snapshot?.program_items.filter(
     (entry) => entry.dyeing_program_id === program,
   );
-  const types = (snapshot?.fabric_types || []).filter(
-    ({ id }) =>
-      (!fabric || fabric === id) && (!program || programItems.some((p) => p.fabric_type_id === id)),
-  );
   const variants = snapshot?.variants || [];
   const compatible = (row) =>
     !program ||
@@ -255,75 +280,96 @@ export function FabricPlanner({ client, canEdit, canLink, program, capabilities 
     (row) =>
       compatible(row) &&
       (!item || item === row.item_id) &&
-      (!colour || colour === row.colour) &&
       (!variant || variant === row.variant) &&
-      [row.style_code, row.colour, row.variant, row.part].some((value) =>
+      [
+        row.style_code,
+        row.colour,
+        row.variant,
+        row.part,
+        ...(snapshot?.requirements || [])
+          .filter((r) => r.variant_item_id === row.id)
+          .map((r) => r.sub_part_name),
+      ].some((value) =>
         String(value || '')
           .toLowerCase()
           .includes(debounced),
       ),
   );
-  const typesKey = types.map(({ id }) => id).join(',');
+  const visibleRequirements = (snapshot?.requirements || []).filter(
+    (r) =>
+      rows.some((v) => v.id === r.variant_item_id) &&
+      (!debounced ||
+        [
+          r.sub_part_name,
+          snapshot.sub_parts.find((p) => p.id === r.sub_part_list_id)?.part,
+          ...Object.values(variants.find((v) => v.id === r.variant_item_id) || {}),
+        ].some((value) =>
+          String(value || '')
+            .toLowerCase()
+            .includes(debounced),
+        )) &&
+      (!fabric || fabric === r.fabric_type_id) &&
+      (!colour || snapshot.lab_dips.find((l) => l.id === r.lab_dip_id)?.colour === colour) &&
+      (!program ||
+        programItems.some(
+          (p) => p.fabric_type_id === r.fabric_type_id && p.lab_dip_id === r.lab_dip_id,
+        )),
+  );
   const records = useMemo(
     () =>
-      rows.map((row) => {
-        const result = {
-          id: row.id,
-          documentId: row.id,
-          colour: row.colour ?? '',
-          style: row.style_code ?? '',
-          variant: row.variant ?? '',
-          part: row.parent_id ? `${row.part} (dependent)` : row.part,
+      visibleRequirements.map((r) => {
+        const row = variants.find((v) => v.id === r.variant_item_id);
+        return {
+          id: r.id,
+          documentId: r.id,
+          colour: snapshot.lab_dips.find((l) => l.id === r.lab_dip_id)?.colour ?? '',
+          style: row.style_code,
+          variant: row.variant,
+          part: row.part,
+          sub_part:
+            r.sub_part_name ||
+            snapshot.sub_parts.find((p) => p.id === r.sub_part_list_id)?.part ||
+            'Unspecified',
+          fabric: snapshot.fabric_types.find((f) => f.id === r.fabric_type_id)?.name ?? '',
+          lab: snapshot.lab_dips.find((l) => l.id === r.lab_dip_id)?.name ?? '',
+          status: snapshot.statuses.find((s) => s.id === r.item_part_fabric_status_id)?.type ?? '',
+          orders: snapshot.links
+            .filter((l) => l.item_part_fabric_id === r.id)
+            .map((l) =>
+              programLabel(
+                snapshot.program_items.find(
+                  (p) => p.dyeing_program_item_id === l.dyeing_program_item_id,
+                ),
+              ),
+            )
+            .join('; '),
+          consumption: r.consumption_per_piece_kg,
+          ...Object.fromEntries(measures.map(([key]) => [key, r[key]])),
         };
-        for (const [key] of measures) result[key] = 0;
-        let hasRequirement = false;
-        for (const type of types) {
-          const entry = snapshot.requirements.find(
-            (value) => value.variant_item_id === row.id && value.fabric_type_id === type.id,
-          );
-          result[`type_${type.id}_consumption`] = entry?.consumption_per_piece_kg ?? '';
-          if (entry) hasRequirement = true;
-          for (const [key] of measures) {
-            result[`type_${type.id}_${key}`] = entry?.[key] ?? '';
-            if (entry?.[key] != null) result[key] += Number(entry[key]);
-          }
-        }
-        if (!hasRequirement) for (const [key] of measures) result[key] = '';
-        return result;
       }),
-    [snapshot, debounced, item, colour, variant, typesKey, program],
+    [snapshot, debounced, item, colour, variant, fabric, program],
   );
   const columns = useMemo(
     () => [
       column('colour', 'Colour'),
       column('style', 'Style code'),
       column('variant', 'Variant'),
-      column('part', 'Part'),
-      ...types.flatMap(({ id, name }) => [
-        column(`type_${id}_consumption`, `${name} · kg / piece`, true),
-        ...measures.map(([key, label]) =>
-          column(`type_${id}_${key}`, `${name} · ${label} kg`, true),
-        ),
-      ]),
-      ...measures.map(([key, label]) => column(key, `Total · ${label} kg`, true)),
+      column('part', 'Production part'),
+      column('sub_part', 'Fabric sub-part'),
+      column('fabric', 'Fabric type'),
+      column('lab', 'Component lab dip'),
+      column('status', 'Status'),
+      column('orders', 'Linked orders'),
+      column('consumption', 'kg / piece', true),
+      ...measures.map(([key, label]) => column(key, label + ' kg', true)),
     ],
-    [typesKey, snapshot],
+    [],
   );
   const spec = useMemo(() => ({ title: 'Fabric Planner', columns }), [columns]);
-  const record = rows.find(({ id }) => id === selection);
-  const initialFabric =
-    (program
-      ? types.find((type) =>
-          snapshot.requirements.some(
-            (r) =>
-              r.variant_item_id === record?.id &&
-              r.fabric_type_id === type.id &&
-              programItems.some(
-                (entry) => entry.fabric_type_id === type.id && entry.lab_dip_id === r.lab_dip_id,
-              ),
-          ),
-        )?.id
-      : fabric) || '';
+  const selectedRequirement = snapshot?.requirements.find((r) => r.id === selection);
+  const record = variants.find((v) => v.id === selectedRequirement?.variant_item_id);
+  const [addVariant, setAddVariant] = useState('');
+  const editRow = open === 'new' ? variants.find((v) => v.id === addVariant) : record;
   const options = (key, label = key) =>
     [
       ...new Map(
@@ -354,7 +400,7 @@ export function FabricPlanner({ client, canEdit, canLink, program, capabilities 
         {
           type: 'button',
           disabled: !record,
-          onClick: () => setOpen(true),
+          onClick: () => setOpen('edit'),
         },
         program
           ? canLink
@@ -369,8 +415,31 @@ export function FabricPlanner({ client, canEdit, canLink, program, capabilities 
       h(
         'div',
         { className: 'fabric-fields' },
+        !program &&
+          canEdit &&
+          picker(
+            'planner-add-variant',
+            'Variant / production part',
+            addVariant,
+            rows.map((v) => [v.id, variantLabel(v)]),
+            setAddVariant,
+            'Choose variant / part',
+          ),
+        !program &&
+          canEdit &&
+          h(
+            'button',
+            { type: 'button', disabled: !addVariant, onClick: () => setOpen('new') },
+            'Add fabric sub-part',
+          ),
         picker('planner-item', 'Item', item, options('item_id', 'style_code'), setFilter(setItem)),
-        picker('planner-colour', 'Colour', colour, options('colour'), setFilter(setColour)),
+        picker(
+          'planner-colour',
+          'Colour',
+          colour,
+          [...new Set(snapshot.lab_dips.map((l) => l.colour))].sort().map((c) => [c, c]),
+          setFilter(setColour),
+        ),
         picker('planner-variant', 'Variant', variant, options('variant'), setFilter(setVariant)),
         picker(
           'planner-fabric-type',
@@ -393,14 +462,14 @@ export function FabricPlanner({ client, canEdit, canLink, program, capabilities 
         onNotice: setStatus,
         capabilities,
       }),
-    types.length > 0 &&
+    snapshot &&
       h(
         'div',
         { className: 'lab-record-table-wrap' },
         h(
           'table',
           null,
-          h('caption', null, 'Totals for displayed variants · kg'),
+          h('caption', null, 'Totals for displayed fabric sub-parts · kg'),
           h(
             'thead',
             null,
@@ -408,38 +477,86 @@ export function FabricPlanner({ client, canEdit, canLink, program, capabilities 
               'tr',
               null,
               h('th', { scope: 'col' }, 'Fabric type'),
-              measures.map(([key, label]) => h('th', { scope: 'col', key }, label)),
+              ...measures.map(([key, label]) => h('th', { scope: 'col', key }, label)),
             ),
           ),
           h(
             'tbody',
             null,
-            types.map(({ id, name }) =>
-              h(
-                'tr',
-                { key: id },
-                h('th', { scope: 'row' }, name),
-                measures.map(([key]) =>
-                  h(
-                    'td',
-                    { key },
-                    kg(
-                      records.reduce((sum, row) => sum + Number(row[`type_${id}_${key}`] ?? 0), 0),
+            snapshot.fabric_types
+              .filter((f) => visibleRequirements.some((r) => r.fabric_type_id === f.id))
+              .map((f) =>
+                h(
+                  'tr',
+                  { key: f.id },
+                  h('th', { scope: 'row' }, f.name),
+                  ...measures.map(([key]) =>
+                    h(
+                      'td',
+                      { key },
+                      kg(
+                        visibleRequirements
+                          .filter((r) => r.fabric_type_id === f.id)
+                          .reduce((sum, r) => sum + Number(r[key] || 0), 0),
+                      ),
                     ),
                   ),
                 ),
               ),
+          ),
+        ),
+      ),
+    snapshot &&
+      h(
+        'div',
+        { className: 'lab-record-table-wrap' },
+        h(
+          'table',
+          null,
+          h('caption', null, 'Actual consumed kg · Variant + Fabric Type'),
+          h(
+            'thead',
+            null,
+            h(
+              'tr',
+              null,
+              ...['Variant / production part', 'Fabric type', 'Consumed kg'].map((label) =>
+                h('th', { key: label, scope: 'col' }, label),
+              ),
             ),
+          ),
+          h(
+            'tbody',
+            null,
+            snapshot.actual_consumption
+              .filter(
+                (r) =>
+                  rows.some((v) => v.id === r.variant_item_id) &&
+                  (!fabric || fabric === r.fabric_type_id),
+              )
+              .map((r) =>
+                h(
+                  'tr',
+                  { key: r.variant_item_id + ':' + r.fabric_type_id },
+                  h(
+                    'th',
+                    { scope: 'row' },
+                    variantLabel(variants.find((v) => v.id === r.variant_item_id)),
+                  ),
+                  h('td', null, snapshot.fabric_types.find((f) => f.id === r.fabric_type_id)?.name),
+                  h('td', null, kg(r.consumed_kg)),
+                ),
+              ),
           ),
         ),
       ),
     open &&
-      record &&
+      editRow &&
       h(FabricPlanEdit, {
         client,
         snapshot,
-        row: record,
-        initialFabric,
+        row: editRow,
+        requirement: open === 'new' ? null : selectedRequirement,
         program,
         canEdit,
         canLink,

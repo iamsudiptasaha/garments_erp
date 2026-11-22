@@ -586,6 +586,10 @@ export function fabricRows(data, page) {
         id: r.id,
         documentId: h.id,
         bill: h.program_number || 'Number pending database save',
+        programStatus:
+          optionsFor(data, 'dyeingProgramStatuses').find(
+            ([id]) => id === h.dyeing_program_status_id,
+          )?.[1] || 'Unclassified',
         date: h.date?.slice(0, 10) || '—',
         supplier: supplier('dyer', h.dyer_id),
         color: s.color(programContext(data, r).mappingId).name,
@@ -691,6 +695,13 @@ export function optionsFor(data, source) {
   if (source === 'knitters') return suppliers('knitter');
   if (source === 'dyers') return suppliers('dyer');
   if (source === 'yarnTypes') return data.yarn_type.map((r) => [r.id, r.name]);
+  if (source === 'dyeingProgramStatuses')
+    return (
+      data.dyeing_program_status || [
+        { id: '1', type: 'Draft' },
+        { id: '2', type: 'Final' },
+      ]
+    ).map((r) => [r.id, r.type]);
   if (source === 'fabricTypes') return data.fabric_type.map((r) => [r.id, r.name]);
   if (source === 'colors')
     return data.color_map_by_brand.map((r) => {
@@ -840,7 +851,10 @@ export function validateFabric(data) {
 export function documentFor(data, page, id) {
   const spec = pages[page];
   return {
-    header: copy(data[spec.entity].find((r) => r.id === id) || {}),
+    header: copy(
+      data[spec.entity].find((r) => r.id === id) ||
+        (page === 'programs' ? { dyeing_program_status_id: '1' } : {}),
+    ),
     lines: spec.lines
       ? copy(
           data[spec.lines]

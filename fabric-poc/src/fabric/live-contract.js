@@ -62,7 +62,7 @@ export const fabricContract = {
     ],
   },
   programs: {
-    dyeing_program: ['date', 'dyer_id'],
+    dyeing_program: ['date', 'dyer_id', 'dyeing_program_status_id'],
     dyeing_program_item: [
       'dyeing_program_id',
       'fabric_type_id',
@@ -239,6 +239,7 @@ export const fabricColumnTypes = {
     updated_at: 'timestamp with time zone',
   },
   dyeing_program: {
+    dyeing_program_status_id: 'bigint',
     id: 'bigint',
     date: 'timestamp with time zone',
     program_number: 'text',

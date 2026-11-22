@@ -2,7 +2,7 @@
 begin;
 do $$
 declare style bigint; body_type bigint; sleeve_type bigint; body bigint; sleeve bigint; size_type bigint; size bigint; variant bigint; sleeve_design bigint;
- body_variant bigint; sleeve_variant bigint; body_requirement bigint; sleeve_requirement bigint;
+ body_variant bigint; sleeve_variant bigint; body_requirement bigint; sleeve_requirement bigint; component bigint; saved_issue bigint; second_lab bigint; second_version bigint; second_line bigint;
  yarn bigint; supplier bigint; po bigint; poi bigint; ybi bigint; fabric bigint; knit bigint;
  brand bigint; colour bigint; mapping bigint; dyer bigint; lab bigint; version bigint; program bigint; program_item bigint; alternate_program bigint; alternate_line bigint;
  payload jsonb; edit_payload jsonb; invalid_payload jsonb; proof uuid; result jsonb; root jsonb; saved_id bigint;
@@ -10,6 +10,13 @@ declare style bigint; body_type bigint; sleeve_type bigint; body bigint; sleeve 
  header_temp text:=gen_random_uuid()::text; line_temp text:=gen_random_uuid()::text; batch_temp text:=gen_random_uuid()::text;
 begin
  update garments_erp.employee_status set is_verified=true,verified_by_employee_id=900001 where employee_id=900001;
+ if exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+  where n.nspname='garments_erp' and c.relname in ('sub_part_list','item_part_fabric_status','dyeing_program_status','item_part_fabric','fabric_plan_dyeing_link') and not c.relrowsecurity)
+ or has_table_privilege('authenticated','garments_erp.item_part_fabric','INSERT')
+ or has_table_privilege('anon','garments_erp.item_part_fabric','SELECT')
+ then raise exception 'TEST fabric sub-part RLS boundary';end if;
+ if exists(select 1 from pg_constraint where conrelid='garments_erp.item_part_fabric'::regclass and contype='u') then raise exception 'TEST unwanted replacement uniqueness';end if;
+
  insert into garments_erp.yarn_type(name) values('Verification yarn') returning id into yarn;
  insert into garments_erp.yarn_supplier(contacts_id,contact_purpose_id) values(900001,900001) returning id into supplier;
  insert into garments_erp.yarn_purchase_order(yarn_supplier_id) values(supplier) returning id into po;
@@ -24,7 +31,7 @@ begin
  insert into garments_erp.lab_dip(edition,color_map_by_brand_id,dyer_id) values(1,mapping,dyer) returning id into lab;
  insert into garments_erp.lab_dip_version(lab_dip_id,version) values(lab,1) returning id into version;
  insert into garments_erp.lab_dip_version_item(lab_dip_version_id,date,lab_dip_status_id) select version,current_date,id from garments_erp.lab_dip_version_status where sort_order=6;
- insert into garments_erp.dyeing_program(dyer_id) values(dyer) returning id into program;
+ insert into garments_erp.dyeing_program(dyer_id,dyeing_program_status_id) values(dyer,2) returning id into program;
  insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity) values(fabric,program,version,100) returning id into program_item;
  insert into garments_erp.item(style_code,brand_id) values('Fabric planner verification',brand) returning id into style;
  insert into garments_erp.part_list(part) values('Planner body') returning id into body_type;
@@ -49,14 +56,14 @@ begin
  insert into garments_erp.variant(variant_name) values('Sleeve variant') returning id into sleeve_design;
  insert into garments_erp.variant_item(item_part_id,variant_id,lab_dip_id)
  values(sleeve,sleeve_design,lab) returning id into sleeve_variant;
- insert into garments_erp.item_part_fabric(variant_item_id,fabric_type_id,consumption_per_piece_kg)
- values(body_variant,fabric,0.525) returning id into body_requirement;
- insert into garments_erp.item_part_fabric(variant_item_id,fabric_type_id,consumption_per_piece_kg)
- values(sleeve_variant,fabric,0.3125) returning id into sleeve_requirement;
+ insert into garments_erp.item_part_fabric(variant_item_id,fabric_type_id,lab_dip_id,consumption_per_piece_kg)
+ values(body_variant,fabric,lab,0.525) returning id into body_requirement;
+ insert into garments_erp.item_part_fabric(variant_item_id,fabric_type_id,lab_dip_id,consumption_per_piece_kg)
+ values(sleeve_variant,fabric,lab,0.3125) returning id into sleeve_requirement;
  insert into garments_erp.fabric_plan_dyeing_link(item_part_fabric_id,dyeing_program_item_id)
  values(body_requirement,program_item),(sleeve_requirement,program_item);
  begin
-  update garments_erp.variant_item set lab_dip_id=null where id=sleeve_variant;
+  update garments_erp.item_part_fabric set lab_dip_id=null where id=sleeve_requirement;
   raise exception 'TEST accepted an incompatible lab dip';
  exception when check_violation then null;end;
  claims:=jsonb_build_object('sub',actor,'aal','aal2','session_id','10000000-0000-4000-8000-000000000001','amr',jsonb_build_array(jsonb_build_object('method','password','timestamp',extract(epoch from now()))));
@@ -64,8 +71,40 @@ begin
  if not exists(select 1 from jsonb_array_elements(public.erp_fabric_planner_snapshot()->'variants') v
    where v->>'id'=sleeve_variant::text and v->>'parent_id'=body::text)
  then raise exception 'TEST planner RPC lost dependent part';end if;
- perform public.erp_save_fabric_requirement(sleeve_variant,fabric,0.3125,0.4);
- perform public.erp_save_fabric_requirement(sleeve_variant,fabric,0.4,0.3125);
+ perform public.erp_save_fabric_requirement(sleeve_requirement,sleeve_variant,
+  (select garments_erp.fabric_json('item_part_fabric',to_jsonb(f)) from garments_erp.item_part_fabric f where id=sleeve_requirement),
+  jsonb_build_object('fabric_type_id',fabric,'lab_dip_id',lab,'consumption_per_piece_kg',0.4));
+ perform public.erp_save_fabric_requirement(sleeve_requirement,sleeve_variant,
+  (select garments_erp.fabric_json('item_part_fabric',to_jsonb(f)) from garments_erp.item_part_fabric f where id=sleeve_requirement),
+  jsonb_build_object('fabric_type_id',fabric,'lab_dip_id',lab,'consumption_per_piece_kg',0.3125));
+ -- Separate component dip, same variant and fabric. No Production records are created.
+ insert into garments_erp.lab_dip(edition,color_map_by_brand_id,dyer_id) values(2,mapping,dyer) returning id into second_lab;
+ insert into garments_erp.lab_dip_version(lab_dip_id,version) values(second_lab,1) returning id into second_version;
+ insert into garments_erp.item_part_fabric(variant_item_id,fabric_type_id,lab_dip_id,sub_part_name,consumption_per_piece_kg)
+ values(body_variant,fabric,second_lab,'Contrast cuff',0.0125) returning id into component;
+ insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity)
+ values(fabric,program,second_version,0.01) returning id into second_line;
+ begin
+  insert into garments_erp.fabric_plan_dyeing_link values(component,program_item);
+  raise exception 'TEST accepted parent dip for contrasting sub-part';
+ exception when check_violation then null;end;
+ insert into garments_erp.fabric_plan_dyeing_link values(component,second_line);
+ update garments_erp.dyeing_program set dyeing_program_status_id=1 where id=program;
+ if exists(select 1 from garments_erp.fabric_plan_estimates where id=component and (item_part_fabric_status_id<>1 or estimated_ordered_kg<>0)) then raise exception 'TEST Draft counts as ordered';end if;
+ update garments_erp.dyeing_program set dyeing_program_status_id=2 where id=program;
+ if not exists(select 1 from garments_erp.fabric_plan_estimates where id=component and item_part_fabric_status_id=2 and order_shortage_kg>0) then raise exception 'TEST ordering incorrectly depends on coverage';end if;
+ update garments_erp.item_part_fabric set item_part_fabric_status_id=4 where id=component;
+ if not exists(select 1 from garments_erp.fabric_plan_estimates where id=component and item_part_fabric_status_id=4) then raise exception 'TEST hold override lost';end if;
+ update garments_erp.item_part_fabric set item_part_fabric_status_id=5 where id=component;
+ if not exists(select 1 from garments_erp.fabric_plan_estimates where id=component and item_part_fabric_status_id=5) then raise exception 'TEST reuse override lost';end if;
+ update garments_erp.item_part_fabric set item_part_fabric_status_id=null where id=component;
+ if not exists(select 1 from garments_erp.fabric_plan_estimates where id=component and item_part_fabric_status_id=2) then raise exception 'TEST clear override failed';end if;
+ delete from garments_erp.fabric_plan_dyeing_link where item_part_fabric_id=component;
+ if not exists(select 1 from garments_erp.fabric_plan_estimates where id=component and item_part_fabric_status_id=1) then raise exception 'TEST unlink status stale';end if;
+ update garments_erp.variant_item set lab_dip_id=null where id=body_variant;
+ if (select lab_dip_id from garments_erp.item_part_fabric where id=component)<>second_lab then raise exception 'TEST parent edit changed component dip';end if;
+ delete from garments_erp.item_part_fabric where id=component;
+
  perform public.erp_set_fabric_plan_dyeing_link(sleeve_requirement,program_item,false,'programs');
  perform public.erp_set_fabric_plan_dyeing_link(sleeve_requirement,program_item,true,'productionItems');
  payload:=jsonb_build_object('resource','dyeBills','action','create','root',jsonb_build_object('table','dyed_fabric_bill','id',header_temp,'before',null),'changes',jsonb_build_array(
@@ -101,8 +140,14 @@ begin
     or not exists(select 1 from garments_erp.fabric_plan_dyeing_surplus
       where dyeing_program_item_id=program_item and received_kg=8 and received_surplus_kg=0)
  then raise exception 'TEST inherited fractional demand and shared coverage';end if;
+ if not exists(select 1 from garments_erp.fabric_plan_estimates where id=body_requirement and item_part_fabric_status_id=3)
+ then raise exception 'TEST verified receipt did not update status';end if;
+ update garments_erp.item_part_fabric set item_part_fabric_status_id=4 where id=body_requirement;
+ if not exists(select 1 from garments_erp.fabric_plan_estimates where id=body_requirement and item_part_fabric_status_id=4) then raise exception 'TEST receipt overrode hold';end if;
+ update garments_erp.item_part_fabric set item_part_fabric_status_id=null where id=body_requirement;
+ if not exists(select 1 from garments_erp.fabric_plan_estimates where id=body_requirement and item_part_fabric_status_id=3) then raise exception 'TEST receipt recalculation failed';end if;
  update garments_erp.dyeing_program_item set quantity=3 where id=program_item;
- insert into garments_erp.dyeing_program(dyer_id) values(dyer) returning id into alternate_program;
+ insert into garments_erp.dyeing_program(dyer_id,dyeing_program_status_id) values(dyer,2) returning id into alternate_program;
  insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity)
  values(fabric,alternate_program,version,2.5) returning id into alternate_line;
  insert into garments_erp.fabric_plan_dyeing_link(item_part_fabric_id,dyeing_program_item_id)
@@ -131,11 +176,22 @@ begin
  then raise exception 'TEST receipt sync duplicated or did not update the original';end if;
  proof:=public.erp_dyed_bill_attestation(actor,900001,edit_payload);
  begin perform public.erp_save_verified_dyed_bill(edit_payload,proof);raise exception 'TEST stale edit';exception when serialization_failure then null;end;
+ insert into garments_erp.item_part_fabric(variant_item_id,fabric_type_id,lab_dip_id,sub_part_name,consumption_per_piece_kg)
+ values(body_variant,fabric,lab,'Same-fabric second component',0.01) returning id into component;
+ insert into garments_erp.raw_material_check_out(raw_material_check_in_id,date,quantity,variant_item_id)
+ select r.id,current_date,0.1,body_variant from garments_erp.raw_material_check_in r
+ join garments_erp.dyed_fabric_item d on d.id=r.dyed_fabric_item_id where d.dyed_fabric_bill_id=saved_id returning id into saved_issue;
+ result:=public.erp_fabric_planner_snapshot();
+ if (select count(*) from jsonb_array_elements(result->'actual_consumption') x where x->>'variant_item_id'=body_variant::text and x->>'fabric_type_id'=fabric::text and (x->>'consumed_kg')::numeric=0.1)<>1
+  or exists(select 1 from garments_erp.fabric_plan_requirements where id in (component,body_requirement) and consumed_kg is not null)
+ then raise exception 'TEST actual consumed kg duplicated or allocated to sub-parts';end if;
+ delete from garments_erp.raw_material_check_out where id=saved_issue;
+ delete from garments_erp.item_part_fabric where id=component;
  perform set_config('request.jwt.claim.sub','',true);perform set_config('request.jwt.claims','{}',true);
  update garments_erp.employee_status set is_active=false where employee_id=900001;
  perform set_config('request.jwt.claim.sub',actor::text,true);perform set_config('request.jwt.claims',claims::text,true);
  begin perform public.erp_dyed_bill_attestation(actor,900001,edit_payload);raise exception 'TEST inactive verifier';exception when insufficient_privilege then null;end;
  if has_function_privilege('authenticated','garments_erp.save_fabric_document_core(text,jsonb,text,jsonb,bigint)','execute') or has_function_privilege('anon','public.erp_save_verified_dyed_bill(jsonb,uuid)','execute') then raise exception 'TEST exposed privileged function';end if;
- raise notice 'PASS verified dyed-bill create/edit, fresh password, exact payload, single use, expiry, stale edits, atomic rollback and restricted core';
+ raise notice 'PASS component dips, Draft/Final, overrides, RLS, aggregate actual kg, and verified dyed-bill create/edit, fresh password, exact payload, single use, expiry, stale edits, atomic rollback and restricted core';
 end $$;
 rollback;

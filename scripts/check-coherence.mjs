@@ -8,12 +8,18 @@ import {FILE_TARGETS} from '../fabric-poc/src/files/model.js';
 import {checklistFields} from '../fabric-poc/src/production/item-model.js';
 import {employeeRelations} from '../fabric-poc/src/hr/model.js';
 import {checkBoundaries} from './coherence-boundaries.mjs';
-function fabricSeriesReleaseSchema(schema) {
+function fabricPlannerReleaseSchema(schema) {
  const migration = '20261117100000_fabric_receipt_cost_and_sku.sql';
  const sql = readFileSync(new URL('../supabase/migrations/' + migration, import.meta.url), 'utf8');
  if (!sql.includes('add column series smallint unique check (series between 1 and 9)'))
   throw Error('Fabric Types requires a unique SKU series from 1 to 9');
+ const plannerMigration = '20261122085000_fabric_subparts_and_statuses.sql';
+ const plannerSql = readFileSync(new URL('../supabase/migrations/' + plannerMigration, import.meta.url), 'utf8');
+ if (!plannerSql.includes('add column dyeing_program_status_id bigint references garments_erp.dyeing_program_status(id)'))
+  throw Error('Dyeing Program status must select its linked database status');
  return {...schema, columns: [...schema.columns, {
+  table_schema: 'garments_erp', table_name: 'dyeing_program', column_name: 'dyeing_program_status_id', data_type: 'bigint', is_nullable: 'YES', pending_migration: plannerMigration,
+ }, {
   table_schema: 'garments_erp', table_name: 'fabric_type', column_name: 'series',
   data_type: 'smallint', is_nullable: 'YES', pending_migration: migration,
  }]};
@@ -72,7 +78,7 @@ export function inspect(schema, catalogue, screens=pages){
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
  const captured=JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url)));
- const schema=fabricSeriesReleaseSchema(checkoutReleaseSchema(productionReferenceSchema(fabricBatchReleaseSchema(employeePhotoReleaseSchema(contactReleaseSchema(captured))))));
+ const schema=fabricPlannerReleaseSchema(checkoutReleaseSchema(productionReferenceSchema(fabricBatchReleaseSchema(employeePhotoReleaseSchema(contactReleaseSchema(captured))))));
  const catalogue=JSON.parse(readFileSync(new URL('../database/catalogue/screen-table-map.json',import.meta.url)));
  const errors=[...inspect(schema,catalogue),...inspectFabricBatch(schema)];
  try{console.log(checkBoundaries());}catch(e){errors.push(e.message)}

@@ -1,5 +1,6 @@
 import { getAccessClient } from '../access/client.js';
 import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
+import { FabricRequirementFields } from '../fabric/requirement-fields.js';
 import { ReviewForm, useSaveReview } from '../fabric/save-review.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { pages } from '../fabric/catalog.js';
@@ -35,6 +36,24 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
       ]),
     );
   });
+  const [requirements, setRequirements] = useState(() =>
+    (data.item_part_fabric || []).filter((f) =>
+      data.variant_item.some(
+        (v) =>
+          v.id === f.variant_item_id &&
+          data.item_part.some((p) => p.id === v.item_part_id && p.item_id === id),
+      ),
+    ),
+  );
+  const fabricOptions = {
+    fabrics: (data.fabric_type || []).map((f) => [f.id, f.name]),
+    parts: (data.sub_part_list || []).map((p) => [p.id, p.part]),
+    labs: (data.lab_dip || []).map((l) => [
+      l.id,
+      `${data.color_map?.find((c) => c.id === data.color_map_by_brand?.find((m) => m.id === l.color_map_by_brand_id)?.color_map_id)?.name || 'Lab dip'} · Edition ${l.edition} · ${l.id}`,
+    ]),
+    statuses: (data.item_part_fabric_status || []).map((s) => [s.id, s.type]),
+  };
   const [checklist, setChecklist] = useState(
     () => data.production_checklist.find((c) => c.item_id === id) || {},
   );
@@ -135,12 +154,30 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
           return {
             id:
               oldLinks.find((r) => r.variant_id === l.variant_id && r.item_part_id === part.id)
-                ?.id || crypto.randomUUID(),
+                ?.id || (/^[0-9a-f-]{36}$/.test(l.id || '') ? l.id : crypto.randomUUID()),
             item_part_id: part.id,
             variant_id: l.variant_id,
             lab_dip_id: l.lab_dip_id || null,
           };
         }),
+      ];
+      const variantIds = new Set(
+        next.variant_item
+          .filter((v) => parts.some((p) => p.id === v.item_part_id))
+          .map((v) => v.id),
+      );
+      if (requirements.some((f) => !variantIds.has(f.variant_item_id)))
+        throw Error('Remove fabric sub-parts before removing their variant / production part.');
+      if (requirements.some((f) => !(Number(f.consumption_per_piece_kg) > 0)))
+        throw Error('Enter positive decimal kg per piece for every fabric sub-part.');
+      next.item_part_fabric = [
+        ...(data.item_part_fabric || []).filter(
+          (f) => !oldLinks.some((v) => v.id === f.variant_item_id),
+        ),
+        ...requirements.map((f) => ({
+          ...f,
+          consumption_per_piece_kg: Number(f.consumption_per_piece_kg),
+        })),
       ];
       next.production_checklist = [
         ...data.production_checklist.filter((c) => c.item_id !== id),
@@ -213,6 +250,34 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
           ),
         ]),
       ];
+      for (const f of requirements)
+        reviewRows.push([
+          'Fabric sub-part',
+          [
+            data.variant.find(
+              (v) => v.id === links.find((l) => l.id === f.variant_item_id)?.variant_id,
+            )?.variant_name,
+            data.part_list.find(
+              (p) => p.id === links.find((l) => l.id === f.variant_item_id)?.part_list_id,
+            )?.part,
+            f.sub_part_name || 'Unnamed',
+            fabricOptions.parts.find(([id]) => id === f.sub_part_list_id)?.[1] ||
+              'Unspecified type',
+            fabricOptions.fabrics.find(([id]) => id === f.fabric_type_id)?.[1],
+            fabricOptions.labs.find(([id]) => id === f.lab_dip_id)?.[1] || 'No lab dip',
+            `${f.consumption_per_piece_kg} kg / piece`,
+            fabricOptions.statuses.find(([id]) => id === f.item_part_fabric_status_id)?.[1] ||
+              'Automatic',
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        ]);
+      for (const f of (data.item_part_fabric || []).filter(
+        (f) =>
+          oldLinks.some((v) => v.id === f.variant_item_id) &&
+          !requirements.some((r) => r.id === f.id),
+      ))
+        reviewRows.push(['Remove fabric sub-part', f.sub_part_name || f.id]);
       const files = attachments.prepare();
       reviewedFiles.current = files;
       review.prepare(
@@ -340,7 +405,7 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
       h(
         'section',
         null,
-        h('h3', null, 'Variants and parts'),
+        h('h3', null, 'Production parts and variants'),
         h(
           'p',
           null,
@@ -388,7 +453,10 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
           {
             type: 'button',
             onClick: () =>
-              setLinks([...links, { variant_id: '', part_list_id: '', lab_dip_id: '' }]),
+              setLinks([
+                ...links,
+                { id: crypto.randomUUID(), variant_id: '', part_list_id: '', lab_dip_id: '' },
+              ]),
           },
           'Add variant / part',
         ),
@@ -412,6 +480,87 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
               ),
             );
           }),
+        ),
+      ),
+      h(
+        'section',
+        null,
+        h('h3', null, 'Fabric consumption'),
+        h(
+          'p',
+          null,
+          'Fabric sub-parts do not create production jobs. Consumption is kg per planned piece.',
+        ),
+        requirements.map((f, i) =>
+          h(
+            'div',
+            { key: f.id },
+            h(
+              'div',
+              { className: 'fabric-fields' },
+              select(
+                `Sub-part variant / production part ${i + 1}`,
+                f.variant_item_id,
+                links
+                  .filter((l) => l.id)
+                  .map((l) => [
+                    l.id,
+                    `${data.variant.find((v) => v.id === l.variant_id)?.variant_name || 'Variant'} · ${data.part_list.find((p) => p.id === l.part_list_id)?.part || 'Part'}`,
+                  ]),
+                (value) =>
+                  setRequirements(
+                    requirements.map((r) => (r.id === f.id ? { ...r, variant_item_id: value } : r)),
+                  ),
+              ),
+            ),
+            h(FabricRequirementFields, {
+              prefix: `item-component-${f.id}`,
+              row: f,
+              options: fabricOptions,
+              onChange: (row) =>
+                setRequirements(requirements.map((r) => (r.id === f.id ? row : r))),
+            }),
+            h(
+              'p',
+              null,
+              'Saved status: ',
+              fabricOptions.statuses.find(
+                ([id]) =>
+                  id ===
+                  (data.fabric_requirement_statuses || []).find((r) => r.id === f.id)?.status_id,
+              )?.[1] || 'Not ordered',
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                onClick: () => setRequirements(requirements.filter((r) => r.id !== f.id)),
+              },
+              'Remove fabric sub-part',
+            ),
+          ),
+        ),
+        h(
+          'button',
+          {
+            type: 'button',
+            disabled: !links.length,
+            onClick: () =>
+              setRequirements([
+                ...requirements,
+                {
+                  id: crypto.randomUUID(),
+                  variant_item_id: links[0]?.id,
+                  fabric_type_id: '',
+                  sub_part_list_id: null,
+                  sub_part_name: '',
+                  lab_dip_id: links[0]?.lab_dip_id || null,
+                  consumption_per_piece_kg: '',
+                  item_part_fabric_status_id: null,
+                },
+              ]),
+          },
+          'Add fabric sub-part',
         ),
       ),
       h(

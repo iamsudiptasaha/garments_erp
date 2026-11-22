@@ -371,7 +371,7 @@ async function item() {
   } = await db.query('select id from garments_erp.item where style_code=$1', [name]);
   return record.id;
 }
-async function bill(pageKey, label, table) {
+async function bill(pageKey, label, table, sourceLine) {
   await route(pageKey);
   const name = 'Browser ' + pageKey + ' ' + Date.now();
   await button(page, '+ New document').click();
@@ -408,7 +408,15 @@ async function bill(pageKey, label, table) {
   if (pageKey === 'knitting') await pick(dialog, 'Knitter');
   for (const [key, value] of fields) {
     if (value === null) {
-      if (pageKey === 'knitting' && key === 'Source yarn bill line') {
+      if (pageKey === 'dyeBills' && key === 'Dyeing program line' && sourceLine) {
+        const control = dialog.getByLabel('Line 1 ' + key, { exact: true });
+        if ((await control.evaluate((el) => el.tagName)) === 'SELECT')
+          await control.selectOption(String(sourceLine.id));
+        else {
+          await control.click();
+          await dialog.getByRole('option', { name: new RegExp(sourceLine.number) }).click();
+        }
+      } else if (pageKey === 'knitting' && key === 'Source yarn bill line') {
         const control = dialog.getByLabel('Line 1 ' + key, { exact: true });
         if ((await control.evaluate((el) => el.tagName)) === 'SELECT')
           await control.selectOption({ index: 2 });
@@ -1047,6 +1055,24 @@ async function contactBankModal(target) {
 
 const modalOnly = process.argv.includes('--owning-modal');
 async function fabricPlannerWorkflow() {
+  const {
+    rows: [isolatedLine],
+  } = await db.query(`with source as (
+    select i.fabric_type_id,i.lab_dip_version_id,p.dyer_id from garments_erp.dyeing_program_item i
+    join garments_erp.dyeing_program p on p.id=i.dyeing_program_id
+    join garments_erp.lab_dip_version v on v.id=i.lab_dip_version_id
+    join garments_erp.lab_dip l on l.id=v.lab_dip_id join garments_erp.fabric_type f on f.id=i.fabric_type_id
+    where f.name='Verification fabric' and l.edition=1 order by i.id limit 1
+  ), header as (insert into garments_erp.dyeing_program(date,dyer_id) select now(),dyer_id from source returning id)
+  insert into garments_erp.dyeing_program_item(dyeing_program_id,fabric_type_id,lab_dip_version_id,quantity)
+    select header.id,source.fabric_type_id,source.lab_dip_version_id,0.01 from source cross join header returning id`);
+
+  const {
+    rows: [contrast],
+  } = await db.query(`insert into garments_erp.lab_dip(edition,color_map_by_brand_id,dyer_id)
+    select max(l.edition)+1,l.color_map_by_brand_id,l.dyer_id from garments_erp.lab_dip l
+    join garments_erp.color_map_by_brand m on m.id=l.color_map_by_brand_id join garments_erp.brand_list b on b.id=m.brand_list_id
+    where b.brand='Verification brand' group by l.color_map_by_brand_id,l.dyer_id returning id`);
   await route('productionItems');
   const style = 'Planner browser ' + randomBytes(4).toString('hex');
   await button(page, '+ Create item').click();
@@ -1065,6 +1091,13 @@ async function fabricPlannerWorkflow() {
     await pick(dialog, 'Lab dip ' + n);
   }
   await pick(dialog, 'Parent of Planner sleeve', 'Billing test body');
+  await b('Add fabric sub-part').click();
+  await pick(dialog, 'Sub-part variant / production part 1', 'Browser variant · Planner sleeve');
+  await dialog.getByLabel('Sub-part name', { exact: true }).fill('Contrast cuff');
+  await pick(dialog, 'Fabric type', 'Verification fabric');
+  await dialog.getByLabel('Component lab dip', { exact: true }).selectOption(String(contrast.id));
+  await dialog.getByLabel('Consumption per piece · kg', { exact: true }).fill('0.025');
+
   await b('Review item').click();
   await b('Confirm save').click();
   await hidden();
@@ -1075,17 +1108,32 @@ async function fabricPlannerWorkflow() {
   await page.getByText('No matching records.').waitFor();
   await page.getByLabel('Item', { exact: true }).selectOption({ label: style });
   await search.fill('Planner sleeve');
-  await page.getByText('1 row', { exact: true }).waitFor();
   const selectRow = () =>
     page.locator('.fortune-sheet-overlay').click({ position: { x: 85, y: 82 } });
-  await selectRow();
-  await button(page, 'Edit selected fabric plan').click();
+  await page
+    .getByLabel('Variant / production part', { exact: true })
+    .selectOption({ label: style + ' · Browser variant · Planner sleeve' });
+  await button(page, 'Add fabric sub-part').click();
+  await dialog.getByLabel('Sub-part name', { exact: true }).fill('Main sleeve');
   await pick(dialog, 'Fabric type', 'Verification fabric');
   await dialog.getByLabel('Consumption per piece · kg').fill('0.125');
+  for (const width of [390, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    assert.ok(
+      await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+      'Sub-part editor overflows at ' + width,
+    );
+  }
+  await page.keyboard.press('Tab');
+  assert.ok(
+    await dialog.evaluate((el) => el.contains(document.activeElement)),
+    'Modal focus left the sub-part editor',
+  );
+
   await b('Review consumption').click();
   const requirementQuery = `select f.id, f.consumption_per_piece_kg, v.required_kg, v.estimated_received_kg
     from garments_erp.item_part_fabric f join garments_erp.fabric_plan_estimates v on v.id=f.id
-    join garments_erp.item i on i.id=v.item_id where i.style_code=$1`;
+    join garments_erp.item i on i.id=v.item_id where i.style_code=$1 and f.sub_part_name='Main sleeve'`;
   assert.equal((await db.query(requirementQuery, [style])).rowCount, 0);
   await b('Back to edit').click();
   assert.equal(await dialog.getByLabel('Consumption per piece · kg').inputValue(), '0.125');
@@ -1097,12 +1145,58 @@ async function fabricPlannerWorkflow() {
   } = await db.query(requirementQuery, [style]);
   assert.equal(Number(requirement.consumption_per_piece_kg), 0.125);
   assert.equal(Number(requirement.required_kg), 0.375);
+  const {
+    rows: [components],
+  } = await db.query(
+    `select count(*) as count,count(distinct f.lab_dip_id) as dips from garments_erp.item_part_fabric f join garments_erp.fabric_plan_estimates r on r.id=f.id where r.item_id=(select id from garments_erp.item where style_code=$1)`,
+    [style],
+  );
+  assert.equal(Number(components.count), 2);
+  assert.equal(Number(components.dips), 2);
+  await search.fill('Main sleeve');
+  await page.getByText('1 row', { exact: true }).waitFor();
+  for (const [label, status] of [
+    ['On hold', 4],
+    ['Reused in-house fabric', 5],
+    ['Automatic', 1],
+  ]) {
+    await selectRow();
+    await button(page, 'Edit selected fabric plan').click();
+    await dialog.getByLabel('Manual status', { exact: true }).selectOption({ label });
+    await b('Review consumption').click();
+    await b('Confirm save').click();
+    await hidden();
+    assert.equal(
+      Number(
+        (
+          await db.query(
+            'select item_part_fabric_status_id from garments_erp.fabric_plan_estimates where id=$1',
+            [requirement.id],
+          )
+        ).rows[0].item_part_fabric_status_id,
+      ),
+      status,
+    );
+  }
+
+  assert.ok(
+    (
+      await denied.rpc('erp_save_fabric_requirement', {
+        p_requirement: requirement.id,
+        p_variant: null,
+        p_expected: null,
+        p_values: null,
+      })
+    ).error,
+  );
 
   await selectRow();
   await button(page, 'Edit selected fabric plan').click();
-  await pick(dialog, 'Fabric type', 'Verification fabric');
-  await pick(dialog, 'Dyeing program item');
+  await dialog
+    .getByLabel('Dyeing program item', { exact: true })
+    .selectOption(String(isolatedLine.id));
   await b('Review link').click();
+  await dialog.getByText('Main sleeve', { exact: true }).waitFor();
   await b('Confirm save').click();
   await hidden();
   const {
@@ -1113,6 +1207,41 @@ async function fabricPlannerWorkflow() {
      where l.item_part_fabric_id=$1`,
     [requirement.id],
   );
+  const {
+    rows: [programRecord],
+  } = await db.query('select program_number from garments_erp.dyeing_program where id=$1', [
+    link.dyeing_program_id,
+  ]);
+  for (const [label, status] of [
+    ['Draft', 1],
+    ['Final', 2],
+  ]) {
+    await route('programs');
+    const programTable = page.getByRole('table', { name: 'Dyeing programs', exact: true });
+    await programTable
+      .locator('tbody tr')
+      .filter({ hasText: programRecord.program_number })
+      .first()
+      .getByRole('cell')
+      .first()
+      .click();
+    await pick(dialog, 'Program status', label);
+    await dialog.getByLabel('Program date', { exact: true }).fill('2026-11-22');
+    await b('Review document →').click();
+    await b('Confirm & save document').click();
+    await hidden();
+    assert.equal(
+      Number(
+        (
+          await db.query(
+            'select item_part_fabric_status_id from garments_erp.fabric_plan_estimates where id=$1',
+            [requirement.id],
+          )
+        ).rows[0].item_part_fabric_status_id,
+      ),
+      status,
+    );
+  }
   await page.goto(
     app + '/fabric.html?live=1&plannerProgram=' + link.dyeing_program_id + '#fabricPlanner',
   );
@@ -1124,6 +1253,17 @@ async function fabricPlannerWorkflow() {
   await b('Review unlink').click();
   await b('Confirm save').click();
   await hidden();
+  assert.equal(
+    Number(
+      (
+        await db.query(
+          'select item_part_fabric_status_id from garments_erp.fabric_plan_estimates where id=$1',
+          [requirement.id],
+        )
+      ).rows[0].item_part_fabric_status_id,
+    ),
+    1,
+  );
   await selectRow();
   await button(page, 'Edit dyeing link').click();
   await pick(dialog, 'Dyeing program item');
@@ -1131,13 +1271,78 @@ async function fabricPlannerWorkflow() {
   await b('Confirm save').click();
   await hidden();
 
-  await bill('dyeBills', 'dyed fabric bill', 'dyed_fabric_bill');
+  await bill('dyeBills', 'dyed fabric bill', 'dyed_fabric_bill', {
+    id: isolatedLine.id,
+    number: programRecord.program_number,
+  });
   const {
     rows: [covered],
   } = await db.query(requirementQuery, [style]);
   assert.equal(Number(covered.estimated_received_kg), 0.375);
+  assert.equal(
+    Number(
+      (
+        await db.query(
+          'select item_part_fabric_status_id from garments_erp.fabric_plan_estimates where id=$1',
+          [requirement.id],
+        )
+      ).rows[0].item_part_fabric_status_id,
+    ),
+    3,
+  );
+  assert.equal(
+    (
+      await db.query(
+        'select dyed_fabric_item_id from garments_erp.raw_material_check_in where automatic_dyed_receipt group by dyed_fabric_item_id having count(*)>1',
+      )
+    ).rowCount,
+    0,
+  );
+
+  for (const [consumption, manual, status] of [
+    ['0.15', '4', 4],
+    ['0.125', '', 3],
+  ]) {
+    await route('productionItems');
+    await page
+      .getByRole('table', { name: 'Items', exact: true })
+      .getByRole('row')
+      .filter({ hasText: style })
+      .getByRole('button')
+      .first()
+      .click();
+    await dialog
+      .locator(`[id="item-component-${requirement.id}-consumption_per_piece_kg"]`)
+      .fill(consumption);
+    await dialog
+      .locator(`[id="item-component-${requirement.id}-item_part_fabric_status_id"]`)
+      .selectOption(manual);
+    await b('Review item').click();
+    await b('Confirm save').click();
+    await hidden();
+    const {
+      rows: [persisted],
+    } = await db.query(
+      'select id,consumption_per_piece_kg,item_part_fabric_status_id from garments_erp.fabric_plan_estimates where id=$1',
+      [requirement.id],
+    );
+    assert.equal(persisted.id, requirement.id);
+    assert.equal(Number(persisted.consumption_per_piece_kg), Number(consumption));
+    assert.equal(Number(persisted.item_part_fabric_status_id), status);
+  }
+  assert.equal(
+    Number(
+      (
+        await db.query(
+          `select count(*) from garments_erp.production p join garments_erp.item_part part on part.id=p.item_part_id join garments_erp.item i on i.id=part.item_id where i.style_code=$1`,
+          [style],
+        )
+      ).rows[0].count,
+    ),
+    0,
+  );
   console.log(
-    'PASS Chromium item, dependent part, fractional plan, link/unlink, verified bill and automatic inventory',
+    'PASS Chromium Items sub-parts, independent dips, decimal kg, review, responsive fields, overrides, Draft/Final, link removal, verified receipt and automatic inventory',
   );
 }
 
