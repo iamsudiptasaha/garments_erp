@@ -1298,6 +1298,48 @@ async function fabricPlannerWorkflow() {
     0,
   );
 
+  for (const [consumption, manual, status] of [
+    ['0.15', '4', 4],
+    ['0.125', '', 3],
+  ]) {
+    await route('productionItems');
+    await page
+      .getByRole('table', { name: 'Items', exact: true })
+      .getByRole('row')
+      .filter({ hasText: style })
+      .getByRole('button')
+      .first()
+      .click();
+    await dialog
+      .locator(`[id="item-component-${requirement.id}-consumption_per_piece_kg"]`)
+      .fill(consumption);
+    await dialog
+      .locator(`[id="item-component-${requirement.id}-item_part_fabric_status_id"]`)
+      .selectOption(manual);
+    await b('Review item').click();
+    await b('Confirm save').click();
+    await hidden();
+    const {
+      rows: [persisted],
+    } = await db.query(
+      'select id,consumption_per_piece_kg,item_part_fabric_status_id from garments_erp.fabric_plan_estimates where id=$1',
+      [requirement.id],
+    );
+    assert.equal(persisted.id, requirement.id);
+    assert.equal(Number(persisted.consumption_per_piece_kg), Number(consumption));
+    assert.equal(Number(persisted.item_part_fabric_status_id), status);
+  }
+  assert.equal(
+    Number(
+      (
+        await db.query(
+          `select count(*) from garments_erp.production p join garments_erp.item_part part on part.id=p.item_part_id join garments_erp.item i on i.id=part.item_id where i.style_code=$1`,
+          [style],
+        )
+      ).rows[0].count,
+    ),
+    0,
+  );
   console.log(
     'PASS Chromium Items sub-parts, independent dips, decimal kg, review, responsive fields, overrides, Draft/Final, link removal, verified receipt and automatic inventory',
   );
