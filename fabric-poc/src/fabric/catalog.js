@@ -381,6 +381,10 @@ export const pages = {
         required: false,
       }),
       field('date', 'Program date', 'date'),
+      field('dyeing_program_status_id', 'Program status', 'select', {
+        source: 'dyeingProgramStatuses',
+        required: false,
+      }),
       field('dyer_id', 'Dyer', 'select', { source: 'dyers' }),
     ],
     groups: true,
@@ -395,6 +399,7 @@ export const pages = {
     ],
     columns: [
       column('bill', 'Program'),
+      column('programStatus', 'Status'),
       column('date', 'Date'),
       column('supplier', 'Dyer', false, 190),
       column('mapping', 'Colour mapping', false, 250),

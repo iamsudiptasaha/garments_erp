@@ -15,6 +15,15 @@ export const productionContract = {
     item_size_list: ['item_id', 'size_list_id'],
     item_cut_ratio: ['item_size_list_id', 'pieces'],
     variant_item: ['item_part_id', 'variant_id', 'lab_dip_id'],
+    item_part_fabric: [
+      'variant_item_id',
+      'fabric_type_id',
+      'sub_part_list_id',
+      'sub_part_name',
+      'lab_dip_id',
+      'consumption_per_piece_kg',
+      'item_part_fabric_status_id',
+    ],
     production_checklist: [
       'item_id',
       'fpt_gpt_status_id',
