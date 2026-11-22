@@ -35,4 +35,8 @@ Gate: documentation contracts and source mapping validated before implementation
 - The optional existing dyed-bill SQL regression could not run in the older populated review fixture because `Verification yarn` already exists; no production data was touched. Clean replay and the standard regression belong to the GitHub isolated database job.
 - All 29 design-system path references resolve; git diff whitespace check passes.
 
-Remaining limits: existing snapshot is unpaginated; no new server read API or migration. Sheet grouping has aligned subtotal rows but no shared collapse control. Browser account tests use a synthetic RPC adapter; real preference RLS is separately tested in PostgreSQL. No claim of production deployment or live business-save acceptance.
+Remaining limits: existing snapshot is unpaginated; no new server read API or migration. Sheet grouping has aligned subtotal rows but no shared collapse control. Browser account tests use a synthetic RPC adapter; real preference RLS is separately tested in PostgreSQL. No production deployment or production business saves were attempted.
+
+### Real database browser integration
+
+The first GitHub run passed clean schema replay, SQL sub-part/status/costing/receipt regressions and the regular quality/browser/security/CodeQL jobs, then exposed a retired Planner selector in the existing real-database browser workflow. Updated only that Planner test path: creation through the existing Item editor, read-only Planner source inspection, then explicit editing. The full test passes locally against real disposable Auth, PostgreSQL, private Storage and the Files handler, including fractional consumption, exact component dips, Review/Back/Confirm, status overrides, Draft/Final linking and unlinking, verified receipt and automatic inventory. No test assertions or CI gates were bypassed.

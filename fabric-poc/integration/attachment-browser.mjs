@@ -1098,24 +1098,34 @@ async function fabricPlannerWorkflow() {
   await dialog.getByLabel('Component lab dip', { exact: true }).selectOption(String(contrast.id));
   await dialog.getByLabel('Consumption per piece · kg', { exact: true }).fill('0.025');
 
+  // Creation remains Item-owned; Planner inspects requirements and explicitly opens editing.
+  await b('Add fabric sub-part').click();
+  await pick(dialog, 'Sub-part variant / production part 2', 'Browser variant · Planner sleeve');
+  await dialog.getByLabel('Sub-part name', { exact: true }).nth(1).fill('Main sleeve');
+  await dialog
+    .getByLabel('Fabric type', { exact: true })
+    .nth(1)
+    .selectOption({ label: 'Verification fabric' });
+  await dialog.getByLabel('Consumption per piece · kg', { exact: true }).nth(1).fill('0.1');
+
   await b('Review item').click();
   await b('Confirm save').click();
   await hidden();
   await button(page, 'Fabric Planner').click();
   await page.getByRole('heading', { name: 'Fabric Planner', exact: true }).waitFor();
-  const search = page.getByRole('searchbox', { name: 'Search fabric plan' });
+  const search = page.getByRole('searchbox', { name: 'Search fabric requirements' });
   await search.fill(style + ' missing');
-  await page.getByText('No matching records.').waitFor();
-  await page.getByLabel('Item', { exact: true }).selectOption({ label: style });
-  await search.fill('Planner sleeve');
+  await page.getByText('No matching records', { exact: true }).waitFor();
+  await search.fill(style);
+  const requirementRows = page.locator('[data-requirement]');
+  await requirementRows.first().waitFor();
+  const openRequirement = async () => {
+    await requirementRows.filter({ hasText: 'Main sleeve' }).getByRole('button').click();
+    await button(page.getByRole('dialog'), 'Edit fabric requirement').click();
+  };
   const selectRow = () =>
     page.locator('.fortune-sheet-overlay').click({ position: { x: 85, y: 82 } });
-  await page
-    .getByLabel('Variant / production part', { exact: true })
-    .selectOption({ label: style + ' · Browser variant · Planner sleeve' });
-  await button(page, 'Add fabric sub-part').click();
-  await dialog.getByLabel('Sub-part name', { exact: true }).fill('Main sleeve');
-  await pick(dialog, 'Fabric type', 'Verification fabric');
+  await openRequirement();
   await dialog.getByLabel('Consumption per piece · kg').fill('0.125');
   for (const width of [390, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -1134,7 +1144,10 @@ async function fabricPlannerWorkflow() {
   const requirementQuery = `select f.id, f.consumption_per_piece_kg, v.required_kg, v.estimated_received_kg
     from garments_erp.item_part_fabric f join garments_erp.fabric_plan_estimates v on v.id=f.id
     join garments_erp.item i on i.id=v.item_id where i.style_code=$1 and f.sub_part_name='Main sleeve'`;
-  assert.equal((await db.query(requirementQuery, [style])).rowCount, 0);
+  assert.equal(
+    Number((await db.query(requirementQuery, [style])).rows[0].consumption_per_piece_kg),
+    0.1,
+  );
   await b('Back to edit').click();
   assert.equal(await dialog.getByLabel('Consumption per piece · kg').inputValue(), '0.125');
   await b('Review consumption').click();
@@ -1153,15 +1166,14 @@ async function fabricPlannerWorkflow() {
   );
   assert.equal(Number(components.count), 2);
   assert.equal(Number(components.dips), 2);
-  await search.fill('Main sleeve');
-  await page.getByText('1 row', { exact: true }).waitFor();
+  await search.fill(style);
+  await requirementRows.filter({ hasText: 'Main sleeve' }).waitFor();
   for (const [label, status] of [
     ['On hold', 4],
     ['Reused in-house fabric', 5],
     ['Automatic', 1],
   ]) {
-    await selectRow();
-    await button(page, 'Edit selected fabric plan').click();
+    await openRequirement();
     await dialog.getByLabel('Manual status', { exact: true }).selectOption({ label });
     await b('Review consumption').click();
     await b('Confirm save').click();
@@ -1190,8 +1202,7 @@ async function fabricPlannerWorkflow() {
     ).error,
   );
 
-  await selectRow();
-  await button(page, 'Edit selected fabric plan').click();
+  await openRequirement();
   await dialog
     .getByLabel('Dyeing program item', { exact: true })
     .selectOption(String(isolatedLine.id));
