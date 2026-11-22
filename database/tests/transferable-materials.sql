@@ -46,6 +46,38 @@ begin
  perform pg_temp.expect_error($q$select public.erp_save_raw_material_transaction('materialIssues',null,null,'{"raw_material_check_in_id":995001,"date":"2026-11-22","quantity":12,"reconciliation":true,"issue_by_employee_id":900001,"remarks":"Close"}')$q$,'23514');
  perform pg_temp.expect_error('insert into garments_erp.transferable_item_movement(raw_material_check_in_id) values(995001)','42501');
 end $$;
+-- Exhaust every action against initial, transferred, returned, discarded and restored states.
+do $$
+declare receipt jsonb; previous_id bigint; phase integer; kind bigint; permitted bigint[]; saved jsonb;
+begin
+ receipt:=public.erp_save_raw_material_transaction('materialReceipts',null,null,
+  jsonb_build_object('inward_date',current_date,'billed_quantity',12,'billed_price',25,
+   'raw_material_item_id',995001,'raw_material_purchase_order_item_id',995001,'is_transferable',true));
+ begin
+  for phase in 0..4 loop
+   permitted:=case phase when 1 then array[2]::bigint[] when 3 then array[4]::bigint[] else array[1,3]::bigint[] end;
+   for kind in 1..4 loop
+    begin
+     perform public.erp_record_transferable_movement((receipt->>'id')::bigint,previous_id,(receipt->>'updated_at')::timestamptz,
+      kind,case when kind=1 then 995001 end,case when kind=1 then 995001 end,900001,'Transition matrix');
+     if not kind=any(permitted) then raise exception 'TEST accepted invalid action % at phase %',kind,phase;end if;
+     raise exception 'Roll back valid probe' using errcode='P0901';
+    exception
+     when sqlstate 'P0901' then null;
+     when check_violation then if kind=any(permitted) then raise;end if;
+    end;
+   end loop;
+   if phase<4 then
+    saved:=public.erp_record_transferable_movement((receipt->>'id')::bigint,previous_id,(receipt->>'updated_at')::timestamptz,
+     phase+1,case when phase=0 then 995001 end,case when phase=0 then 995001 end,900001,'Advance matrix state');
+    previous_id:=(saved->>'id')::bigint;
+   end if;
+  end loop;
+  raise exception 'Roll back matrix history' using errcode='P0902';
+ exception when sqlstate 'P0902' then null;
+ end;
+ raise notice 'PASS all 20 action/state combinations, including Transfer and Discard after Restore';
+end $$;
 reset role;
 -- Direct writes/imports/legacy command paths still meet table guards.
 select pg_temp.expect_error('update garments_erp.raw_material_check_in set is_transferable=false where id=995001','23514');
