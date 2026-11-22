@@ -60,6 +60,15 @@ test('approved Planner uses shared controls, identities, totals and independent 
   await expect(source).toContainText('Sleeve');
   await expect(source.getByRole('button', { name: 'Edit fabric requirement' })).toHaveCount(0);
   await page.keyboard.press('Escape');
+  await page
+    .getByRole('columnheader', { name: /^Colour/ })
+    .getByRole('button')
+    .click();
+  await page
+    .getByRole('columnheader', { name: /^Colour/ })
+    .getByRole('button')
+    .click();
+  await expect(page.locator('.planner-group').first()).toContainText('Red');
   await page.getByRole('button', { name: 'Columns', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Customize columns' })).toBeVisible();
   await page.getByRole('checkbox', { name: 'Variant', exact: true }).uncheck();

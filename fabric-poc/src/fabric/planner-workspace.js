@@ -28,6 +28,7 @@ function RequirementRows({ table, preferences, save, onRules, onOpen }) {
     .map((r) => r.original);
   const columns = table.getVisibleLeafColumns();
   const groups = plannerGroups(records);
+  if (preferences.sorting?.find((rule) => rule.id === 'colour')?.desc) groups.reverse();
   const grouped = preferences.grouping?.includes('colour');
   const expanded = preferences.expanded ?? true;
   const isOpen = (colour) => expanded === true || expanded['colour:' + colour] === true;

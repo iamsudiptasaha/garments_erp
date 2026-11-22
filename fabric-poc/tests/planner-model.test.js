@@ -106,6 +106,9 @@ test('worksheet sort keeps each subtotal with its colour and grand total last', 
   assert.equal(rows.at(-2).summary, 'subtotal');
   assert.equal(rows.at(-1).summary, 'grand');
   assert.equal(buildSheet(state).celldata.length, rows.length + 1);
+  const descending = orderedRecords({ ...state, sort: { key: 'colour', direction: 'desc' } });
+  assert.equal(descending[0].colour, 'Red');
+  assert.equal(descending.at(-1).summary, 'grand');
   // Existing ordinary worksheets retain their normal global sorting.
   assert.deepEqual(
     orderedRecords({

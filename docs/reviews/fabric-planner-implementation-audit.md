@@ -40,3 +40,5 @@ Remaining limits: existing snapshot is unpaginated; no new server read API or mi
 ### Real database browser integration
 
 The first GitHub run passed clean schema replay, SQL sub-part/status/costing/receipt regressions and the regular quality/browser/security/CodeQL jobs, then exposed a retired Planner selector in the existing real-database browser workflow. Updated only that Planner test path: creation through the existing Item editor, read-only Planner source inspection, then explicit editing. The full test passes locally against real disposable Auth, PostgreSQL, private Storage and the Files handler, including fractional consumption, exact component dips, Review/Back/Confirm, status overrides, Draft/Final linking and unlinking, verified receipt and automatic inventory. No test assertions or CI gates were bypassed.
+
+Final sorting check: colour groups now follow descending colour sort in each view, while subtotals remain with their colour and the grand total remains last. Added unit and Chromium regression coverage; full quality and 121-browser-test suite pass again.

@@ -32,7 +32,8 @@ export function orderedRecords(state) {
   if (!state.grouping) return sorted;
   const { key: groupKey, summaryKey } = state.grouping;
   const groups = [...new Set(rows.filter((r) => !r[summaryKey]).map((r) => r[groupKey]))].sort(
-    (a, b) => String(a).localeCompare(String(b)),
+    (a, b) =>
+      String(a).localeCompare(String(b)) * (key === groupKey && direction === 'desc' ? -1 : 1),
   );
   return groups
     .flatMap((group) => [
