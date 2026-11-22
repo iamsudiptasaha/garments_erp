@@ -12,6 +12,7 @@ export function switchReceiptMode(header, mode) {
     dyed_fabric_item_id: null,
     raw_material_supplier_list_id: null,
     _receiptMode: mode,
+    is_transferable: false,
   };
 }
 export function updateReceipt(data, header, key, value) {
@@ -69,14 +70,27 @@ export function receiptFields(spec, data, mode, header) {
       : mode === 'fabric'
         ? [{ ...byKey.dyed_fabric_item_id, required: true }]
         : [];
+  const locked = (data.transferable_receipt_state || []).find(
+    (r) => r.id === header.id,
+  )?.identity_locked;
   return {
     ...spec,
     header: mode
       ? [
-          ...source,
-          byKey.material_category_id,
+          ...source.map((f) => ({ ...f, disabled: f.disabled || locked })),
+          { ...byKey.material_category_id, disabled: locked },
+          {
+            ...byKey.is_transferable,
+            disabled:
+              mode !== 'order' ||
+              !header.raw_material_purchase_order_item_id ||
+              Boolean(
+                (data.transferable_receipt_state || []).find((r) => r.id === header.id)
+                  ?.transferability_lock_reason,
+              ),
+          },
           ...['date', 'quantity', 'price', 'invoice_number', 'verified_by_employee_id'].map(
-            (key) => byKey[key],
+            (key) => ({ ...byKey[key], readOnly: locked && ['date', 'quantity'].includes(key) }),
           ),
         ]
       : [],

@@ -42,6 +42,7 @@ import { WorkspaceGate, sessionAccessModel } from '../access/workspace-gate.js';
 import { ItemEditor } from '../production/item-editor.js';
 import { JobEditor } from '../production/editor.js';
 import { ProductionOverview } from '../production/cards.js';
+import { TransferableMaterials } from '../inventory/transferable.js';
 import { InventoryCard } from '../inventory/cards.js';
 import { miscellaneousOverview } from '../miscellaneous/catalog.js';
 import {
@@ -669,6 +670,8 @@ function App({ live, refreshWorkspaceAccess }) {
             },
           };
         });
+        const stock = await inventory.load();
+        setState((previous) => ({ ...previous, data: { ...previous.data, ...stock } }));
         setNotice('Inventory transaction saved to Supabase');
         setSelected(null);
         return row.id;
@@ -794,6 +797,10 @@ function App({ live, refreshWorkspaceAccess }) {
     );
   }
   function reconcile(id) {
+    if (data.raw_material_check_in.some((r) => r.id === id && r.is_transferable)) {
+      setNotice('Transferable receipts cannot be reconciled through Stock Out.');
+      return;
+    }
     if (can('create', 'materialIssues'))
       setEditor({ page: 'materialIssues', id: null, receiptId: id, reconciliation: true });
   }
@@ -1391,164 +1398,184 @@ function App({ live, refreshWorkspaceAccess }) {
                               'This page is not available to the selected preview role.',
                             ),
                           )
-                        : page === 'productionJobs'
-                          ? h(JobHistory, {
+                        : page === 'transferableMaterials'
+                          ? h(TransferableMaterials, {
                               data,
-                              onUpdate: () => navigate('productionUpdateTaskStatus'),
-                              canUpdate: can('edit', 'productionJobs'),
+                              actor,
+                              can,
+                              client: live ? getAccessClient() : null,
+                              onRefresh: live ? refreshLive : undefined,
+                              onMovement: live
+                                ? async (payload) => {
+                                    await inventory.recordMovement(payload);
+                                    const stock = await inventory.load();
+                                    setState((previous) => ({
+                                      ...previous,
+                                      data: { ...previous.data, ...stock },
+                                    }));
+                                  }
+                                : undefined,
                             })
-                          : ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(page)
-                            ? h(PortalTaskBoard, {
-                                preferenceClient: live ? getAccessClient() : null,
-                                key: page,
+                          : page === 'productionJobs'
+                            ? h(JobHistory, {
                                 data,
-                                live: !!live,
-                                liveTasks: live ? productionTasks(data) : undefined,
-                                onCommit: live ? commitProduction : undefined,
-                                onImage: live ? production.image : undefined,
-                                onStart: live
-                                  ? async (part, employee) =>
-                                      applyProduction(await production.start(data, part, employee))
-                                  : undefined,
-                                actor,
-                                mode: page === 'productionTaskBoard' ? 'board' : 'update',
-                                onOpenFloor: (url) =>
-                                  navigate('productionUpdateTaskStatus', undefined, url),
-                                canEdit: can('edit'),
-                                canCreate: can('create', 'productionJobs'),
-                                onCreate: (next) => {
-                                  if (live || !can('create', 'productionJobs')) return;
-                                  save({ ...state, data: next });
-                                },
-                                onSave: (next) => {
-                                  if (live || !can('edit')) return;
-                                  save({ ...state, data: next });
-                                },
+                                onUpdate: () => navigate('productionUpdateTaskStatus'),
+                                canUpdate: can('edit', 'productionJobs'),
                               })
-                            : h(
-                                React.Fragment,
-                                null,
-                                h(RecordPageHeading, {
-                                  eyebrow:
-                                    (spec.section === 'colours'
-                                      ? 'COLOURS / '
-                                      : spec.section === 'production'
-                                        ? 'PRODUCTION / '
-                                        : spec.section === 'inventory'
-                                          ? 'RAW MATERIAL INVENTORY / '
-                                          : spec.section === 'miscellaneous'
-                                            ? 'MISCELLANEOUS / '
-                                            : 'FABRIC / ') + spec.title.toUpperCase(),
-                                  title: spec.title,
-                                  description: spec.subtitle,
-                                  view,
-                                  action:
-                                    overviewColumns && !spec.readonly && can('create')
-                                      ? h(
+                            : ['productionTaskBoard', 'productionUpdateTaskStatus'].includes(page)
+                              ? h(PortalTaskBoard, {
+                                  preferenceClient: live ? getAccessClient() : null,
+                                  key: page,
+                                  data,
+                                  live: !!live,
+                                  liveTasks: live ? productionTasks(data) : undefined,
+                                  onCommit: live ? commitProduction : undefined,
+                                  onImage: live ? production.image : undefined,
+                                  onStart: live
+                                    ? async (part, employee) =>
+                                        applyProduction(
+                                          await production.start(data, part, employee),
+                                        )
+                                    : undefined,
+                                  actor,
+                                  mode: page === 'productionTaskBoard' ? 'board' : 'update',
+                                  onOpenFloor: (url) =>
+                                    navigate('productionUpdateTaskStatus', undefined, url),
+                                  canEdit: can('edit'),
+                                  canCreate: can('create', 'productionJobs'),
+                                  onCreate: (next) => {
+                                    if (live || !can('create', 'productionJobs')) return;
+                                    save({ ...state, data: next });
+                                  },
+                                  onSave: (next) => {
+                                    if (live || !can('edit')) return;
+                                    save({ ...state, data: next });
+                                  },
+                                })
+                              : h(
+                                  React.Fragment,
+                                  null,
+                                  h(RecordPageHeading, {
+                                    eyebrow:
+                                      (spec.section === 'colours'
+                                        ? 'COLOURS / '
+                                        : spec.section === 'production'
+                                          ? 'PRODUCTION / '
+                                          : spec.section === 'inventory'
+                                            ? 'RAW MATERIAL INVENTORY / '
+                                            : spec.section === 'miscellaneous'
+                                              ? 'MISCELLANEOUS / '
+                                              : 'FABRIC / ') + spec.title.toUpperCase(),
+                                    title: spec.title,
+                                    description: spec.subtitle,
+                                    view,
+                                    action:
+                                      overviewColumns && !spec.readonly && can('create')
+                                        ? h(
+                                            'button',
+                                            { className: 'primary', onClick: () => edit(null) },
+                                            spec.newLabel ||
+                                              (page === 'suppliers'
+                                                ? '+ Add supplier'
+                                                : '+ New document'),
+                                          )
+                                        : overviewColumns
+                                          ? null
+                                          : undefined,
+                                    onView: (mode) => {
+                                      setView(mode);
+                                      setLabProgressId(null);
+                                      setLabSelections({});
+                                      setSelected(null);
+                                    },
+                                  }),
+                                  !overviewColumns &&
+                                    h(
+                                      RecordPageActions,
+                                      {
+                                        view,
+                                        label: 'Search ' + spec.title,
+                                        placeholder: searchPlaceholder,
+                                        value: query,
+                                        onSearch: (value) => {
+                                          setQuery(value);
+                                          setSelected(null);
+                                        },
+                                      },
+                                      !spec.readonly &&
+                                        can('create') &&
+                                        h(
                                           'button',
                                           { className: 'primary', onClick: () => edit(null) },
                                           spec.newLabel ||
                                             (page === 'suppliers'
                                               ? '+ Add supplier'
                                               : '+ New document'),
-                                        )
-                                      : overviewColumns
-                                        ? null
-                                        : undefined,
-                                  onView: (mode) => {
-                                    setView(mode);
-                                    setLabProgressId(null);
-                                    setLabSelections({});
-                                    setSelected(null);
-                                  },
-                                }),
-                                !overviewColumns &&
-                                  h(
-                                    RecordPageActions,
-                                    {
-                                      view,
-                                      label: 'Search ' + spec.title,
-                                      placeholder: searchPlaceholder,
-                                      value: query,
-                                      onSearch: (value) => {
-                                        setQuery(value);
-                                        setSelected(null);
+                                        ),
+                                      !spec.readonly &&
+                                        can(page === 'materialContacts' ? 'view' : 'edit') &&
+                                        view === 'sheet' &&
+                                        h(
+                                          'button',
+                                          {
+                                            disabled:
+                                              query !== sheetQuery ||
+                                              !selected?.documentId ||
+                                              !records.includes(selected),
+                                            onClick: () => edit(selected.documentId),
+                                          },
+                                          page === 'materialContacts'
+                                            ? can('edit')
+                                              ? 'View/Edit'
+                                              : 'View'
+                                            : spec.master
+                                              ? 'Edit selected record'
+                                              : 'Edit selected document',
+                                        ),
+                                    ),
+                                  page === 'materialStock' &&
+                                    view === 'sheet' &&
+                                    can('create', 'materialIssues') &&
+                                    h(
+                                      'button',
+                                      {
+                                        className: 'primary',
+                                        disabled: !selected || selected.left <= 0,
+                                        onClick: () => reconcile(selected.id),
                                       },
-                                    },
-                                    !spec.readonly &&
-                                      can('create') &&
-                                      h(
-                                        'button',
-                                        { className: 'primary', onClick: () => edit(null) },
-                                        spec.newLabel ||
-                                          (page === 'suppliers'
-                                            ? '+ Add supplier'
-                                            : '+ New document'),
-                                      ),
-                                    !spec.readonly &&
-                                      can(page === 'materialContacts' ? 'view' : 'edit') &&
-                                      view === 'sheet' &&
-                                      h(
-                                        'button',
-                                        {
-                                          disabled:
-                                            query !== sheetQuery ||
-                                            !selected?.documentId ||
-                                            !records.includes(selected),
-                                          onClick: () => edit(selected.documentId),
-                                        },
-                                        page === 'materialContacts'
-                                          ? can('edit')
-                                            ? 'View/Edit'
-                                            : 'View'
-                                          : spec.master
-                                            ? 'Edit selected record'
-                                            : 'Edit selected document',
-                                      ),
-                                  ),
-                                page === 'materialStock' &&
-                                  view === 'sheet' &&
-                                  can('create', 'materialIssues') &&
-                                  h(
-                                    'button',
-                                    {
-                                      className: 'primary',
-                                      disabled: !selected || selected.left <= 0,
-                                      onClick: () => reconcile(selected.id),
-                                    },
-                                    'Reconcile selected stock',
-                                  ),
-                                h(RecordPageStatus, {
-                                  notice,
-                                  onRefresh: live ? refreshLive : undefined,
-                                }),
-                                view === 'overview' &&
-                                  !overviewColumns &&
-                                  records.length === 0 &&
-                                  h(RecordPageEmpty, {
-                                    query,
-                                    prompt: spec.master
-                                      ? 'Add the first record to get started.'
-                                      : 'Add the first document to get started.',
+                                      'Reconcile selected stock',
+                                    ),
+                                  h(RecordPageStatus, {
+                                    notice,
+                                    onRefresh: live ? refreshLive : undefined,
                                   }),
-                                view === 'overview'
-                                  ? overview()
-                                  : h(FabricSheet, {
-                                      key: actor + ':' + page,
-                                      page,
-                                      spec,
-                                      records,
-                                      client: live ? getAccessClient() : null,
-                                      preferences,
-                                      onSelect: setSelected,
-                                      onNotice: setNotice,
-                                      capabilities: {
-                                        format: can('format'),
-                                        export: can('export'),
-                                        print: can('print'),
-                                      },
+                                  view === 'overview' &&
+                                    !overviewColumns &&
+                                    records.length === 0 &&
+                                    h(RecordPageEmpty, {
+                                      query,
+                                      prompt: spec.master
+                                        ? 'Add the first record to get started.'
+                                        : 'Add the first document to get started.',
                                     }),
-                              ),
+                                  view === 'overview'
+                                    ? overview()
+                                    : h(FabricSheet, {
+                                        key: actor + ':' + page,
+                                        page,
+                                        spec,
+                                        records,
+                                        client: live ? getAccessClient() : null,
+                                        preferences,
+                                        onSelect: setSelected,
+                                        onNotice: setNotice,
+                                        capabilities: {
+                                          format: can('format'),
+                                          export: can('export'),
+                                          print: can('print'),
+                                        },
+                                      }),
+                                ),
       );
     }
     if (floor) return renderFloor();

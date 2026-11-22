@@ -1,5 +1,6 @@
 const transactionFields = {
   materialReceipts: {
+    is_transferable: 'is_transferable',
     inward_date: 'date',
     billed_quantity: 'quantity',
     billed_price: 'price',
@@ -43,7 +44,7 @@ const setupFields = {
 export const liveInventoryPage = (page) =>
   Object.hasOwn(transactionFields, page) ||
   Object.hasOwn(setupFields, page) ||
-  ['materialStock', 'materialMovements'].includes(page);
+  ['materialStock', 'materialMovements', 'transferableMaterials'].includes(page);
 
 function projectReceipt(row, orders, lines) {
   const line = lines.find((entry) => entry.id === row.raw_material_purchase_order_item_id);
@@ -77,6 +78,9 @@ export function inventoryCommands(client) {
           ),
         ),
       };
+    },
+    async recordMovement(payload) {
+      return rpc('erp_record_transferable_movement', payload);
     },
     async save({ resource, table, before, after, id }) {
       const previous = before[table].find((row) => row.id === id);
@@ -122,7 +126,11 @@ export function inventoryCommands(client) {
         p_values: Object.fromEntries(
           Object.entries(fields).map(([field, key]) => [
             field,
-            candidate[key] === '' ? null : (candidate[key] ?? null),
+            field === 'is_transferable'
+              ? Boolean(candidate[key])
+              : candidate[key] === ''
+                ? null
+                : (candidate[key] ?? null),
           ]),
         ),
       });

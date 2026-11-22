@@ -357,16 +357,18 @@ export function inventoryOptions(data, source, s) {
       `${s.dyed(r).batch} · ${s.dyed(r).k.name} · ${s.dyed(r).color.name}`,
     ]);
   if (source === 'stockReceipts')
-    return data.raw_material_check_in.map((r) => {
-      const issued = data.raw_material_check_out
-          .filter((o) => o.raw_material_check_in_id === r.id)
-          .reduce((n, o) => n + o.quantity, 0),
-        details = receipt(r);
-      return [
-        r.id,
-        `${r.sku || r.id} · ${details.name} · ${r.quantity - issued} ${details.unit} available`,
-      ];
-    });
+    return data.raw_material_check_in
+      .filter((r) => !r.is_transferable)
+      .map((r) => {
+        const issued = data.raw_material_check_out
+            .filter((o) => o.raw_material_check_in_id === r.id)
+            .reduce((n, o) => n + o.quantity, 0),
+          details = receipt(r);
+        return [
+          r.id,
+          `${r.sku || r.id} · ${details.name} · ${r.quantity - issued} ${details.unit} available`,
+        ];
+      });
   return null;
 }
 export function validateInventory(data) {

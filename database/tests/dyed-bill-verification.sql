@@ -185,7 +185,7 @@ begin
  if (select count(*) from jsonb_array_elements(result->'actual_consumption') x where x->>'variant_item_id'=body_variant::text and x->>'fabric_type_id'=fabric::text and (x->>'consumed_kg')::numeric=0.1)<>1
   or exists(select 1 from garments_erp.fabric_plan_requirements where id in (component,body_requirement) and consumed_kg is not null)
  then raise exception 'TEST actual consumed kg duplicated or allocated to sub-parts';end if;
- delete from garments_erp.raw_material_check_out where id=saved_issue;
+ -- Stock Out history is retained; the enclosing test transaction rolls it back.
  delete from garments_erp.item_part_fabric where id=component;
  perform set_config('request.jwt.claim.sub','',true);perform set_config('request.jwt.claims','{}',true);
  update garments_erp.employee_status set is_active=false where employee_id=900001;

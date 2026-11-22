@@ -195,6 +195,7 @@ export function BillEditor({
           ? h('input', {
               type: 'checkbox',
               checked: Boolean(value),
+              disabled: f.disabled || f.readOnly,
               onChange: (e) => onChange(e.target.checked),
               'aria-label': `${prefix}${f.label}`,
             })
@@ -485,6 +486,10 @@ export function BillEditor({
                 key: mode,
                 type: 'button',
                 'aria-pressed': receiptMode === mode,
+                disabled: Boolean(
+                  (data.transferable_receipt_state || []).find((r) => r.id === draft.header.id)
+                    ?.identity_locked,
+                ),
                 onClick: () => {
                   setReceiptMode(mode);
                   setDraft((d) => ({ ...d, header: switchReceiptMode(d.header, mode) }));
@@ -510,6 +515,16 @@ export function BillEditor({
         'p',
         { className: 'editor-note' },
         `SKU: ${draft.header.sku || 'assigned automatically when saved'}`,
+      ),
+    page === 'materialReceipts' &&
+      !review &&
+      (data.transferable_receipt_state || []).find((r) => r.id === draft.header.id)
+        ?.transferability_lock_reason &&
+      h(
+        'p',
+        { className: 'editor-note' },
+        (data.transferable_receipt_state || []).find((r) => r.id === draft.header.id)
+          .transferability_lock_reason,
       ),
     error && h('p', { className: 'form-error', role: 'alert' }, error),
     review

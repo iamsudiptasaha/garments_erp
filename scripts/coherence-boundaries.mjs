@@ -151,7 +151,7 @@ export function checkBoundaries(){
  const receiptCatalog='fabric-poc/src/inventory/catalog.js';
  const receiptField="      select('material_category_id', 'Material category', 'materialCategories', false),\n";
  const receiptSource=readFileSync(resolve(root,receiptCatalog),'utf8');
- const receiptLayout='          byKey.material_category_id,\n';
+ const receiptLayout='          { ...byKey.material_category_id, disabled: locked },\n';
  const receiptLayoutPath='fabric-poc/src/inventory/receipts.js';
  const receiptSql=functions.get(receiptCategory?.command);
  const receiptAdapter=readFileSync(resolve(root,'fabric-poc/src/fabric/inventory-live.js'),'utf8');
@@ -174,6 +174,13 @@ export function checkBoundaries(){
   receiptSql.includes("stage_id = case when p_values ? 'stage_id'") &&
   receiptAdapter.includes("'stage_id',") &&
   functions.get('garments_erp.raw_material_transaction_snapshot')?.includes("if can_issue then tables := tables || array['stage'];");
+ const transferable=policy.transferableInventory;
+ if(!transferable || transferable.root!=='raw_material_check_in' || transferable.history!=='transferable_item_movement' ||
+  transferable.foreignKeys?.item_id!=='item' || transferable.foreignKeys?.job_worker_id!=='job_worker' ||
+  !functions.get(transferable.saveFunction)?.includes("has_screen_permission('transferableMaterials','create')") ||
+  !functions.get('garments_erp.guard_transferable_movement')?.includes('garments_erp.transferable_actions(') ||
+  !functions.get(transferable.readFunction)?.includes("'transferable_receipt_state',garments_erp.transferable_receipt_projection()"))
+   throw Error('Transferable Materials: receipt ownership, linked records or guarded command differs');
  const errors=inspectBoundaries({schema:contactReleaseSchema(json('database/schema/live-schema.json')),catalogue:json('database/catalogue/screen-table-map.json'),policy,functions});
  if(!checkoutReviewed)errors.push('Stock outward: stage selector and transaction write contract differ');
  if(!receiptReviewed)errors.push('Stock receipts: category selector and transaction write contract differ');
