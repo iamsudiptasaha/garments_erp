@@ -112,9 +112,11 @@ function RequirementRows({ table, preferences, save, onRules, onOpen }) {
                             },
                             r.style,
                           )
-                        : typeof r[c.id] === 'number'
-                          ? kg(r[c.id])
-                          : r[c.id],
+                        : c.id === 'status'
+                          ? h('span', { className: 'erp-overview-status' }, r.status)
+                          : typeof r[c.id] === 'number'
+                            ? kg(r[c.id])
+                            : r[c.id],
                   ),
                 ),
               ),
@@ -245,6 +247,7 @@ export function FabricPlanner({ client, canEdit, canLink, capabilities }) {
     () => [
       ...plannerFields.map(([key, label]) => ({ key, label })),
       ...fabrics.map((f) => ({ key: f.id, label: f.name + ' · kg', numeric: true })),
+      { key: 'status', label: 'Fabric Status' },
     ],
     [fabrics],
   );
@@ -280,6 +283,7 @@ export function FabricPlanner({ client, canEdit, canLink, capabilities }) {
             grid: 'overview-fabric-planner',
             title: 'Fabric Planner',
             records: filtered,
+            manualFiltering: true,
             initialPreferences: defaults,
             externalSearch: query,
             onSearch: changeQuery,

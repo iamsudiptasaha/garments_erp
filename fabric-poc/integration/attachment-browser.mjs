@@ -1117,7 +1117,7 @@ async function fabricPlannerWorkflow() {
   await search.fill(style + ' missing');
   await page.getByText('No matching records', { exact: true }).waitFor();
   await search.fill(style);
-  const requirementRows = page.locator('[data-requirement]');
+  const requirementRows = page.locator('[data-requirement]').filter({ hasText: style });
   await requirementRows.first().waitFor();
   const openRequirement = async () => {
     await requirementRows.filter({ hasText: 'Main sleeve' }).getByRole('button').click();
@@ -1166,46 +1166,80 @@ async function fabricPlannerWorkflow() {
   );
   assert.equal(Number(components.count), 2);
   assert.equal(Number(components.dips), 2);
-  // Exercise the actual worksheet with SQL-backed requirements, not just a mocked projection.
-  await button(page, 'Sheet View').click();
-  await page.getByRole('combobox', { name: 'Sort column' }).waitFor();
-  const [sheetDownload] = await Promise.all([
-    page.waitForEvent('download'),
-    button(page, 'Export CSV').click(),
-  ]);
-  const sheetBytes = [];
-  for await (const chunk of await sheetDownload.createReadStream()) sheetBytes.push(chunk);
-  const exported = Buffer.concat(sheetBytes)
-    .toString('utf8')
-    .trim()
-    .split(/\r?\n/)
-    .map((line) =>
-      Array.from(line.matchAll(/"((?:[^"]|"")*)"/g), (match) => match[1].replaceAll('""', '"')),
-    );
-  const { rows: fabricTotals } = await db.query(
-    `select t.name, sum(r.required_kg) as kg from garments_erp.fabric_plan_estimates r
+  async function verifyPlannerStatuses() {
+    // Search is deliberately debounced: wait for the exact filtered data before exporting.
+    await page.waitForFunction((expectedStyle) => {
+      const rows = [...document.querySelectorAll('[data-requirement]')];
+      return rows.length === 2 && rows.every((row) => row.textContent.includes(expectedStyle));
+    }, style);
+    await button(page, 'Sheet View').click();
+    await page.getByRole('combobox', { name: 'Sort column' }).waitFor();
+    const [sheetDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      button(page, 'Export CSV').click(),
+    ]);
+    const sheetBytes = [];
+    for await (const chunk of await sheetDownload.createReadStream()) sheetBytes.push(chunk);
+    const exported = Buffer.concat(sheetBytes)
+      .toString('utf8')
+      .trim()
+      .split(/\r?\n/)
+      .map((line) =>
+        Array.from(line.matchAll(/"((?:[^"]|"")*)"/g), (match) => match[1].replaceAll('""', '"')),
+      );
+    const { rows: fabricTotals } = await db.query(
+      `select t.name, sum(r.required_kg) as kg from garments_erp.fabric_plan_estimates r
      join garments_erp.item i on i.id=r.item_id join garments_erp.fabric_type t on t.id=r.fabric_type_id
      where i.style_code=$1 group by t.id,t.name`,
-    [style],
-  );
-  assert.equal(
-    exported[0].length,
-    6 + fabricTotals.length,
-    'Only filtered fabric columns belong in Sheet',
-  );
-  for (const total of fabricTotals) {
-    const column = exported[0].indexOf(total.name + ' · kg');
-    assert.ok(column >= 6, 'Missing SQL fabric column');
-    assert.equal(
-      Number(exported.at(-1)[column]),
-      Number(total.kg),
-      'Sheet grand total differs from SQL',
+      [style],
     );
+    assert.equal(
+      exported[0].length,
+      7 + fabricTotals.length,
+      'Only filtered fabric columns belong in Sheet',
+    );
+    for (const total of fabricTotals) {
+      const column = exported[0].indexOf(total.name + ' · kg');
+      assert.ok(column >= 6, 'Missing SQL fabric column');
+      assert.equal(
+        Number(exported.at(-1)[column]),
+        Number(total.kg),
+        'Sheet grand total differs from SQL',
+      );
+    }
+    assert.equal(exported[0].at(-1), 'Fabric Status');
+    const { rows: statuses } = await db.query(
+      `select r.id,r.sub_part_name,s.type from garments_erp.fabric_plan_estimates r
+     join garments_erp.item i on i.id=r.item_id
+     join garments_erp.item_part_fabric_status s on s.id=r.item_part_fabric_status_id
+     where i.style_code=$1`,
+      [style],
+    );
+    for (const status of statuses) {
+      const exportedRequirement = exported.filter((row) => row[4] === status.sub_part_name);
+      assert.equal(exportedRequirement.length, 1);
+      assert.equal(
+        exportedRequirement[0].at(-1),
+        status.type,
+        'Sheet status must match its SQL requirement',
+      );
+    }
+    assert.ok(
+      exported
+        .filter((row) => row[0].endsWith(' subtotal') || row[0] === 'Grand total')
+        .every((row) => row.at(-1) === ''),
+    );
+    assert.equal(exported.at(-1)[0], 'Grand total');
+    await button(page.getByRole('group', { name: 'Fabric Planner view' }), 'Overview').click();
+    await requirementRows.filter({ hasText: 'Main sleeve' }).waitFor();
+    for (const status of statuses) {
+      await page
+        .locator(`[data-requirement="${status.id}"]`)
+        .getByText(status.type, { exact: true })
+        .waitFor();
+    }
   }
-  assert.equal(exported.filter((row) => row[4] === 'Main sleeve').length, 1);
-  assert.equal(exported.at(-1)[0], 'Grand total');
-  await button(page.getByRole('group', { name: 'Fabric Planner view' }), 'Overview').click();
-  await requirementRows.filter({ hasText: 'Main sleeve' }).waitFor();
+  await verifyPlannerStatuses();
   await search.fill(style);
   await requirementRows.filter({ hasText: 'Main sleeve' }).waitFor();
   for (const [label, status] of [
@@ -1229,6 +1263,7 @@ async function fabricPlannerWorkflow() {
       ),
       status,
     );
+    await verifyPlannerStatuses();
   }
 
   assert.ok(
@@ -1292,6 +1327,11 @@ async function fabricPlannerWorkflow() {
       ),
       status,
     );
+    await button(page, 'Fabric Planner').click();
+    await page.getByRole('heading', { name: 'Fabric Planner', exact: true }).waitFor();
+    await search.fill(style);
+    await requirementRows.filter({ hasText: 'Main sleeve' }).waitFor();
+    await verifyPlannerStatuses();
   }
   await page.goto(
     app + '/fabric.html?live=1&plannerProgram=' + link.dyeing_program_id + '#fabricPlanner',
@@ -1380,6 +1420,11 @@ async function fabricPlannerWorkflow() {
     assert.equal(persisted.id, requirement.id);
     assert.equal(Number(persisted.consumption_per_piece_kg), Number(consumption));
     assert.equal(Number(persisted.item_part_fabric_status_id), status);
+    await button(page, 'Fabric Planner').click();
+    await page.getByRole('heading', { name: 'Fabric Planner', exact: true }).waitFor();
+    await search.fill(style);
+    await requirementRows.filter({ hasText: 'Main sleeve' }).waitFor();
+    await verifyPlannerStatuses();
   }
   assert.equal(
     Number(

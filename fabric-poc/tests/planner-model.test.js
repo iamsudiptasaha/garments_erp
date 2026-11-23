@@ -121,3 +121,35 @@ test('worksheet sort keeps each subtotal with its colour and grand total last', 
     ['b', 'a'],
   );
 });
+
+test('effective SQL statuses stay attached to requirement IDs and never populate summary rows', () => {
+  const statuses = ['Not ordered', 'Ordered', 'Received', 'On hold', 'Reused in-house fabric'].map(
+    (type, i) => ({ id: String(i + 1), type }),
+  );
+  const records = plannerRequirements({
+    ...snapshot,
+    statuses,
+    requirements: statuses.map((status) => ({
+      ...snapshot.requirements[0],
+      id: 'req-' + status.id,
+      item_part_fabric_status_id: status.id,
+      manual_status_id: null,
+    })),
+  });
+  assert.deepEqual(
+    records.map((r) => [r.id, r.status]),
+    statuses.map((s) => ['req-' + s.id, s.type]),
+  );
+  const rows = plannerSheetRows(records, plannerFabrics(records));
+  assert.equal(rows.filter((r) => r.summary).length, 2);
+  assert.ok(rows.filter((r) => r.summary).every((r) => r.status === ''));
+  const sorted = orderedRecords({
+    records: rows,
+    sort: { key: 'status', direction: 'asc' },
+    grouping: { key: 'colour', summaryKey: 'summary' },
+  });
+  assert.deepEqual(
+    sorted.filter((r) => !r.summary).map((r) => r.status),
+    [...statuses.map((s) => s.type)].sort(),
+  );
+});

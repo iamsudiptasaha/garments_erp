@@ -87,7 +87,7 @@ test('approved Planner uses shared controls, identities, totals and independent 
   await page.locator('.erp-grid-columns summary').click();
   await page.getByRole('searchbox', { name: 'Search fabric requirements' }).fill('Red');
   await expect(page.getByRole('combobox', { name: 'Sort column' }).locator('option')).toHaveCount(
-    7,
+    8,
   );
   await expect(
     page.getByRole('combobox', { name: 'Sort column' }).locator('option'),
@@ -167,4 +167,92 @@ test('Overview ungrouping restores global sorting without changing Sheet groupin
   await page.keyboard.press('Escape');
   await expect(page.locator('.planner-group')).toHaveCount(2);
   await expect(page.getByTestId('subtotal:Red')).toContainText('19.25');
+});
+
+test('Fabric Status stays requirement-specific, filterable, sortable and configurable', async ({
+  page,
+}) => {
+  await open(page, 'status-operator');
+  await expect(page.locator('thead').getByRole('columnheader').last()).toContainText(
+    'Fabric Status',
+  );
+  for (const [id, status] of [
+    ['1', 'Not ordered'],
+    ['2', 'Ordered'],
+    ['3', 'Received'],
+    ['4', 'On hold'],
+  ]) {
+    await expect(page.locator(`[data-requirement="${id}"] .erp-overview-status`)).toHaveText(
+      status,
+    );
+  }
+  await expect(page.getByTestId('subtotal:Red').locator('td').last()).toBeEmpty();
+  await expect(page.getByTestId('grand').locator('td').last()).toBeEmpty();
+  await page
+    .getByRole('columnheader', { name: /Fabric Status/ })
+    .getByRole('button')
+    .click();
+  await expect(page.getByRole('columnheader', { name: /Fabric Status/ })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  );
+  await expect(page.locator('[data-requirement]').nth(1)).toHaveAttribute('data-requirement', '1');
+  await page
+    .getByRole('columnheader', { name: /Fabric Status/ })
+    .getByRole('button')
+    .click();
+  await expect(page.locator('[data-requirement]').nth(1)).toHaveAttribute('data-requirement', '2');
+  await page.getByRole('button', { name: /^Filter/ }).click();
+  await page.getByRole('button', { name: '+ Add filter rule' }).click();
+  await page.getByRole('combobox', { name: 'Filter field 1' }).selectOption('status');
+  await page.getByRole('combobox', { name: 'Filter operator 1' }).selectOption('is');
+  await page.getByRole('textbox', { name: 'Filter value 1' }).fill('Ordered');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-requirement]')).toHaveCount(1);
+  await expect(page.locator('[data-requirement]')).toHaveAttribute('data-requirement', '2');
+  await expect(page.getByTestId('grand')).toContainText('2');
+  await expect(page.getByRole('columnheader', { name: /Dynamic rib/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Sheet View', exact: true }).click();
+  await expect(page.getByText('3 rows', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('combobox', { name: 'Sort column' }).locator('option').last(),
+  ).toHaveText('Fabric Status');
+  await page.getByRole('combobox', { name: 'Sort column' }).selectOption('status');
+  await page.getByRole('combobox', { name: 'Sort direction' }).selectOption('asc');
+  await page.getByRole('combobox', { name: 'Sort direction' }).selectOption('desc');
+  await page.locator('.fortune-sheet-overlay').click({ position: { x: 85, y: 82 } });
+  await page.getByRole('button', { name: 'View source', exact: true }).click();
+  const source = page.getByRole('dialog', { name: 'Fabric requirement source' });
+  await expect(source).toContainText('Sleeve');
+  await expect(
+    source.getByText('Requirement ID', { exact: true }).locator('..').locator('dd'),
+  ).toHaveText('2');
+  await page.keyboard.press('Escape');
+  await page.locator('.erp-grid-columns summary').click();
+  await page.getByRole('combobox', { name: 'Column to configure' }).selectOption('status');
+  await page.getByRole('button', { name: 'Hide column', exact: true }).click();
+  await page.locator('.erp-grid-columns summary').click();
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await expect(page.getByRole('columnheader', { name: /Fabric Status/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear all', exact: true }).click();
+  await expect(page.locator('[data-requirement]')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Columns', exact: true }).click();
+  await page.getByRole('button', { name: 'Move Fabric Status left' }).click();
+  await page.getByRole('checkbox', { name: 'Fabric Status', exact: true }).uncheck();
+  await page.keyboard.press('Escape');
+  await page.reload();
+  await expect(page.getByRole('columnheader', { name: /Fabric Status/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Columns', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Fabric Status', exact: true }).check();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('thead').getByRole('columnheader').nth(7)).toContainText(
+    'Fabric Status',
+  );
+  await page.evaluate(() => window.refreshPlannerFixture());
+  await expect(page.locator('[data-requirement="2"] .erp-overview-status')).toHaveText(
+    'Reused in-house fabric',
+  );
+  await expect(page.locator('[data-requirement="1"] .erp-overview-status')).toHaveText(
+    'Not ordered',
+  );
 });
