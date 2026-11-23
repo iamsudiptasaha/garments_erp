@@ -139,3 +139,32 @@ test('approved Planner uses shared controls, identities, totals and independent 
   await expect(page.getByRole('columnheader', { name: /^Variant/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+// Removing grouping must restore the shared table's global row sort, not just hide headings.
+test('Overview ungrouping restores global sorting without changing Sheet grouping', async ({
+  page,
+}) => {
+  await open(page, 'ungrouped-operator');
+  await page.getByRole('button', { name: /^Group/ }).click();
+  await page.getByRole('button', { name: 'Remove group rule 1' }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /^Sort/ }).click();
+  await page.getByRole('combobox', { name: 'Sort field 1' }).selectOption('subpart');
+  await page.getByRole('combobox', { name: 'Sort direction 1' }).selectOption('desc');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.planner-group')).toHaveCount(0);
+  await expect(page.locator('[data-testid^="subtotal:"]')).toHaveCount(0);
+  await expect(page.locator('[data-requirement]').first()).toHaveAttribute('data-requirement', '2');
+  await expect(page.getByTestId('grand')).toContainText('19.25');
+  await page.reload();
+  await expect(page.locator('[data-requirement]').first()).toHaveAttribute('data-requirement', '2');
+  await page.getByRole('button', { name: 'Sheet View', exact: true }).click();
+  await expect(page.getByText('7 rows', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await expect(page.locator('.planner-group')).toHaveCount(0);
+  await page.getByRole('button', { name: /^Group/ }).click();
+  await page.getByRole('button', { name: '+ Add grouping level' }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.planner-group')).toHaveCount(2);
+  await expect(page.getByTestId('subtotal:Red')).toContainText('19.25');
+});

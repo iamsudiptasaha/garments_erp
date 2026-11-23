@@ -1166,6 +1166,46 @@ async function fabricPlannerWorkflow() {
   );
   assert.equal(Number(components.count), 2);
   assert.equal(Number(components.dips), 2);
+  // Exercise the actual worksheet with SQL-backed requirements, not just a mocked projection.
+  await button(page, 'Sheet View').click();
+  await page.getByRole('combobox', { name: 'Sort column' }).waitFor();
+  const [sheetDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    button(page, 'Export CSV').click(),
+  ]);
+  const sheetBytes = [];
+  for await (const chunk of await sheetDownload.createReadStream()) sheetBytes.push(chunk);
+  const exported = Buffer.concat(sheetBytes)
+    .toString('utf8')
+    .trim()
+    .split(/\r?\n/)
+    .map((line) =>
+      Array.from(line.matchAll(/"((?:[^"]|"")*)"/g), (match) => match[1].replaceAll('""', '"')),
+    );
+  const { rows: fabricTotals } = await db.query(
+    `select t.name, sum(r.required_kg) as kg from garments_erp.fabric_plan_estimates r
+     join garments_erp.item i on i.id=r.item_id join garments_erp.fabric_type t on t.id=r.fabric_type_id
+     where i.style_code=$1 group by t.id,t.name`,
+    [style],
+  );
+  assert.equal(
+    exported[0].length,
+    6 + fabricTotals.length,
+    'Only filtered fabric columns belong in Sheet',
+  );
+  for (const total of fabricTotals) {
+    const column = exported[0].indexOf(total.name + ' · kg');
+    assert.ok(column >= 6, 'Missing SQL fabric column');
+    assert.equal(
+      Number(exported.at(-1)[column]),
+      Number(total.kg),
+      'Sheet grand total differs from SQL',
+    );
+  }
+  assert.equal(exported.filter((row) => row[4] === 'Main sleeve').length, 1);
+  assert.equal(exported.at(-1)[0], 'Grand total');
+  await button(page.getByRole('group', { name: 'Fabric Planner view' }), 'Overview').click();
+  await requirementRows.filter({ hasText: 'Main sleeve' }).waitFor();
   await search.fill(style);
   await requirementRows.filter({ hasText: 'Main sleeve' }).waitFor();
   for (const [label, status] of [
