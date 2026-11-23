@@ -73,6 +73,7 @@ export function plannerSheetRows(records, fabrics) {
     part: '',
     subpart: '',
     lab: '',
+    status: '',
     summary,
     displayValues: { colour: [summary === 'subtotal' ? colour + ' subtotal' : colour] },
     ...Object.fromEntries(fabrics.map((f) => [f.id, plannerTotal(rows, f.id)])),

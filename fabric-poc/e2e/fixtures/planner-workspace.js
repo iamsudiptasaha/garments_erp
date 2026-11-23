@@ -17,7 +17,13 @@ const snapshot = {
     { id: '8', name: 'Dynamic rib' },
   ],
   sub_parts: [],
-  statuses: [{ id: '1', type: 'Not ordered' }],
+  statuses: [
+    { id: '1', type: 'Not ordered' },
+    { id: '2', type: 'Ordered' },
+    { id: '3', type: 'Received' },
+    { id: '4', type: 'On hold' },
+    { id: '5', type: 'Reused in-house fabric' },
+  ],
   program_items: [],
   links: [],
   actual_consumption: [],
@@ -42,7 +48,7 @@ const snapshot = {
       sub_part_name: 'Sleeve',
       required_kg: 2,
       consumption_per_piece_kg: 0.02,
-      item_part_fabric_status_id: '1',
+      item_part_fabric_status_id: '2',
     },
     {
       id: '3',
@@ -53,7 +59,7 @@ const snapshot = {
       sub_part_name: 'Neck Rib',
       required_kg: 5.5,
       consumption_per_piece_kg: 0.055,
-      item_part_fabric_status_id: '1',
+      item_part_fabric_status_id: '3',
     },
     {
       id: '4',
@@ -64,7 +70,7 @@ const snapshot = {
       sub_part_name: 'Body',
       required_kg: 3.25,
       consumption_per_piece_kg: 0.0325,
-      item_part_fabric_status_id: '1',
+      item_part_fabric_status_id: '4',
     },
   ],
 };
@@ -89,6 +95,7 @@ const client = {
 };
 window.refreshPlannerFixture = () => {
   snapshot.requirements[1].required_kg = 3;
+  snapshot.requirements[1].item_part_fabric_status_id = '5';
   render(1);
 };
 function render(key = 0) {

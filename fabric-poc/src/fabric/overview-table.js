@@ -204,6 +204,7 @@ export function OverviewTable({
   renderBody,
   tableClassName,
   externalSearch,
+  manualFiltering = false,
 }) {
   const { preferences, ready, save, error } = useGridPreferences(
     client,
@@ -240,6 +241,7 @@ export function OverviewTable({
   const table = useReactTable({
     data: records,
     autoResetAll: false,
+    manualFiltering,
     columns: columns.map((column, index) => ({ ...column, enableHiding: index > 0 })),
     defaultColumn: { filterFn: filterRules, minSize: 48, maxSize: 1600 },
     getRowId,
