@@ -27,9 +27,9 @@ function RequirementRows({ table, preferences, save, onRules, onOpen }) {
     .flatRows.filter((r) => !r.getIsGrouped())
     .map((r) => r.original);
   const columns = table.getVisibleLeafColumns();
-  const groups = plannerGroups(records);
-  if (preferences.sorting?.find((rule) => rule.id === 'colour')?.desc) groups.reverse();
   const grouped = preferences.grouping?.includes('colour');
+  const groups = grouped ? plannerGroups(records) : [{ colour: 'ungrouped', records }];
+  if (grouped && preferences.sorting?.find((rule) => rule.id === 'colour')?.desc) groups.reverse();
   const expanded = preferences.expanded ?? true;
   const isOpen = (colour) => expanded === true || expanded['colour:' + colour] === true;
   const total = (rows, label, id) =>
@@ -119,7 +119,7 @@ function RequirementRows({ table, preferences, save, onRules, onOpen }) {
                 ),
               ),
             ),
-          total(g.records, g.colour + ' subtotal', 'subtotal:' + g.colour),
+          grouped && total(g.records, g.colour + ' subtotal', 'subtotal:' + g.colour),
         ),
       ),
     ),
