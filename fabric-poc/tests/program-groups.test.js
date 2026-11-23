@@ -82,3 +82,18 @@ test('receipt provenance and existing program identities cannot be moved', () =>
   group.lab_dip_version_id = 'new-version';
   assert.throws(() => saveProgram(data, draft), /receipt provenance/);
 });
+
+test('repeated manual fabric rows require an explicit target instead of guessing', () => {
+  const { data, rows, lab } = fixture(),
+    draft = programDraft(data);
+  draft.header.dyer_id = 'dy1';
+  const next = addPlannerRequirements(draft, lab, 'seed-navy-v1', ['1'], rows);
+  next.items.push({ ...next.items[0], id: crypto.randomUUID(), quantity: 3 });
+  assert.throws(
+    () => addPlannerRequirements(next, lab, 'seed-navy-v1', ['2'], rows),
+    /Choose Manage Links/,
+  );
+  const targeted = reconcileProgramLinks(next, next.items[0].id, ['1', '2'], rows);
+  assert.equal(targeted.items[0].quantity, 16.125);
+  assert.equal(targeted.items[1].quantity, 3);
+});

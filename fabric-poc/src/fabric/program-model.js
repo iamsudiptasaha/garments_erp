@@ -67,9 +67,14 @@ export function addPlannerRequirements(draft, labId, versionId, selectedIds, req
   if (!selected.length || selected.some((r) => !r || r.lab_dip_id !== labId))
     throw Error('Select matching planner requirements.');
   for (const fabric of new Set(selected.map((r) => r.fabric_type_id))) {
-    let item = next.items.find(
+    const candidates = next.items.filter(
       (i) => i.dyeing_program_lab_dip_id === group.id && i.fabric_type_id === fabric,
     );
+    if (candidates.length > 1)
+      throw Error(
+        'Several rows use this edition and fabric. Choose Manage Links on the intended row.',
+      );
+    let item = candidates[0];
     if (!item) {
       item = {
         id: crypto.randomUUID(),
