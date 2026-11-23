@@ -99,6 +99,12 @@ begin
  -- Existing public command owns revision, authorization and all composite link changes.
  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
  perform set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","aal":"aal2","amr":[{"method":"password"}],"session_id":"10000000-0000-4000-8000-000000000001"}',true);
+ -- Exercise the actual browser database role, not only a postgres session carrying JWT claims.
+ select garments_erp.fabric_json('item_part_fabric',to_jsonb(f)) into expected from garments_erp.item_part_fabric f where id=req;
+ execute 'set local role authenticated';
+ perform public.erp_save_fabric_requirement(req,vi,expected,jsonb_build_object('fabric_type_id',ft::text,'lab_dip_id',lab::text,'sub_part_name','Body','consumption_per_piece_kg',0.525));
+ set constraints all immediate;
+ execute 'reset role';
  select garments_erp.fabric_json('dyeing_program',to_jsonb(p0)) into expected from garments_erp.dyeing_program p0 where id=p;
  root:=jsonb_build_object('table','dyeing_program','id',p::text,'before',expected);
  payload:=jsonb_build_array(jsonb_build_object('table','fabric_plan_dyeing_link','id',req2||':'||i,'before',null,'values',jsonb_build_object('item_part_fabric_id',req2::text,'dyeing_program_item_id',i::text)));
@@ -112,6 +118,14 @@ begin
  -- A manual edit after recalculation remains legal.
  update garments_erp.dyeing_program_item set quantity=77 where id=i;
 
+ select garments_erp.fabric_json('dyeing_program',to_jsonb(p0)) into expected from garments_erp.dyeing_program p0 where id=p;
+ root:=jsonb_build_object('table','dyeing_program','id',p::text,'before',expected);
+ update garments_erp.dyeing_program_item set quantity=78 where id=i;
+ begin
+  perform public.erp_save_fabric_document('programs',root,'edit',jsonb_build_array(jsonb_build_object('table','dyeing_program','id',p::text,'before',expected,'values',jsonb_build_object('dyer_id',dy::text))));
+  raise exception 'TEST stale child-only revision accepted';
+ exception when serialization_failure then null;end;
+ update garments_erp.dyeing_program_item set quantity=77 where id=i;
  perform public.erp_set_fabric_plan_dyeing_link(req2,i,false,'programs');
  select garments_erp.fabric_json('dyeing_program',to_jsonb(p0)) into expected from garments_erp.dyeing_program p0 where id=p;
  root:=jsonb_build_object('table','dyeing_program','id',p::text,'before',expected);

@@ -1317,10 +1317,9 @@ async function fabricPlannerWorkflow() {
       .getByRole('cell')
       .first()
       .click();
-    await pick(dialog, 'Program status', label);
     await dialog.getByLabel('Program date', { exact: true }).fill('2026-11-22');
-    await b('Review document →').click();
-    await b('Confirm & save document').click();
+    await b(label === 'Final' ? 'Review finalization' : 'Review changes').click();
+    await b('Confirm save').click();
     await hidden();
     assert.equal(
       Number(

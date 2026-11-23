@@ -1187,6 +1187,7 @@ function App({ live, refreshWorkspaceAccess }) {
       return plannerView
         ? h(plannerProgram ? ProgramFabricPlanner : FabricPlanner, {
             key: plannerProgram || 'all',
+            onSourceChange: refreshLive,
             client: getAccessClient(),
             program: plannerProgram,
             canEdit: can('edit', 'productionItems'),

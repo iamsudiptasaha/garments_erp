@@ -238,7 +238,14 @@ export function FabricPlanEdit({
   );
 }
 
-export function ProgramFabricPlanner({ client, canEdit, canLink, program, capabilities }) {
+export function ProgramFabricPlanner({
+  client,
+  canEdit,
+  canLink,
+  program,
+  capabilities,
+  onSourceChange,
+}) {
   const [snapshot, setSnapshot] = useState(null);
   const [status, setStatus] = useState('Loading fabric plan…');
   const [query, setQuery] = useState('');
@@ -593,8 +600,9 @@ export function ProgramFabricPlanner({ client, canEdit, canLink, program, capabi
         canEdit,
         canLink,
         onClose: () => setOpen(false),
-        onSave: (data) => {
+        onSave: async (data) => {
           setSnapshot(data);
+          await onSourceChange?.();
           setStatus('Fabric plan saved.');
           setOpen(false);
         },

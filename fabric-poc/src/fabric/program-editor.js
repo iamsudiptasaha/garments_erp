@@ -16,6 +16,9 @@ import {
   saveProgram,
 } from './program-model.js';
 
+const statusLabel = (id) => ({ 1: 'Draft', 2: 'Final' })[id] || 'Unclassified';
+const statusChange = (before, after) =>
+  before === after ? statusLabel(after) : statusLabel(before) + ' → ' + statusLabel(after);
 const kg = (n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 3 });
 const button = (label, onClick, extra = {}) =>
   h('button', { type: 'button', onClick, ...extra }, label);
@@ -484,7 +487,7 @@ export function ProgramEditor({
           h(
             'p',
             null,
-            `${review.draft.header.date} · ${data.contacts.find((c) => c.id === data.dyer.find((d) => d.id === review.draft.header.dyer_id)?.contacts_id)?.company_name || 'Dyer'} · ${review.draft.header.dyeing_program_status_id === '2' ? (draft.header.dyeing_program_status_id === '2' ? 'Final' : 'Draft → Final') : review.draft.header.dyeing_program_status_id === '1' ? 'Draft' : 'Unclassified'}`,
+            `${review.draft.header.date} · ${data.contacts.find((c) => c.id === data.dyer.find((d) => d.id === review.draft.header.dyer_id)?.contacts_id)?.company_name || 'Dyer'} · ${statusChange(draft.header.dyeing_program_status_id, review.draft.header.dyeing_program_status_id)}`,
           ),
           summary(review.draft, programDraft(data, id)),
           programDraft(data, id).items.some(
@@ -740,16 +743,23 @@ export function ProgramEditor({
             'div',
             { className: 'editor-actions' },
             h('button', { type: 'submit', className: 'primary' }, 'Review changes'),
-            draft.header.dyeing_program_status_id !== '2' &&
-              button('Review finalization', () =>
+            button(
+              draft.header.dyeing_program_status_id === '2'
+                ? 'Review as Draft'
+                : 'Review finalization',
+              () =>
                 attempt(() => {
                   const next = {
                     ...draft,
-                    header: { ...draft.header, dyeing_program_status_id: '2' },
+                    header: {
+                      ...draft.header,
+                      dyeing_program_status_id:
+                        draft.header.dyeing_program_status_id === '2' ? '1' : '2',
+                    },
                   };
                   setReview({ after: saveProgram(data, next), draft: next });
                 }),
-              ),
+            ),
           ),
         ),
     !review && h('div', { className: 'editor-actions' }, button('Cancel', onClose)),

@@ -1,6 +1,6 @@
 # Dyeing edition groups — approved implementation on dev
 
-Migration: `20261123200917_lab_dip_edition_groups.sql`. This change has not been applied to hosted Supabase. No production deployment is authorized.
+Migrations: `20261123200917_lab_dip_edition_groups.sql` and `20261123210053_fabric_requirement_integrity_boundary.sql`. This change has not been applied to hosted Supabase. No production deployment is authorized.
 
 ## Ownership and persistence
 
@@ -16,7 +16,9 @@ Previous batches must have the same edition, may have another version, and canno
 
 The existing public `erp_save_fabric_document` and private core save header, groups, items and links together. Groups precede items; deletes run in reverse. Composite links are handled explicitly through their two actual keys, never a synthetic database ID. Existing links reopen selected; addition reviews retain the complete set and recalculate only affected ordered quantities from authoritative SQL requirement kg. Manual overrides afterward are preserved. Unlinking preserves the item's quantity and other rows. Removals are explicit and included in review.
 
-Link mutations require program create/edit plus Production Items view; existing one-link Planner permissions remain unchanged. The private group table has RLS and no browser grants. Catalogue mappings inherit the existing program-item read permissions. Snapshots serialize all bigint references as strings. A link-set digest in `fabric_json` invalidates stale complete-set reviews even for link-only writes where the timestamp trigger correctly treats a header-only stamp as a no-op. The reviewed SQL total also rejects stale planner quantities. Existing row/root optimistic checks, audit logging and dyed-bill attestation remain active.
+Link mutations require program create/edit plus Production Items view; existing one-link Planner permissions remain unchanged. The private group table has RLS and no browser grants. Catalogue mappings inherit the existing program-item read permissions. Snapshots serialize all bigint references as strings. Group/item and link-set digests in `fabric_json` invalidate stale complete-document reviews even for link-only writes where the timestamp trigger correctly treats a header-only stamp as a no-op. The reviewed SQL total also rejects stale planner quantities. Requirement and one-link RPCs explicitly complete deferred integrity checks inside their existing authorized boundaries before returning to the authenticated caller. No private-table SELECT grant or SECURITY DEFINER trigger is introduced. Existing row/root optimistic checks, audit logging and dyed-bill attestation remain active.
+
+Planner saves await the existing workspace refresh before closing, so the next program editor receives current link/group revisions rather than the previous cached Fabric snapshot.
 
 Frontend sources: `program-editor.js` owns the document form; `program-model.js` stages group/item/link changes; `relationships.js` resolves persisted group ownership. The generic BillEditor program form was retired. `FabricRequirementFields`, shared selectors, Overview controls, preference store, native dialogs and `FabricSheet` remain shared. Only ordered kg opts into staged worksheet entry; all other cells and other worksheets remain protected.
 
@@ -24,7 +26,7 @@ Frontend sources: `program-editor.js` owns the document form; `program-model.js`
 
 - New table: `dyeing_program_lab_dip`; new group FK on program items. New unique version+edition key supports the composite FK. No allocation/reservation table.
 - New function: `guard_dyeing_program_group()` (one). New constraint triggers use the existing traceability/link functions. Net function count: **+1**.
-- Modified: `check_lab_dip_traceability`, `check_fabric_plan_dyeing_links`, `fabric_contract`, `fabric_row_in_document`, `fabric_snapshot`, `fabric_planner_snapshot`, `save_fabric_document_core`, `set_fabric_plan_dyeing_link`, `production_setup_contract`, `fabric_json`.
+- Modified: `check_lab_dip_traceability`, `check_fabric_plan_dyeing_links`, `fabric_contract`, `fabric_row_in_document`, `fabric_snapshot`, `fabric_planner_snapshot`, `save_fabric_document_core`, `set_fabric_plan_dyeing_link`, `production_setup_contract`, `fabric_json`, `save_fabric_requirement`.
 - Replaced view: `view_variant_item_lab_dip_status` → `view_item_part_fabric_labdip_status`.
 - Reused unchanged: `fabric_plan_coverage`, requirement and coverage/status views, receipt synchronization, verified bill APIs and costing/SKU functions. `view_default_lab_dip_version` remains a legacy report, never an automatic program selection source.
 - Retired columns: item-level version and previous batch, after dependency replacement and full backfilled-graph guard verification. No `DROP CASCADE`; no historical migration edits.
