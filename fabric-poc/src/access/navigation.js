@@ -202,10 +202,6 @@ export function WorkspaceSidebar({
       ),
       section('fabric', 'Fabric', 'Fabric sections', [
         button('fabricOverview', 'Fabric overview'),
-        live &&
-          can('productionItems') &&
-          can('programs') &&
-          button('fabricPlanner', 'Fabric Planner'),
         ...pageButtons('fabric'),
       ]),
       section('colours', 'Colours', 'Colour sections', pageButtons('colours'), 'colour-nav'),
@@ -213,7 +209,14 @@ export function WorkspaceSidebar({
         'production',
         'Production',
         'Production pages',
-        [...pageButtons('production'), ...productionLinks],
+        [
+          live &&
+            can('productionItems') &&
+            can('programs') &&
+            button('fabricPlanner', 'Fabric Planner'),
+          ...pageButtons('production'),
+          ...productionLinks,
+        ],
         'production-nav',
       ),
       section(

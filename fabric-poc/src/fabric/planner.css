@@ -1,0 +1,39 @@
+.planner-operational {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.planner-operational th,
+.planner-operational td {
+  padding: 8px 10px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.planner-operational th {
+  font-size: 11px;
+}
+.planner-operational thead th:nth-child(n + 6),
+.fabric-planner-workspace .numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.planner-group th,
+.planner-total th,
+.planner-total td {
+  background: #f1f6fb;
+}
+.planner-group button {
+  border: 0;
+  background: transparent;
+  padding: 3px 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.planner-total {
+  font-weight: 600;
+}
+.planner-operational tfoot th,
+.planner-operational tfoot td {
+  background: #edf5fc;
+  font-weight: 600;
+}

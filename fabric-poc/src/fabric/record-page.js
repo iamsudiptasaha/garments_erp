@@ -21,6 +21,7 @@ export function RecordPageHeading({
   view,
   onView,
   viewLabel,
+  sheetLabel,
   action,
 }) {
   return h(
@@ -38,10 +39,10 @@ export function RecordPageHeading({
         ? h(
             'div',
             { className: 'erp-overview-heading-actions' },
-            h(WorkspaceViewToggle, { view, onChange: onView, label: viewLabel }),
+            h(WorkspaceViewToggle, { view, onChange: onView, label: viewLabel, sheetLabel }),
             action,
           )
-        : h(WorkspaceViewToggle, { view, onChange: onView, label: viewLabel })),
+        : h(WorkspaceViewToggle, { view, onChange: onView, label: viewLabel, sheetLabel })),
   );
 }
 

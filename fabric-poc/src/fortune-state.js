@@ -19,7 +19,7 @@ export const defaultState = () => ({
 export function orderedRecords(state) {
   const rows = state.records ? [...state.records] : project(state.data, 'knitting');
   const { key, direction } = state.sort;
-  return rows.sort((a, b) => {
+  const sorted = rows.sort((a, b) => {
     const x = a[key],
       y = b[key];
     return (
@@ -29,6 +29,18 @@ export function orderedRecords(state) {
       (direction === 'desc' ? -1 : 1)
     );
   });
+  if (!state.grouping) return sorted;
+  const { key: groupKey, summaryKey } = state.grouping;
+  const groups = [...new Set(rows.filter((r) => !r[summaryKey]).map((r) => r[groupKey]))].sort(
+    (a, b) =>
+      String(a).localeCompare(String(b)) * (key === groupKey && direction === 'desc' ? -1 : 1),
+  );
+  return groups
+    .flatMap((group) => [
+      ...sorted.filter((r) => !r[summaryKey] && r[groupKey] === group),
+      ...rows.filter((r) => r[summaryKey] === 'subtotal' && r[groupKey] === group),
+    ])
+    .concat(rows.filter((r) => r[summaryKey] === 'grand'));
 }
 export function buildSheet(state) {
   const records = orderedRecords(state),

@@ -43,7 +43,7 @@ function picker(id, label, value, rows, onChange, placeholder = 'All') {
   );
 }
 
-function FabricPlanEdit({
+export function FabricPlanEdit({
   client,
   snapshot,
   row,
@@ -235,7 +235,7 @@ function FabricPlanEdit({
   );
 }
 
-export function FabricPlanner({ client, canEdit, canLink, program, capabilities }) {
+export function ProgramFabricPlanner({ client, canEdit, canLink, program, capabilities }) {
   const [snapshot, setSnapshot] = useState(null);
   const [status, setStatus] = useState('Loading fabric plan…');
   const [query, setQuery] = useState('');
