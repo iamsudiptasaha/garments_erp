@@ -66,7 +66,7 @@ const { user: denied, session: viewerSession } = await signIn('ci_viewer');
 const app = process.env.ATTACHMENT_UI_URL || 'http://127.0.0.1:18766';
 assert.match(app, /^http:\/\/127[.]0[.]0[.]1:\d+$/);
 const filesService = process.env.ATTACHMENT_FILES_SERVICE;
-if (filesService) assert.equal(filesService, 'http://127.0.0.1:55426');
+if (filesService) assert.equal(filesService, 'http://127.0.0.1:18765');
 const browser = await chromium.launch();
 async function authenticatedContext(session) {
   const context = await browser.newContext({
