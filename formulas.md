@@ -15,6 +15,8 @@ Source: [Fabric domain](fabric-poc/src/fabric/domain.js). The [legacy workbook](
 
 ### Fabric Planner estimates
 
+- Adding planner links to a dyeing-program item retains its complete existing link set and sums the authoritative `fabric_plan_requirements.required_kg` once per linked requirement ID. Recalculation rounds only at the program quantity's existing three-decimal kg storage boundary. The reviewed total is checked again in the atomic save; a subsequent entered ordered-kg override remains independent. Removing links does not recalculate quantity. No coverage, receipt or costing formula changes. [Atomic save](supabase/migrations/20261123200917_lab_dip_edition_groups.sql) · [Document staging](fabric-poc/src/fabric/program-model.js)
+
 - Planner colour subtotals and grand totals sum the SQL-supplied `fabric_plan_estimates.required_kg` once per `item_part_fabric.id`, separately for each `fabric_type_id`, within the current filtered requirement set. No rounding precedes aggregation; the existing kg display formats up to six decimal places. Overview and Sheet share this projection; neither recalculates planned pieces, consumption, coverage or costing. [Presentation projection](fabric-poc/src/fabric/planner-model.js)
 
 - Required kg = planned variant pieces × consumption kg per piece. Each part uses the planned size totals of its root’s item. Distribute each size’s cut-ratio pieces equally across the variants configured on that part, giving remainder pieces to the first variant-item IDs. A dependent part can use its own variants and inherits its root’s Production ID.

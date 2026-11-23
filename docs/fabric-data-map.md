@@ -1,5 +1,7 @@
 # Fabric implementation and database mapping
 
+> Historical implementation record. Current approved edition-group ownership and release/recovery rules are documented in [Dyeing edition groups](dyeing-edition-groups.md). Earlier variant-colour, item-level version/batch and automatic approved-version selection descriptions below are superseded.
+
 The Fabric app is available at `/` and `/fabric.html`. The earlier standalone table trial remains at `/fortune.html`, with Univer and Tabulator comparisons preserved at `/univer.html` and `/tabulator.html`.
 
 ## Implemented locally

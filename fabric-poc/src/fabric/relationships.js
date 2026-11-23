@@ -1,9 +1,13 @@
 import { latestStatusItem, statusFor } from '../colours/domain.js';
 // Database-shaped relationships. Legacy conversion is local-preview-only.
 export function programContext(data, line) {
-  const version = data.lab_dip_version.find((v) => v.id === line?.lab_dip_version_id),
+  const group = data.dyeing_program_lab_dip?.find((g) => g.id === line?.dyeing_program_lab_dip_id),
+    version = data.lab_dip_version.find(
+      (v) => v.id === (group?.lab_dip_version_id ?? line?.lab_dip_version_id),
+    ),
     lab = data.lab_dip.find((l) => l.id === version?.lab_dip_id);
   return {
+    group,
     version,
     lab,
     mappingId: lab?.color_map_by_brand_id || line?.legacy_color_map_by_brand_id || null,
@@ -19,17 +23,21 @@ export function previousBatchLabel(data, id) {
   );
 }
 export function batchesForVersion(data, versionId, excludeProgramId = null) {
-  if (!versionId) return [];
+  const edition = data.lab_dip_version.find((v) => v.id === versionId)?.lab_dip_id;
+  if (!edition) return [];
   return (data.batch_no_lab_dip_version_map || [])
-    .filter(
-      (b) =>
-        b.lab_dip_version_id === versionId &&
-        (!excludeProgramId ||
-          data.dyed_fabric_item.find((d) => d.id === b.dyed_fabric_item_id)
-            ?.dyeing_program_item_id !== excludeProgramId),
-    )
+    .filter((b) => {
+      const version = data.lab_dip_version.find((v) => v.id === b.lab_dip_version_id);
+      const receipt = data.dyed_fabric_item.find((d) => d.id === b.dyed_fabric_item_id);
+      const item = data.dyeing_program_item.find((i) => i.id === receipt?.dyeing_program_item_id);
+      return (
+        version?.lab_dip_id === edition &&
+        (!excludeProgramId || item?.dyeing_program_id !== excludeProgramId)
+      );
+    })
     .sort((a, b) => a.batch_no.localeCompare(b.batch_no, undefined, { numeric: true }));
 }
+
 export function versionsForMapping(data, mappingId, dyerId) {
   return data.lab_dip_version
     .filter((v) =>
@@ -48,13 +56,6 @@ export function versionsForMapping(data, mappingId, dyerId) {
         b.version - a.version ||
         String(b.id).localeCompare(String(a.id), undefined, { numeric: true }),
     );
-}
-export function defaultVersion(data, mappingId, dyerId) {
-  return (
-    versionsForMapping(data, mappingId, dyerId).find(
-      (v) => (statusFor(data, v)?.sort_order || 0) >= 4,
-    )?.id || ''
-  );
 }
 export function versionLabel(data, id) {
   const v = data.lab_dip_version.find((v) => v.id === id),
@@ -113,6 +114,35 @@ export function upgradeFabricRelationships(data) {
     const legacy = next.batch_no_lab_dip_version_map.find((b) => b.batch_no === row.batch_no);
     if (legacy && !next.batch_no_lab_dip_version_map.some((b) => b.id === row.batch_no))
       row.batch_no = legacy.id;
+  }
+  next.dyeing_program_lab_dip ||= [];
+  next.fabric_plan_dyeing_link ||= [];
+  for (const row of next.dyeing_program_item) {
+    if (row.dyeing_program_lab_dip_id) continue;
+    const version = next.lab_dip_version.find((v) => v.id === row.lab_dip_version_id);
+    if (!version) continue;
+    let group = next.dyeing_program_lab_dip.find(
+      (g) => g.dyeing_program_id === row.dyeing_program_id && g.lab_dip_id === version.lab_dip_id,
+    );
+    if (
+      group &&
+      (group.lab_dip_version_id !== row.lab_dip_version_id ||
+        (group.batch_no || null) !== (row.batch_no || null))
+    )
+      throw Error('Legacy preview has conflicting edition versions or batches.');
+    if (!group) {
+      group = {
+        id: crypto.randomUUID(),
+        dyeing_program_id: row.dyeing_program_id,
+        lab_dip_id: version.lab_dip_id,
+        lab_dip_version_id: row.lab_dip_version_id,
+        batch_no: row.batch_no || null,
+      };
+      next.dyeing_program_lab_dip.push(group);
+    }
+    row.dyeing_program_lab_dip_id = group.id;
+    delete row.lab_dip_version_id;
+    delete row.batch_no;
   }
   return next;
 }

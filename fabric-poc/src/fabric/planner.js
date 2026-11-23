@@ -4,6 +4,7 @@ import { RecordPageHeading, RecordPageStatus } from './record-page.js';
 import { ReviewForm, useSaveReview } from './save-review.js';
 import { FabricRequirementFields } from './requirement-fields.js';
 import { FabricSheet } from './sheet.js';
+import { RecordSelect } from './record-select.js';
 
 const measures = [
   ['required_kg', 'Required'],
@@ -60,7 +61,7 @@ export function FabricPlanEdit({
     fabric_type_id: requirement?.fabric_type_id ?? '',
     sub_part_list_id: requirement?.sub_part_list_id ?? null,
     sub_part_name: requirement?.sub_part_name ?? '',
-    lab_dip_id: requirement?.lab_dip_id ?? row.lab_dip_id,
+    lab_dip_id: requirement?.lab_dip_id ?? null,
     consumption_per_piece_kg: requirement?.consumption_per_piece_kg ?? '',
     item_part_fabric_status_id: requirement?.manual_status_id ?? null,
   }));
@@ -181,7 +182,9 @@ export function FabricPlanEdit({
           options: {
             fabrics: snapshot.fabric_types.map((f) => [f.id, f.name]),
             parts: snapshot.sub_parts.map((p) => [p.id, p.part]),
-            labs: snapshot.lab_dips.map((l) => [l.id, l.name]),
+            labs: snapshot.lab_dips
+              .filter((l) => !row.brand_id || l.brand_id === row.brand_id)
+              .map((l) => [l.id, l.name]),
             statuses: snapshot.statuses.map((s) => [s.id, s.type]),
           },
           onChange: setDraft,
@@ -241,6 +244,7 @@ export function ProgramFabricPlanner({ client, canEdit, canLink, program, capabi
   const [query, setQuery] = useState('');
   const [item, setItem] = useState('');
   const [colour, setColour] = useState('');
+  const [edition, setEdition] = useState('');
   const [variant, setVariant] = useState('');
   const [fabric, setFabric] = useState('');
   const [selection, setSelection] = useState(null);
@@ -283,7 +287,9 @@ export function ProgramFabricPlanner({ client, canEdit, canLink, program, capabi
       (!variant || variant === row.variant) &&
       [
         row.style_code,
-        row.colour,
+        ...(snapshot?.requirements || [])
+          .filter((r) => r.variant_item_id === row.id)
+          .map((r) => snapshot.lab_dips.find((l) => l.id === r.lab_dip_id)?.name),
         row.variant,
         row.part,
         ...(snapshot?.requirements || [])
@@ -301,6 +307,8 @@ export function ProgramFabricPlanner({ client, canEdit, canLink, program, capabi
       (!debounced ||
         [
           r.sub_part_name,
+          snapshot.lab_dips.find((l) => l.id === r.lab_dip_id)?.name,
+          snapshot.lab_dips.find((l) => l.id === r.lab_dip_id)?.colour,
           snapshot.sub_parts.find((p) => p.id === r.sub_part_list_id)?.part,
           ...Object.values(variants.find((v) => v.id === r.variant_item_id) || {}),
         ].some((value) =>
@@ -309,7 +317,9 @@ export function ProgramFabricPlanner({ client, canEdit, canLink, program, capabi
             .includes(debounced),
         )) &&
       (!fabric || fabric === r.fabric_type_id) &&
-      (!colour || snapshot.lab_dips.find((l) => l.id === r.lab_dip_id)?.colour === colour) &&
+      (!colour ||
+        snapshot.lab_dips.find((l) => l.id === r.lab_dip_id)?.color_map_by_brand_id === colour) &&
+      (!edition || r.lab_dip_id === edition) &&
       (!program ||
         programItems.some(
           (p) => p.fabric_type_id === r.fabric_type_id && p.lab_dip_id === r.lab_dip_id,
@@ -347,7 +357,7 @@ export function ProgramFabricPlanner({ client, canEdit, canLink, program, capabi
           ...Object.fromEntries(measures.map(([key]) => [key, r[key]])),
         };
       }),
-    [snapshot, debounced, item, colour, variant, fabric, program],
+    [snapshot, debounced, item, colour, edition, variant, fabric, program],
   );
   const columns = useMemo(
     () => [
@@ -433,13 +443,35 @@ export function ProgramFabricPlanner({ client, canEdit, canLink, program, capabi
             'Add fabric sub-part',
           ),
         picker('planner-item', 'Item', item, options('item_id', 'style_code'), setFilter(setItem)),
-        picker(
-          'planner-colour',
-          'Colour',
-          colour,
-          [...new Set(snapshot.lab_dips.map((l) => l.colour))].sort().map((c) => [c, c]),
-          setFilter(setColour),
-        ),
+        h(RecordSelect, {
+          label: 'Colour',
+          value: colour,
+          clearable: true,
+          options: [
+            ...new Map(
+              snapshot.lab_dips.map((l) => [
+                l.color_map_by_brand_id,
+                {
+                  value: l.color_map_by_brand_id,
+                  label: [l.colour, l.brand].filter(Boolean).join(' · '),
+                },
+              ]),
+            ).values(),
+          ],
+          onChange: (value) => {
+            setFilter(setColour)(value);
+            setEdition('');
+          },
+        }),
+        h(RecordSelect, {
+          label: 'Lab Dip edition',
+          value: edition,
+          clearable: true,
+          options: snapshot.lab_dips
+            .filter((l) => !colour || l.color_map_by_brand_id === colour)
+            .map((l) => ({ value: l.id, label: l.name })),
+          onChange: setFilter(setEdition),
+        }),
         picker('planner-variant', 'Variant', variant, options('variant'), setFilter(setVariant)),
         picker(
           'planner-fabric-type',

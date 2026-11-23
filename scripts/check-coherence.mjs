@@ -25,6 +25,15 @@ function fabricPlannerReleaseSchema(schema) {
   data_type: 'smallint', is_nullable: 'YES', pending_migration: migration,
  }]};
 }
+function editionGroupReleaseSchema(schema) {
+ const next = structuredClone(schema);
+ next.columns = next.columns.filter(c => c.table_name!=='dyeing_program_lab_dip' && !(c.table_schema==='garments_erp' && c.table_name==='dyeing_program_item' && ['lab_dip_version_id','batch_no'].includes(c.column_name)));
+ next.foreign_keys=next.foreign_keys.filter(f=>!(f.schema==='garments_erp'&&f.table==='dyeing_program_item'&&/FOREIGN KEY \((lab_dip_version_id|batch_no)\)/.test(f.definition)));
+ for (const [column_name,data_type] of Object.entries({id:'bigint',dyeing_program_id:'bigint',lab_dip_id:'bigint',lab_dip_version_id:'bigint',batch_no:'bigint',created_at:'timestamp with time zone',updated_at:'timestamp with time zone'})) next.columns.push({table_schema:'garments_erp',table_name:'dyeing_program_lab_dip',column_name,data_type,is_nullable:column_name==='batch_no'?'YES':'NO'});
+ next.columns.push({table_schema:'garments_erp',table_name:'dyeing_program_item',column_name:'dyeing_program_lab_dip_id',data_type:'bigint',is_nullable:'NO'});
+ next.columns = next.columns.map(c => c.table_name==='view_variant_item_lab_dip_status'?{...c,table_name:'view_item_part_fabric_labdip_status',column_name:c.column_name==='variant_item_id'?'item_part_fabric_id':c.column_name}:c);
+ return next;
+}
 function checkoutReleaseSchema(schema) {
  const migration = '20261108135000_checkout_variant.sql';
  const sql = readFileSync(new URL('../supabase/migrations/' + migration, import.meta.url), 'utf8');
@@ -79,7 +88,7 @@ export function inspect(schema, catalogue, screens=pages){
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
  const captured=JSON.parse(readFileSync(new URL('../database/schema/live-schema.json',import.meta.url)));
- const schema=transferableReleaseSchema(fabricPlannerReleaseSchema(checkoutReleaseSchema(productionReferenceSchema(fabricBatchReleaseSchema(employeePhotoReleaseSchema(contactReleaseSchema(captured)))))));
+ const schema=editionGroupReleaseSchema(transferableReleaseSchema(fabricPlannerReleaseSchema(checkoutReleaseSchema(productionReferenceSchema(fabricBatchReleaseSchema(employeePhotoReleaseSchema(contactReleaseSchema(captured))))))));
  const catalogue=JSON.parse(readFileSync(new URL('../database/catalogue/screen-table-map.json',import.meta.url)));
  const errors=[...inspect(schema,catalogue),...inspectFabricBatch(schema)];
  try{console.log(checkBoundaries());}catch(e){errors.push(e.message)}

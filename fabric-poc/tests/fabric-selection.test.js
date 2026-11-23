@@ -1,25 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initialFabric, documentFor, saveDocument, fabricRows } from '../src/fabric/domain.js';
-import { batchesForVersion } from '../src/fabric/relationships.js';
+import { batchesForVersion, programContext } from '../src/fabric/relationships.js';
 import { labOptions, programOptions } from '../src/fabric/record-select.js';
 import { saveVerifiedDyedBill } from '../src/fabric/bill-verification.js';
 
 test('previous batch stores mapping identity while grid and options show its label', () => {
   const data = initialFabric(),
     draft = documentFor(data, 'programs', 'dp1');
-  draft.lines[1].batch_no = 'seed-batch-1';
+  draft.header.id = crypto.randomUUID();
+  const groupIds = new Map(draft.groups.map((g) => [g.id, crypto.randomUUID()]));
+  draft.groups.forEach((g) => {
+    g.id = groupIds.get(g.id);
+    g.dyeing_program_id = draft.header.id;
+  });
+  draft.items.forEach((i) => {
+    i.id = crypto.randomUUID();
+    i.dyeing_program_id = draft.header.id;
+    i.dyeing_program_lab_dip_id = groupIds.get(i.dyeing_program_lab_dip_id);
+  });
+  draft.groups[0].batch_no = 'seed-batch-1';
   const saved = saveDocument(data, 'programs', draft);
   assert.equal(
-    saved.dyeing_program_item.find((r) => r.id === draft.lines[1].id).batch_no,
+    saved.dyeing_program_lab_dip.find((g) => g.id === draft.groups[0].id).batch_no,
     'seed-batch-1',
   );
   assert.equal(
-    fabricRows(saved, 'programs').find((r) => r.id === draft.lines[1].id).batch,
+    fabricRows(saved, 'programs').find((r) => r.id === draft.items[0].id).batch,
     'B-104',
   );
   assert.ok(
-    batchesForVersion(saved, draft.lines[1].lab_dip_version_id).some(
+    batchesForVersion(saved, draft.groups[0].lab_dip_version_id).some(
       (b) => b.id === 'seed-batch-1' && b.batch_no === 'B-104',
     ),
   );
@@ -44,10 +55,12 @@ test('Lab Dip search labels follow latest child review and retain exact version 
   );
   assert.match(option.label, /Edition 1 · Version 1 · Approved · 2026-11-05/);
   const program = programOptions(data).find(
-    (o) => o.value === data.dyeing_program_item.find((p) => p.lab_dip_version_id === version.id).id,
+    (o) =>
+      o.value ===
+      data.dyeing_program_item.find((p) => programContext(data, p).version?.id === version.id).id,
   );
   assert.match(program.label, /Approved/);
-  assert.match(program.label, /Previous batch/);
+  assert.match(program.label, /Batch No./);
 });
 test('incorrect verifier password stops before attestation/save and cleans up isolated auth', async () => {
   let cleanup = 0;

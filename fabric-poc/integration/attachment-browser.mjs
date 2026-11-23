@@ -1058,14 +1058,17 @@ async function fabricPlannerWorkflow() {
   const {
     rows: [isolatedLine],
   } = await db.query(`with source as (
-    select i.fabric_type_id,i.lab_dip_version_id,p.dyer_id from garments_erp.dyeing_program_item i
+    select i.fabric_type_id,g.lab_dip_version_id,g.lab_dip_id,p.dyer_id from garments_erp.dyeing_program_item i
     join garments_erp.dyeing_program p on p.id=i.dyeing_program_id
-    join garments_erp.lab_dip_version v on v.id=i.lab_dip_version_id
-    join garments_erp.lab_dip l on l.id=v.lab_dip_id join garments_erp.fabric_type f on f.id=i.fabric_type_id
+    join garments_erp.dyeing_program_lab_dip g on g.id=i.dyeing_program_lab_dip_id
+    join garments_erp.lab_dip l on l.id=g.lab_dip_id join garments_erp.fabric_type f on f.id=i.fabric_type_id
     where f.name='Verification fabric' and l.edition=1 order by i.id limit 1
-  ), header as (insert into garments_erp.dyeing_program(date,dyer_id) select now(),dyer_id from source returning id)
-  insert into garments_erp.dyeing_program_item(dyeing_program_id,fabric_type_id,lab_dip_version_id,quantity)
-    select header.id,source.fabric_type_id,source.lab_dip_version_id,0.01 from source cross join header returning id`);
+  ), header as (insert into garments_erp.dyeing_program(date,dyer_id) select now(),dyer_id from source returning id),
+  edition_group as (insert into garments_erp.dyeing_program_lab_dip(dyeing_program_id,lab_dip_id,lab_dip_version_id)
+    select header.id,source.lab_dip_id,source.lab_dip_version_id from header cross join source returning id,dyeing_program_id,lab_dip_id)
+  insert into garments_erp.dyeing_program_item(dyeing_program_id,dyeing_program_lab_dip_id,fabric_type_id,quantity)
+    select edition_group.dyeing_program_id,edition_group.id,source.fabric_type_id,0.01 from source cross join edition_group
+    returning id,(select lab_dip_id from edition_group) as lab_dip_id`);
 
   const {
     rows: [contrast],
@@ -1088,7 +1091,6 @@ async function fabricPlannerWorkflow() {
     await b('Add variant / part').click();
     await pick(dialog, 'Variant ' + n, 'Browser variant');
     await pick(dialog, 'Part ' + n, part);
-    await pick(dialog, 'Lab dip ' + n);
   }
   await pick(dialog, 'Parent of Planner sleeve', 'Billing test body');
   await b('Add fabric sub-part').click();
@@ -1106,6 +1108,10 @@ async function fabricPlannerWorkflow() {
     .getByLabel('Fabric type', { exact: true })
     .nth(1)
     .selectOption({ label: 'Verification fabric' });
+  await dialog
+    .getByLabel('Component lab dip', { exact: true })
+    .nth(1)
+    .selectOption(String(isolatedLine.lab_dip_id));
   await dialog.getByLabel('Consumption per piece · kg', { exact: true }).nth(1).fill('0.1');
 
   await b('Review item').click();

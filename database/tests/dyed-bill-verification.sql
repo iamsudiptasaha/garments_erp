@@ -1,7 +1,7 @@
 -- Disposable synthetic database only; all business fixtures roll back.
 begin;
 do $$
-declare style bigint; body_type bigint; sleeve_type bigint; body bigint; sleeve bigint; size_type bigint; size bigint; variant bigint; sleeve_design bigint;
+declare edition_group bigint; style bigint; body_type bigint; sleeve_type bigint; body bigint; sleeve bigint; size_type bigint; size bigint; variant bigint; sleeve_design bigint;
  body_variant bigint; sleeve_variant bigint; body_requirement bigint; sleeve_requirement bigint; component bigint; saved_issue bigint; second_lab bigint; second_version bigint; second_line bigint;
  yarn bigint; supplier bigint; po bigint; poi bigint; ybi bigint; fabric bigint; knit bigint;
  brand bigint; colour bigint; mapping bigint; dyer bigint; lab bigint; version bigint; program bigint; program_item bigint; alternate_program bigint; alternate_line bigint;
@@ -32,7 +32,8 @@ begin
  insert into garments_erp.lab_dip_version(lab_dip_id,version) values(lab,1) returning id into version;
  insert into garments_erp.lab_dip_version_item(lab_dip_version_id,date,lab_dip_status_id) select version,current_date,id from garments_erp.lab_dip_version_status where sort_order=6;
  insert into garments_erp.dyeing_program(dyer_id,dyeing_program_status_id) values(dyer,2) returning id into program;
- insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity) values(fabric,program,version,100) returning id into program_item;
+ insert into garments_erp.dyeing_program_lab_dip(dyeing_program_id,lab_dip_id,lab_dip_version_id) values(program,lab,version) returning id into edition_group;
+ insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,dyeing_program_lab_dip_id,quantity) values(fabric,program,edition_group,100) returning id into program_item;
  insert into garments_erp.item(style_code,brand_id) values('Fabric planner verification',brand) returning id into style;
  insert into garments_erp.part_list(part) values('Planner body') returning id into body_type;
  insert into garments_erp.part_list(part) values('Planner sleeve') returning id into sleeve_type;
@@ -82,8 +83,9 @@ begin
  insert into garments_erp.lab_dip_version(lab_dip_id,version) values(second_lab,1) returning id into second_version;
  insert into garments_erp.item_part_fabric(variant_item_id,fabric_type_id,lab_dip_id,sub_part_name,consumption_per_piece_kg)
  values(body_variant,fabric,second_lab,'Contrast cuff',0.0125) returning id into component;
- insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity)
- values(fabric,program,second_version,0.01) returning id into second_line;
+ insert into garments_erp.dyeing_program_lab_dip(dyeing_program_id,lab_dip_id,lab_dip_version_id) values(program,second_lab,second_version) returning id into edition_group;
+ insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,dyeing_program_lab_dip_id,quantity)
+ values(fabric,program,edition_group,0.01) returning id into second_line;
  begin
   insert into garments_erp.fabric_plan_dyeing_link values(component,program_item);
   raise exception 'TEST accepted parent dip for contrasting sub-part';
@@ -148,8 +150,9 @@ begin
  if not exists(select 1 from garments_erp.fabric_plan_estimates where id=body_requirement and item_part_fabric_status_id=3) then raise exception 'TEST receipt recalculation failed';end if;
  update garments_erp.dyeing_program_item set quantity=3 where id=program_item;
  insert into garments_erp.dyeing_program(dyer_id,dyeing_program_status_id) values(dyer,2) returning id into alternate_program;
- insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity)
- values(fabric,alternate_program,version,2.5) returning id into alternate_line;
+ insert into garments_erp.dyeing_program_lab_dip(dyeing_program_id,lab_dip_id,lab_dip_version_id) values(alternate_program,lab,version) returning id into edition_group;
+ insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,dyeing_program_lab_dip_id,quantity)
+ values(fabric,alternate_program,edition_group,2.5) returning id into alternate_line;
  insert into garments_erp.fabric_plan_dyeing_link(item_part_fabric_id,dyeing_program_item_id)
  values(body_requirement,alternate_line);
  if not exists(select 1 from garments_erp.fabric_plan_estimates where id=body_requirement

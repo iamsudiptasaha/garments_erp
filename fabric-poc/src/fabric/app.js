@@ -80,6 +80,7 @@ import {
   WorkspaceConnectionBanner,
 } from './record-page.js';
 import { BillEditor } from './editor.js';
+import { ProgramEditor } from './program-editor.js';
 import { ProgramFabricPlanner } from './planner.js';
 import { FabricPlanner } from './planner-workspace.js';
 import './styles.css';
@@ -1636,17 +1637,19 @@ function App({ live, refreshWorkspaceAccess }) {
     ),
     editor &&
       h(
-        editor.page === 'labDips'
-          ? LabEditor
-          : editor.page === 'materialContacts'
-            ? ContactEditor
-            : editor.page === 'productionItems'
-              ? live
-                ? ProductionItemEditor
-                : ItemEditor
-              : editor.page === 'productionJobs'
-                ? JobEditor
-                : BillEditor,
+        editor.page === 'programs'
+          ? ProgramEditor
+          : editor.page === 'labDips'
+            ? LabEditor
+            : editor.page === 'materialContacts'
+              ? ContactEditor
+              : editor.page === 'productionItems'
+                ? live
+                  ? ProductionItemEditor
+                  : ItemEditor
+                : editor.page === 'productionJobs'
+                  ? JobEditor
+                  : BillEditor,
         {
           key: `${editor.page}:${editor.id || 'new'}`,
           page: editor.page,

@@ -36,12 +36,15 @@ function GridWorkbook({
   onNotice,
   capabilities,
   paged,
+  editableCell,
+  onEditCell,
 }) {
   const book = useRef(null),
     host = useRef(null),
     state = useRef(null),
+    selectedCell = useRef(null),
     callbacks = useRef({ onPreferences, onSelect, onNotice, capabilities });
-  callbacks.current = { onPreferences, onSelect, onNotice };
+  callbacks.current = { onPreferences, onSelect, onNotice, editableCell, onEditCell };
   const [revision, setRevision] = useState(0);
   const [print, setPrint] = useState(null);
   const [available, setAvailable] = useState(0);
@@ -94,6 +97,7 @@ function GridWorkbook({
       sort: { key: sort.key, direction: sort.direction },
     };
     lastSheet.current = null;
+    selectedCell.current = null;
     return { data: [buildSheet(state.current)], key: ++generation.current };
   }, [page, spec, visible, records, sort.key, sort.direction, revision, zoom, available]);
 
@@ -115,6 +119,13 @@ function GridWorkbook({
       !!e.target.closest('.fortune-sheet-overlay,.luckysheet-rich-text-editor');
     const reject = (e) => {
       if (sheetTarget(e)) {
+        const cell = selectedCell.current;
+        if (
+          !['paste', 'cut', 'drop'].includes(e.type) &&
+          cell &&
+          callbacks.current.editableCell?.(cell.record, cell.column)
+        )
+          return;
         e.preventDefault();
         e.stopPropagation();
         callbacks.current.onNotice('Values are protected. Use the document form to make changes.');
@@ -182,6 +193,10 @@ function GridWorkbook({
   }
   function selection(_sheet, range) {
     const sorted = orderedRecords(state.current);
+    selectedCell.current =
+      range.row[0] === range.row[1] && range.column[0] === range.column[1] && range.row[0] > 0
+        ? { record: sorted[range.row[0] - 1], column: state.current.columns[range.column[0]] }
+        : null;
     callbacks.current.onSelect(
       range.row[0] === range.row[1] && range.row[0] > 0 ? sorted[range.row[0] - 1] : null,
     );
@@ -246,7 +261,11 @@ function GridWorkbook({
       h(
         'span',
         null,
-        capabilities.format ? '🔒 Values protected · formatting enabled' : '🔒 Read-only access',
+        editableCell
+          ? 'Ordered kg editable · other values protected'
+          : capabilities.format
+            ? '🔒 Values protected · formatting enabled'
+            : '🔒 Read-only access',
       ),
       h(GridColumns, { columns: arranged, visible, widths, onChange: configure }),
       h(
@@ -310,7 +329,18 @@ function GridWorkbook({
           ? ['copy', '|', 'set-row-height', 'set-column-width']
           : ['copy'],
         hooks: {
-          beforeUpdateCell: () => false,
+          beforeUpdateCell: (row, column, value) => {
+            const record = orderedRecords(state.current)[row - 1],
+              field = state.current.columns[column];
+            if (row > 0 && record && field && callbacks.current.editableCell?.(record, field)) {
+              const quantity = Number(value);
+              if (String(value).trim() !== '' && Number.isFinite(quantity) && quantity >= 0)
+                callbacks.current.onEditCell?.(record, field, quantity);
+              else callbacks.current.onNotice('Enter a non-negative ordered quantity.');
+            }
+            // The owning document stages the edit. The workbook never persists business data.
+            return false;
+          },
           beforePaste: () => false,
           beforeAddSheet: () => false,
           beforeDeleteSheet: () => false,

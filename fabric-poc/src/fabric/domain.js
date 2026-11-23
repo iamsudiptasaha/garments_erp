@@ -1,3 +1,4 @@
+import { programDraft, saveProgram } from './program-model.js';
 import { commentText } from './rich-comment.js';
 import {
   programContext,
@@ -598,7 +599,7 @@ export function fabricRows(data, page) {
             ([id]) => id === programContext(data, r).mappingId,
           )?.[1] || '—',
         labDip: versionLabelForRow(data, r),
-        batch: previousBatchLabel(data, r.batch_no),
+        batch: previousBatchLabel(data, programContext(data, r).group?.batch_no),
         name: get('fabric_type', r.fabric_type_id).name,
         quantity: r.quantity,
         comments: commentText(r.comments || ''),
@@ -754,6 +755,11 @@ export function validateFabric(data) {
     dyeing_program_item: {
       dyeing_program_id: 'dyeing_program',
       fabric_type_id: 'fabric_type',
+      dyeing_program_lab_dip_id: 'dyeing_program_lab_dip',
+    },
+    dyeing_program_lab_dip: {
+      dyeing_program_id: 'dyeing_program',
+      lab_dip_id: 'lab_dip',
       lab_dip_version_id: 'lab_dip_version',
     },
     dyed_fabric_item: {
@@ -806,18 +812,27 @@ export function validateFabric(data) {
       ])
         if (row[key] && !data[target].some((r) => r.id === row[key]))
           throw Error('Choose an existing company/contact and contact purpose.');
-  for (const line of data.dyeing_program_item) {
-    const { lab } = programContext(data, line),
-      program = data.dyeing_program.find((p) => p.id === line.dyeing_program_id);
-    if (lab && lab.dyer_id !== program.dyer_id)
-      throw Error('The selected lab-dip version belongs to another dyer.');
-    if (line.batch_no) {
-      const batch = data.batch_no_lab_dip_version_map.find((b) => b.id === line.batch_no);
-      if (!batch || batch.lab_dip_version_id !== line.lab_dip_version_id)
-        throw Error('Previous batch must use the exact selected lab-dip version.');
+  for (const group of data.dyeing_program_lab_dip || []) {
+    const version = data.lab_dip_version.find((v) => v.id === group.lab_dip_version_id);
+    const lab = data.lab_dip.find((l) => l.id === group.lab_dip_id);
+    const program = data.dyeing_program.find((p) => p.id === group.dyeing_program_id);
+    if (version?.lab_dip_id !== lab?.id) throw Error('Select a version belonging to the edition.');
+    if (lab?.dyer_id !== program?.dyer_id)
+      throw Error('The selected lab-dip edition belongs to another dyer.');
+    const peers = data.dyeing_program_lab_dip.filter(
+      (g) => g.dyeing_program_id === group.dyeing_program_id,
+    );
+    if (peers.length > 6 || peers.filter((g) => g.lab_dip_id === group.lab_dip_id).length !== 1)
+      throw Error('Use at most six distinct edition groups.');
+    if (group.batch_no) {
+      const batch = data.batch_no_lab_dip_version_map.find((b) => b.id === group.batch_no);
+      const previousVersion = data.lab_dip_version.find((v) => v.id === batch?.lab_dip_version_id);
+      if (previousVersion?.lab_dip_id !== group.lab_dip_id)
+        throw Error('Previous batch must use the same lab-dip edition.');
+      const receipt = data.dyed_fabric_item.find((d) => d.id === batch.dyed_fabric_item_id);
       if (
-        data.dyed_fabric_item.find((d) => d.id === batch.dyed_fabric_item_id)
-          ?.dyeing_program_item_id === line.id
+        data.dyeing_program_item.find((i) => i.id === receipt?.dyeing_program_item_id)
+          ?.dyeing_program_id === group.dyeing_program_id
       )
         throw Error('A program cannot use its own output as a previous batch.');
     }
@@ -835,7 +850,7 @@ export function validateFabric(data) {
       !dyed ||
       !b.batch_no?.trim() ||
       b.batch_no !== b.batch_no.trim() ||
-      b.lab_dip_version_id !== program?.lab_dip_version_id
+      b.lab_dip_version_id !== programContext(data, program).version?.id
     )
       throw Error('Batch mapping must match the dyed fabric and its program lab-dip version.');
   }
@@ -849,6 +864,7 @@ export function validateFabric(data) {
   return true;
 }
 export function documentFor(data, page, id) {
+  if (page === 'programs') return programDraft(data, id);
   const spec = pages[page];
   return {
     header: copy(
@@ -863,7 +879,13 @@ export function documentFor(data, page, id) {
               page === 'dyeBills'
                 ? { ...r, batch_no: batchFor(data, r.id)?.batch_no || '' }
                 : page === 'programs'
-                  ? { ...r, color_map_by_brand_id: programContext(data, r).mappingId }
+                  ? {
+                      ...r,
+                      lab_dip_id: programContext(data, r).lab?.id,
+                      lab_dip_version_id: programContext(data, r).version?.id,
+                      batch_no: programContext(data, r).group?.batch_no,
+                      color_map_by_brand_id: programContext(data, r).mappingId,
+                    }
                   : r,
             ),
         )
@@ -871,6 +893,7 @@ export function documentFor(data, page, id) {
   };
 }
 export function saveDocument(data, page, draft) {
+  if (page === 'programs') return saveProgram(data, draft);
   if (page === 'productionJobs')
     throw Error('Job history is read-only. Use Update Tasks for production handovers.');
   const spec = pages[page],
@@ -997,12 +1020,6 @@ export function saveDocument(data, page, draft) {
               ? Number(line[field.key])
               : String(line[field.key] ?? '').trim();
       }
-      if (spec.groups) {
-        required(line.lab_dip_version_id, 'Lab-dip version');
-        result.lab_dip_version_id = line.lab_dip_version_id;
-        result.batch_no = line.batch_no ? String(line.batch_no).trim() : null;
-        result.comments = line.comments || '';
-      }
       return result;
     });
     if (new Set(incoming.map((r) => r.id)).size !== incoming.length)
@@ -1020,9 +1037,12 @@ export function saveDocument(data, page, draft) {
           id: oldMaps.find((b) => b.dyed_fabric_item_id === row.id)?.id || uid(),
           dyed_fabric_item_id: row.id,
           batch_no: String(draft.lines[i].batch_no || '').trim(),
-          lab_dip_version_id: next.dyeing_program_item.find(
-            (p) => p.id === row.dyeing_program_item_id,
-          )?.lab_dip_version_id,
+          lab_dip_version_id:
+            next.dyeing_program_item.find((p) => p.id === row.dyeing_program_item_id) &&
+            programContext(
+              next,
+              next.dyeing_program_item.find((p) => p.id === row.dyeing_program_item_id),
+            ).version?.id,
         }),
       );
     }

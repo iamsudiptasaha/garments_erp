@@ -110,6 +110,12 @@ Migrated Overview sections:
 
 During each migration, replace the card render path with the shared table and remove handlers, styles, helpers and imports used exclusively by those cards. Check references in other modules, worksheets, editors and browser acceptance tests before removing code. Keep the original modal and service boundaries.
 
+### Approved Dyeing Program worksheet exception
+
+Dyeing Program's document editor reuses `OverviewTable`, `FabricSheet`, `RecordPageHeading`, `RecordPageActions`, `RecordSelect` and `LabRecordSelect`. Its existing native dialog stages the complete document for Review → Confirm Save. Group identities are Lab Dip edition IDs; readable colour/edition labels never substitute for identity. Independent editor Overview and Sheet keys use the shared preference store. Grouped report bodies use the existing `renderBody` extension; view controls are not copied.
+
+Only an existing fabric item's ordered-kg cell is editable in this document worksheet. `FabricSheet`'s optional `editableCell`/`onEditCell` callbacks stage that value in the owning form; they never save directly. Blank fabric intersections, headers, source references and all subtotals/totals remain protected. Paste/cut/drop remain blocked. The selected-row quantity input and Manage Rows table provide accessible form alternatives. Every other worksheet retains the default protected-value contract below. No new styling or theme is introduced.
+
 ### Mandatory Sheet-view contract
 
 Use Suppliers and Colours as the reference for selection and the transition from a worksheet to an existing record form. The Sheet contract applies to record worksheets. Overview views retain their own interactions. Dedicated editors such as Item Costing follow their form contract, including draft and finalized states.

@@ -510,5 +510,22 @@
     },
     "ownership": "Receipt selects existing PO/material; movement references whole receipt, existing worker, garment item and employee. No child record editors or material registry.",
     "state": "Derived in PostgreSQL from immutable ordered events; the frontend consumes state, available actions and flag restrictions."
+  },
+  "dyeingProgramEditionGroups": {
+    "saveCommand": "public.erp_save_fabric_document",
+    "root": "dyeing_program",
+    "children": [
+      "dyeing_program_lab_dip",
+      "dyeing_program_item"
+    ],
+    "links": {
+      "table": "fabric_plan_dyeing_link",
+      "primaryKey": [
+        "item_part_fabric_id",
+        "dyeing_program_item_id"
+      ]
+    },
+    "permission": "Program create/edit; planner link changes also require Production Items view",
+    "invariants": "At most six unique editions. Explicit edition/version, optional same-edition historical batch excluding current program outputs. Receipt versions remain immutable. Composite planner changes share root revision and transaction; additions recalculate complete linked-set kg using fabric_plan_requirements."
   }
 }

@@ -1,5 +1,7 @@
 # Fabric: database-first alignment before going online
 
+> Historical implementation record. Current approved edition-group ownership and release/recovery rules are documented in [Dyeing edition groups](dyeing-edition-groups.md). Earlier variant-colour, item-level version/batch and automatic approved-version selection descriptions below are superseded.
+
 Scope: Fabric, plus colour/lab-dip dependencies required for dyeing. Production and stock workflows remain separate. Supabase is authoritative; the browser preview is not a second schema.
 
 ## Findings from current source and live metadata

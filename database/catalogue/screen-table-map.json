@@ -714,7 +714,7 @@
     },
     {
       "schema_name": "garments_erp",
-      "table_name": "view_variant_item_lab_dip_status"
+      "table_name": "view_item_part_fabric_labdip_status"
     },
     {
       "schema_name": "garments_erp",
@@ -943,6 +943,10 @@
     {
       "schema_name": "garments_erp",
       "table_name": "transferable_item_movement_type"
+    },
+    {
+      "schema_name": "garments_erp",
+      "table_name": "dyeing_program_lab_dip"
     }
   ],
   "mappings": [
@@ -1149,7 +1153,7 @@
     {
       "resource_key": "productionItems",
       "schema_name": "garments_erp",
-      "table_name": "view_variant_item_lab_dip_status",
+      "table_name": "view_item_part_fabric_labdip_status",
       "relation_type": "lookup",
       "can_view": true,
       "can_create": false,
@@ -5611,6 +5615,106 @@
       "schema_name": "garments_erp",
       "table_name": "employee",
       "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialStock",
+      "schema_name": "garments_erp",
+      "table_name": "dyeing_program_lab_dip",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialMovements",
+      "schema_name": "garments_erp",
+      "table_name": "dyeing_program_lab_dip",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialReceipts",
+      "schema_name": "garments_erp",
+      "table_name": "dyeing_program_lab_dip",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "materialIssues",
+      "schema_name": "garments_erp",
+      "table_name": "dyeing_program_lab_dip",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "fabricTypes",
+      "schema_name": "garments_erp",
+      "table_name": "dyeing_program_lab_dip",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "programs",
+      "schema_name": "garments_erp",
+      "table_name": "dyeing_program_lab_dip",
+      "relation_type": "detail",
+      "can_view": true,
+      "can_create": true,
+      "can_edit": true,
+      "can_delete": false
+    },
+    {
+      "resource_key": "dyeBills",
+      "schema_name": "garments_erp",
+      "table_name": "dyeing_program_lab_dip",
+      "relation_type": "lookup",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "dyed",
+      "schema_name": "garments_erp",
+      "table_name": "dyeing_program_lab_dip",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "greige",
+      "schema_name": "garments_erp",
+      "table_name": "dyeing_program_lab_dip",
+      "relation_type": "report_source",
+      "can_view": true,
+      "can_create": false,
+      "can_edit": false,
+      "can_delete": false
+    },
+    {
+      "resource_key": "batches",
+      "schema_name": "garments_erp",
+      "table_name": "dyeing_program_lab_dip",
+      "relation_type": "report_source",
       "can_view": true,
       "can_create": false,
       "can_edit": false,

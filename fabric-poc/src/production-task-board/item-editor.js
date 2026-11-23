@@ -48,10 +48,16 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
   const fabricOptions = {
     fabrics: (data.fabric_type || []).map((f) => [f.id, f.name]),
     parts: (data.sub_part_list || []).map((p) => [p.id, p.part]),
-    labs: (data.lab_dip || []).map((l) => [
-      l.id,
-      `${data.color_map?.find((c) => c.id === data.color_map_by_brand?.find((m) => m.id === l.color_map_by_brand_id)?.color_map_id)?.name || 'Lab dip'} · Edition ${l.edition} · ${l.id}`,
-    ]),
+    labs: (data.lab_dip || [])
+      .filter((l) =>
+        data.color_map_by_brand?.some(
+          (m) => m.id === l.color_map_by_brand_id && m.brand_list_id === header.brand_id,
+        ),
+      )
+      .map((l) => [
+        l.id,
+        `${data.color_map?.find((c) => c.id === data.color_map_by_brand?.find((m) => m.id === l.color_map_by_brand_id)?.color_map_id)?.name || 'Lab dip'} · Edition ${l.edition}`,
+      ]),
     statuses: (data.item_part_fabric_status || []).map((s) => [s.id, s.type]),
   };
   const [checklist, setChecklist] = useState(
@@ -157,7 +163,6 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
                 ?.id || (/^[0-9a-f-]{36}$/.test(l.id || '') ? l.id : crypto.randomUUID()),
             item_part_id: part.id,
             variant_id: l.variant_id,
-            lab_dip_id: l.lab_dip_id || null,
           };
         }),
       ];
@@ -223,7 +228,6 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
           [
             data.variant.find(({ id }) => id === link.variant_id)?.variant_name ?? link.variant_id,
             data.part_list.find(({ id }) => id === link.part_list_id)?.part,
-            link.lab_dip_id && 'Lab dip ' + link.lab_dip_id,
           ]
             .filter(Boolean)
             .join(' · '),
@@ -428,19 +432,6 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
               (value) =>
                 setLinks(links.map((r, n) => (n === i ? { ...r, part_list_id: value } : r))),
             ),
-            select(
-              `Lab dip ${i + 1}`,
-              l.lab_dip_id,
-              (data.lab_dip || [])
-                .filter((d) =>
-                  data.color_map_by_brand.some(
-                    (m) => m.id === d.color_map_by_brand_id && m.brand_list_id === header.brand_id,
-                  ),
-                )
-                .map((d) => [d.id, `Edition ${d.edition} \xB7 ${d.id}`]),
-              (value) => setLinks(links.map((r, n) => (n === i ? { ...r, lab_dip_id: value } : r))),
-              false,
-            ),
             h(
               'button',
               { type: 'button', onClick: () => setLinks(links.filter((_, n) => n !== i)) },
@@ -453,10 +444,7 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
           {
             type: 'button',
             onClick: () =>
-              setLinks([
-                ...links,
-                { id: crypto.randomUUID(), variant_id: '', part_list_id: '', lab_dip_id: '' },
-              ]),
+              setLinks([...links, { id: crypto.randomUUID(), variant_id: '', part_list_id: '' }]),
           },
           'Add variant / part',
         ),
@@ -554,7 +542,7 @@ export function ProductionItemEditor({ data, id, onSave, onClose, canEditFiles, 
                   fabric_type_id: '',
                   sub_part_list_id: null,
                   sub_part_name: '',
-                  lab_dip_id: links[0]?.lab_dip_id || null,
+                  lab_dip_id: null,
                   consumption_per_piece_kg: '',
                   item_part_fabric_status_id: null,
                 },
