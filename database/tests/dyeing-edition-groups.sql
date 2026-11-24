@@ -126,7 +126,7 @@ begin
   raise exception 'TEST stale child-only revision accepted';
  exception when serialization_failure then null;end;
  update garments_erp.dyeing_program_item set quantity=77 where id=i;
- perform public.erp_set_fabric_plan_dyeing_link(req2,i,false,'programs');
+ perform public.erp_set_fabric_plan_dyeing_link(req2,i,false,'programs',(select jsonb_build_object('program',garments_erp.fabric_json('dyeing_program',to_jsonb(p0)),'requirement',(select garments_erp.fabric_json('item_part_fabric',to_jsonb(f)) from garments_erp.item_part_fabric f where f.id=req2)) from garments_erp.dyeing_program p0 join garments_erp.dyeing_program_item i0 on i0.dyeing_program_id=p0.id where i0.id=i),(select round(coalesce(sum(r.required_kg),0),3) from garments_erp.fabric_plan_requirements r where r.id in(select item_part_fabric_id from garments_erp.fabric_plan_dyeing_link where dyeing_program_item_id=i except select req2)));
  select garments_erp.fabric_json('dyeing_program',to_jsonb(p0)) into expected from garments_erp.dyeing_program p0 where id=p;
  root:=jsonb_build_object('table','dyeing_program','id',p::text,'before',expected);
  payload:=jsonb_build_array(

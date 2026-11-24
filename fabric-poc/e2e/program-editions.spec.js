@@ -64,6 +64,9 @@ test('complete planner links reopen checked, consolidate editions, recalculate a
     name: 'Reconfirm Complete Planner Links',
     exact: true,
   });
+  await expect(
+    review.getByRole('heading', { name: 'Reconfirm Complete Planner Links', exact: true }),
+  ).toBeInViewport();
   await expect(review.getByRole('heading', { name: 'Navy · Edition 1', exact: true })).toHaveCount(
     1,
   );
@@ -213,4 +216,75 @@ test('Finalization reviews the proposed Final status and writes only after confi
           .dyeing_program_status_id,
     ),
   ).toBe('2');
+});
+
+test('removed groups retain edition, version, batch and linked-row context in confirmation', async ({
+  page,
+}) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Manage Rows', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove Row', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Manage Program Rows', exact: true })
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Remove empty group', exact: true }).click();
+  // Keep another valid Draft group so the removed group's old identity must be reviewed.
+  await page.getByRole('button', { name: 'Add manual row', exact: true }).click();
+  const manual = page.getByRole('dialog', { name: 'Add manual fabric requirement' });
+  await choose(page, 'Lab Dip edition', '2', 'Edition 2');
+  await choose(page, 'Explicit version', 'Version 1', 'Version 1');
+  await choose(page, 'Fabric type', 'Sinker', 'Sinker');
+  await manual.getByRole('spinbutton', { name: 'Ordered kg', exact: true }).fill('3');
+  await manual.getByRole('button', { name: 'Add manual row', exact: true }).click();
+  await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+  const review = page.getByRole('region', { name: 'Review Dyeing Program' });
+  await expect(review.getByRole('heading', { name: 'Navy · Edition 1', exact: true })).toHaveCount(
+    1,
+  );
+  await expect(review).toContainText('Removed');
+  await expect(review).toContainText('99 → Removed');
+  await expect(review).toContainText('Version 1');
+  expect(await page.evaluate(() => window.programSaves.length)).toBe(0);
+});
+test('empty group can be saved as Draft but blocks explicit Finalization', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Manage Rows', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove Row', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Manage Program Rows', exact: true })
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Review finalization', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Final programs require');
+  await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm save', exact: true }).click();
+  expect(
+    await page.evaluate(() =>
+      window.programSaves[0].dyeing_program_lab_dip.some((g) => g.id === 'group-fixture'),
+    ),
+  ).toBe(true);
+});
+
+test('reuse label requires an explicit persisted source rather than another program sharing the edition', async ({
+  page,
+}) => {
+  await open(page);
+  await expect(page.getByText('Approved from Previous Program', { exact: true })).toHaveCount(0);
+  const source = page.getByRole('combobox', {
+    name: 'Navy · Edition 1 Source Program',
+    exact: true,
+  });
+  await source.click();
+  await page.getByRole('option').first().click();
+  await expect(page.getByText('Approved from Previous Program', { exact: true })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm save', exact: true }).click();
+  expect(
+    await page.evaluate(
+      () =>
+        window.programSaves[0].dyeing_program_lab_dip.find((g) => g.id === 'group-fixture')
+          .source_dyeing_program_id,
+    ),
+  ).toBe('dp1');
 });

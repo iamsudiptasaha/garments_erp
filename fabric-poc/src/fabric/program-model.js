@@ -2,6 +2,11 @@ import { programContext } from './relationships.js';
 
 const clone = (value) => structuredClone(value);
 const kg = (value) => Math.round(Number(value) * 1000) / 1000;
+// Display/review projection only; SQL validates this total at either save boundary.
+export function linkedRequiredKg(requirements, requirementIds) {
+  const ids = new Set(requirementIds);
+  return kg(requirements.reduce((sum, r) => sum + (ids.has(r.id) ? Number(r.required_kg) : 0), 0));
+}
 export function programDraft(data, id) {
   return {
     header: clone(
@@ -40,8 +45,9 @@ export function reconcileProgramLinks(draft, itemId, selectedIds, requirements) 
   next.links = next.links
     .filter((l) => l.dyeing_program_item_id !== itemId)
     .concat(ids.map((id) => ({ item_part_fabric_id: id, dyeing_program_item_id: itemId })));
+  const total = linkedRequiredKg(rows, ids);
+  if (Object.hasOwn(next.recalculations, itemId)) next.recalculations[itemId] = total;
   if (ids.some((id) => !existing.some((l) => l.item_part_fabric_id === id))) {
-    const total = kg(rows.reduce((sum, r) => sum + Number(r.required_kg), 0));
     item.quantity = total;
     next.recalculations = { ...next.recalculations, [itemId]: total };
   }
@@ -109,14 +115,25 @@ export function saveProgram(data, draft) {
     new Set(draft.groups.map((g) => g.lab_dip_id)).size !== draft.groups.length
   )
     throw Error('Select one to six distinct editions.');
-  if (!draft.items.length) throw Error('Add at least one fabric item.');
+  const final = draft.header.dyeing_program_status_id !== '1';
+  if (!draft.items.length && final) throw Error('Final programs require at least one fabric item.');
   for (const group of draft.groups) {
     const lab = data.lab_dip.find((l) => l.id === group.lab_dip_id),
       version = data.lab_dip_version.find((v) => v.id === group.lab_dip_version_id);
     if (!lab || lab.dyer_id !== draft.header.dyer_id || version?.lab_dip_id !== lab.id)
       throw Error('Select an edition for this dyer and explicitly select its version.');
-    if (!draft.items.some((i) => i.dyeing_program_lab_dip_id === group.id))
-      throw Error('Remove empty edition groups before saving.');
+    if (final && !draft.items.some((i) => i.dyeing_program_lab_dip_id === group.id))
+      throw Error('Final programs require a fabric item in every edition group.');
+    if (
+      group.source_dyeing_program_id &&
+      (group.source_dyeing_program_id === id ||
+        !data.dyeing_program_lab_dip.some(
+          (g) =>
+            g.dyeing_program_id === group.source_dyeing_program_id &&
+            g.lab_dip_id === group.lab_dip_id,
+        ))
+    )
+      throw Error('Choose another source program using this exact edition.');
     if (group.batch_no) {
       const batch = data.batch_no_lab_dip_version_map.find((b) => b.id === group.batch_no);
       if (

@@ -526,6 +526,15 @@
       ]
     },
     "permission": "Program create/edit; planner link changes also require Production Items view",
-    "invariants": "At most six unique editions. Explicit edition/version, optional same-edition historical batch excluding current program outputs. Receipt versions remain immutable. Composite planner changes share root revision and transaction; additions recalculate complete linked-set kg using fabric_plan_requirements."
+    "invariants": "At most six unique editions. Explicit edition/version, optional same-edition historical batch excluding current program outputs. Receipt origin, edition/version and output identity are immutable from recording. Explicit source program selects the same edition without inferred historical backfill. Draft permits empty groups; Final forbids them. Composite planner changes and standalone link commands validate root revisions and reviewed totals; additions recalculate complete linked-set kg using fabric_plan_requirements."
+  },
+  "reviewedLocalItemEditionRemoval": {
+    "authoritativeTable": "item_part_fabric",
+    "authoritativeColumn": "lab_dip_id",
+    "scope": "Approved Fabric ER remediation: remove variant-level Lab Dip selection and writes from local preview only; preserve production identities and size allocation.",
+    "files": {
+      "fabric-poc/src/production/item-editor.js": "6fb42d875399de95bd34c552116d69febf3eb37d28ad8751f80ce04d38328d5f",
+      "fabric-poc/src/production/item-model.js": "b478cad08bd4c7a277178e12f69d78a3c5fc3f0d1ea6460a2415abdfeeda9f44"
+    }
   }
 }

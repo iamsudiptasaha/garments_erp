@@ -12,7 +12,15 @@ function editable(row, fields) {
 }
 function versionWrite(data, row) {
   const item = latestStatusItem(data, row);
-  if (!item) throw Error('Lab-dip version is missing its current status item.');
+  // Unreviewed versions are valid. Preserve their NULL review fields instead of
+  // manufacturing an approval record or blocking another edition's save.
+  if (!item)
+    return {
+      ...row,
+      date: row.date ?? null,
+      comments: row.comments ?? null,
+      lab_dip_status_id: row.lab_dip_status_id ?? null,
+    };
   // Compatibility transport only: the document RPC atomically writes review fields
   // into lab_dip_version_item; these are not physical version columns.
   return {

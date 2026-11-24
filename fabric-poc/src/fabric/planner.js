@@ -1,3 +1,4 @@
+import { linkedRequiredKg } from './program-model.js';
 import { createElement as h, useEffect, useMemo, useRef, useState } from 'react';
 import { useGridSearch, WorksheetToolbar } from './grid-toolbar.js';
 import { RecordPageHeading, RecordPageStatus } from './record-page.js';
@@ -90,8 +91,18 @@ export function FabricPlanEdit({
     const linkChange = event.nativeEvent.submitter?.value === 'link';
     if (linkChange) {
       if (!canLink || !requirement || !programItem) return;
+      const complete = new Set(
+        snapshot.links
+          .filter((l) => l.dyeing_program_item_id === programId)
+          .map((l) => l.item_part_fabric_id),
+      );
+      if (linked) complete.delete(requirement.id);
+      else complete.add(requirement.id);
+      const required = linkedRequiredKg(snapshot.requirements, complete);
       review.prepare(
         {
+          p_expected: { program: programItem.program_revision, requirement: requirement.revision },
+          p_reviewed_required_kg: required,
           p_requirement: requirement.id,
           p_program_item: programId,
           p_linked: !linked,
@@ -110,6 +121,11 @@ export function FabricPlanEdit({
             snapshot.lab_dips.find((l) => l.id === requirement.lab_dip_id)?.name ?? '—',
           ],
           ['Fabric', snapshot.fabric_types.find((f) => f.id === requirement.fabric_type_id)?.name],
+          ['Complete linked requirements', String(complete.size)],
+          [
+            'Ordered kg',
+            linked ? 'Unchanged' : `${programItem.quantity ?? 'Current'} → ${required}`,
+          ],
           [linked ? 'Unlink program item' : 'Link program item', programLabel(programItem)],
         ],
         async (args) => onSave(await call(client, 'erp_set_fabric_plan_dyeing_link', args)),

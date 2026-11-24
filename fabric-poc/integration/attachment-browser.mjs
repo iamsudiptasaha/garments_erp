@@ -372,6 +372,12 @@ async function item() {
   return record.id;
 }
 async function bill(pageKey, label, table, sourceLine) {
+  if (pageKey === 'dyeBills' && !sourceLine)
+    sourceLine = (
+      await db.query(
+        `select i.id,p.program_number number from garments_erp.dyeing_program_item i join garments_erp.dyeing_program p on p.id=i.dyeing_program_id join garments_erp.fabric_type f on f.id=i.fabric_type_id where f.name='Verification fabric' order by i.id limit 1`,
+      )
+    ).rows[0];
   await route(pageKey);
   const name = 'Browser ' + pageKey + ' ' + Date.now();
   await button(page, '+ New document').click();
@@ -415,6 +421,25 @@ async function bill(pageKey, label, table, sourceLine) {
         else {
           await control.click();
           await dialog.getByRole('option', { name: new RegExp(sourceLine.number) }).click();
+        }
+      } else if (pageKey === 'dyeBills' && key === 'Knitted fabric source') {
+        const input = dialog.getByLabel('Line 1 ' + key, { exact: true });
+        // Recorded concurrency fixtures intentionally use another fabric. Select
+        // the compatible source instead of depending on global insertion order.
+        if ((await input.evaluate((el) => el.tagName)) === 'SELECT') {
+          const compatible = (
+            await db.query(
+              `select k.id from garments_erp.knitting_bill_item k join garments_erp.fabric_type f on f.id=k.fabric_type_id where f.name='Verification fabric' order by k.id limit 1`,
+            )
+          ).rows[0];
+          await input.selectOption(String(compatible.id));
+        } else {
+          await input.fill('Verification fabric');
+          await dialog
+            .getByRole('option')
+            .filter({ hasText: 'Verification fabric' })
+            .first()
+            .click();
         }
       } else if (pageKey === 'knitting' && key === 'Source yarn bill line') {
         const control = dialog.getByLabel('Line 1 ' + key, { exact: true });
@@ -501,7 +526,12 @@ async function shade() {
   await dialog
     .getByLabel('Colour / brand')
     .selectOption({ label: 'Verification colour / Verification brand' });
-  await dialog.getByLabel('Dyer').selectOption({ index: 1 });
+  const sourceDyer = (
+    await db.query(
+      `select l.dyer_id from garments_erp.lab_dip l join garments_erp.lab_dip_version v on v.lab_dip_id=l.id join garments_erp.batch_no_lab_dip_version_map b on b.lab_dip_version_id=v.id where b.batch_no='BROWSER-LEGACY-STOCK'`,
+    )
+  ).rows[0];
+  await dialog.getByLabel('Dyer').selectOption(String(sourceDyer.dyer_id));
   await upload(dialog, 'Upload shade card image', 'shade.png');
   await b('Review →').click();
   await dialog.getByText(/Upload shade.png/).waitFor();
@@ -1072,10 +1102,14 @@ async function fabricPlannerWorkflow() {
 
   const {
     rows: [contrast],
-  } = await db.query(`insert into garments_erp.lab_dip(edition,color_map_by_brand_id,dyer_id)
+  } = await db.query(
+    `insert into garments_erp.lab_dip(edition,color_map_by_brand_id,dyer_id)
     select max(l.edition)+1,l.color_map_by_brand_id,l.dyer_id from garments_erp.lab_dip l
     join garments_erp.color_map_by_brand m on m.id=l.color_map_by_brand_id join garments_erp.brand_list b on b.id=m.brand_list_id
-    where b.brand='Verification brand' group by l.color_map_by_brand_id,l.dyer_id returning id`);
+    where b.brand='Verification brand' and l.dyer_id=(select source.dyer_id from garments_erp.lab_dip source where source.id=$1)
+    group by l.color_map_by_brand_id,l.dyer_id returning id`,
+    [isolatedLine.lab_dip_id],
+  );
   await route('productionItems');
   const style = 'Planner browser ' + randomBytes(4).toString('hex');
   await button(page, '+ Create item').click();
@@ -1442,8 +1476,337 @@ async function fabricPlannerWorkflow() {
     ),
     0,
   );
+  await programEditorWorkflow(
+    requirement.id,
+    style,
+    isolatedLine.lab_dip_id,
+    contrast.id,
+    programRecord.program_number,
+  );
   console.log(
     'PASS Chromium Items sub-parts, independent dips, decimal kg, review, responsive fields, overrides, Draft/Final, link removal, verified receipt and automatic inventory',
+  );
+}
+
+// Real authenticated ProgramEditor → public RPC → PostgreSQL → snapshot/reload.
+async function programEditorWorkflow(requirementId, style, sourceLab, contrastLab, sourceNumber) {
+  await db.query('insert into garments_erp.lab_dip_version(lab_dip_id,version) values($1,1)', [
+    contrastLab,
+  ]);
+  await db.query(
+    `insert into garments_erp.lab_dip_version_item(lab_dip_version_id,date,lab_dip_status_id)
+    select v.id,current_date,s.id from garments_erp.lab_dip_version v cross join garments_erp.lab_dip_version_status s
+    where v.lab_dip_id=$1 and v.version=1 and s.sort_order=3`,
+    [contrastLab],
+  );
+  await db.query('insert into garments_erp.lab_dip_version(lab_dip_id,version) values($1,2)', [
+    contrastLab,
+  ]);
+  const contrastEdition = (
+    await db.query('select edition from garments_erp.lab_dip where id=$1', [contrastLab])
+  ).rows[0].edition;
+  const extra = (
+    await db.query(
+      `insert into garments_erp.item_part_fabric(variant_item_id,fabric_type_id,lab_dip_id,sub_part_name,consumption_per_piece_kg)
+    select variant_item_id,fabric_type_id,lab_dip_id,'Editor extra sleeve',0.025 from garments_erp.item_part_fabric where id=$1 returning id`,
+      [requirementId],
+    )
+  ).rows[0];
+  const colour = 'Verification colour';
+  const ed = page.getByRole('dialog', { name: 'Dyeing Program', exact: true });
+  const choose = async (scope, label, text) => {
+    const input = scope.getByRole('combobox', { name: label, exact: true });
+    await input.fill(text);
+    await scope.getByRole('option').filter({ hasText: text }).first().click();
+  };
+  const addManual = async (edition, quantity) => {
+    await button(ed, 'Add manual row').click();
+    const modal = page.getByRole('dialog', { name: 'Add manual fabric requirement', exact: true });
+    await choose(modal, 'Lab Dip edition', `${colour} · Edition ${edition}`);
+    assert.equal(
+      await modal.getByRole('combobox', { name: 'Explicit version', exact: true }).inputValue(),
+      '',
+    );
+    await choose(modal, 'Explicit version', 'Version 1');
+    await choose(modal, 'Fabric type', 'Verification fabric');
+    await modal.getByRole('spinbutton', { name: 'Ordered kg', exact: true }).fill(String(quantity));
+    await button(modal, 'Add manual row').click();
+  };
+  await route('programs');
+  // SQL fixture setup happened after the previous workspace load. A hash-only
+  // navigation intentionally retains the existing workspace snapshot.
+  await page.reload();
+  await button(page, '+ New document').click();
+  const initialSnapshot = ok(await actor.rpc('erp_fabric_snapshot'));
+  const sourceDyer = initialSnapshot.lab_dip.find((l) => l.id === String(sourceLab)).dyer_id;
+  await ed.getByRole('combobox', { name: 'Dyer', exact: true }).click();
+  await ed
+    .getByRole('option')
+    .nth(initialSnapshot.dyer.findIndex((d) => d.id === sourceDyer))
+    .click();
+  const date = '2026-11-24';
+  await ed.getByLabel('Program date', { exact: true }).fill(date);
+  await addManual(1, 70);
+  await addManual(contrastEdition, 3.25);
+  await choose(ed, `${colour} · Edition 1 Source Program`, sourceNumber);
+  await choose(ed, `${colour} · Edition 1 Batch No.`, 'BROWSER-LEGACY-STOCK');
+  await button(ed, 'Manage Rows').click();
+  const managed = page.getByRole('dialog', { name: 'Manage Program Rows', exact: true });
+  await button(managed, 'Manage Links').first().click();
+  const picker = page.getByRole('dialog', { name: 'Fabric Planner · Add to Program', exact: true });
+  await picker.getByRole('checkbox', { name: new RegExp(style + '.*Main sleeve') }).check();
+  await picker.getByRole('checkbox', { name: new RegExp(style + '.*Editor extra sleeve') }).check();
+  await button(picker, 'Review complete links').click();
+  const linksReview = page.getByRole('dialog', {
+    name: 'Reconfirm Complete Planner Links',
+    exact: true,
+  });
+  await linksReview.getByText('Added', { exact: true }).first().waitFor();
+  await button(linksReview, 'Confirm complete links').click();
+  await button(ed, 'Manage Rows').click();
+  await managed
+    .getByRole('spinbutton', { name: 'Verification fabric ordered kg', exact: true })
+    .first()
+    .fill('55');
+  await button(managed, 'Close').click();
+  await button(ed, 'Review changes').click();
+  await button(ed, 'Confirm save').click();
+  await ed.waitFor({ state: 'hidden' });
+  const created = (
+    await db.query(
+      `select p.id,p.program_number,g.id group_id,i.id item_id,i.quantity,g.source_dyeing_program_id,g.batch_no
+    from garments_erp.dyeing_program p join garments_erp.dyeing_program_lab_dip g on g.dyeing_program_id=p.id
+    join garments_erp.dyeing_program_item i on i.dyeing_program_lab_dip_id=g.id
+    where g.lab_dip_id=$1 and exists(select 1 from garments_erp.fabric_plan_dyeing_link l where l.dyeing_program_item_id=i.id and l.item_part_fabric_id=$2)
+    order by p.id desc limit 1`,
+      [sourceLab, extra.id],
+    )
+  ).rows[0];
+  assert.ok(created);
+  assert.equal(Number(created.quantity), 55);
+  assert.ok(created.source_dyeing_program_id);
+  assert.ok(created.batch_no);
+  assert.equal(
+    (
+      await db.query(
+        'select count(*)::int n from garments_erp.dyeing_program_lab_dip where dyeing_program_id=$1',
+        [created.id],
+      )
+    ).rows[0].n,
+    2,
+  );
+  const open = async () => {
+    await route('programs');
+    await page.reload();
+    await page
+      .getByRole('table', { name: 'Dyeing programs', exact: true })
+      .getByRole('button', { name: created.program_number, exact: true })
+      .click();
+  };
+  await open();
+  await ed.getByText('Approved from Previous Program', { exact: true }).waitFor();
+  await ed.getByText(sourceNumber, { exact: true }).first().waitFor();
+  await button(ed, 'Manage Rows').click();
+  await button(managed, 'Manage Links').first().click();
+  assert.equal(
+    await picker.getByRole('checkbox', { name: new RegExp(style + '.*Main sleeve') }).isChecked(),
+    true,
+  );
+  assert.equal(
+    await picker
+      .getByRole('checkbox', { name: new RegExp(style + '.*Editor extra sleeve') })
+      .isChecked(),
+    true,
+  );
+  // Removal preserves the manual quantity and the unrelated edition/item.
+  await picker
+    .getByRole('checkbox', { name: new RegExp(style + '.*Editor extra sleeve') })
+    .uncheck();
+  await button(picker, 'Review complete links').click();
+  await button(linksReview, 'Confirm complete links').click();
+  await button(ed, 'Review changes').click();
+  await button(ed, 'Confirm save').click();
+  await ed.waitFor({ state: 'hidden' });
+  assert.equal(
+    Number(
+      (
+        await db.query('select quantity from garments_erp.dyeing_program_item where id=$1', [
+          created.item_id,
+        ])
+      ).rows[0].quantity,
+    ),
+    55,
+  );
+  assert.equal(
+    (
+      await db.query(
+        'select count(*)::int n from garments_erp.fabric_plan_dyeing_link where dyeing_program_item_id=$1',
+        [created.item_id],
+      )
+    ).rows[0].n,
+    1,
+  );
+  // Concurrent change after review must fail atomically through the real UI/RPC.
+  await open();
+  await ed.getByLabel('Program date', { exact: true }).fill('2026-11-23');
+  await button(ed, 'Review changes').click();
+  await db.query('update garments_erp.dyeing_program_item set quantity=56 where id=$1', [
+    created.item_id,
+  ]);
+  await button(ed, 'Confirm save').click();
+  await ed
+    .getByRole('alert')
+    .filter({ hasText: /changed/ })
+    .waitFor();
+  assert.notEqual(
+    (
+      await db.query('select date::date::text date from garments_erp.dyeing_program where id=$1', [
+        created.id,
+      ])
+    ).rows[0].date,
+    '2026-11-23',
+  );
+  await button(ed, 'Back to edit').click();
+  await button(ed, 'Cancel').click();
+  // A reloaded edit can finalize explicitly; no automatic Final transition.
+  await open();
+  await button(ed, 'Review finalization').click();
+  await button(ed, 'Confirm save').click();
+  await ed.waitFor({ state: 'hidden' });
+  assert.equal(
+    Number(
+      (
+        await db.query(
+          'select dyeing_program_status_id from garments_erp.dyeing_program where id=$1',
+          [created.id],
+        )
+      ).rows[0].dyeing_program_status_id,
+    ),
+    2,
+  );
+  const protectedItem = (
+    await db.query(
+      `select i.id,g.id group_id,g.lab_dip_version_id from garments_erp.dyeing_program_item i join garments_erp.dyeing_program_lab_dip g on g.id=i.dyeing_program_lab_dip_id where i.dyeing_program_id=$1 and g.lab_dip_id=$2`,
+      [created.id, contrastLab],
+    )
+  ).rows[0];
+  await db.query('begin');
+  const receipt = (
+    await db.query(
+      `insert into garments_erp.dyed_fabric_item(dyed_fabric_bill_id,dyeing_program_item_id,knitting_bill_item_id,gross_quantity,billed_quantity,final_quantity,dyeing_rate)
+    select d.dyed_fabric_bill_id,$1,d.knitting_bill_item_id,1,1,1,d.dyeing_rate from garments_erp.dyed_fabric_item d join garments_erp.batch_no_lab_dip_version_map b on b.dyed_fabric_item_id=d.id where b.batch_no='BROWSER-LEGACY-STOCK' returning id`,
+      [protectedItem.id],
+    )
+  ).rows[0];
+  await db.query(
+    'insert into garments_erp.batch_no_lab_dip_version_map(dyed_fabric_item_id,lab_dip_version_id,batch_no) values($1,$2,$3)',
+    [receipt.id, protectedItem.lab_dip_version_id, 'EDITOR-LOCK-' + created.id],
+  );
+  await db.query('commit');
+  await open();
+  await choose(ed, `${colour} · Edition ${contrastEdition} version`, 'Version 2');
+  await button(ed, 'Review changes').click();
+  await ed
+    .getByRole('alert')
+    .filter({ hasText: /provenance/ })
+    .waitFor();
+  await button(ed, 'Cancel').click();
+  const canonical = ok(await actor.rpc('erp_fabric_snapshot'));
+  const existingGroup = canonical.dyeing_program_lab_dip.find(
+    (g) => g.id === String(protectedItem.group_id),
+  );
+  const locked = await actor.rpc('erp_save_fabric_document', {
+    p_resource: 'programs',
+    p_root: {
+      table: 'dyeing_program',
+      id: String(created.id),
+      before: canonical.dyeing_program.find((p) => p.id === String(created.id)),
+    },
+    p_action: 'edit',
+    p_changes: [
+      {
+        table: 'dyeing_program_lab_dip',
+        id: existingGroup.id,
+        before: existingGroup,
+        values: {
+          dyeing_program_id: String(created.id),
+          lab_dip_id: String(contrastLab),
+          lab_dip_version_id: canonical.lab_dip_version.find(
+            (v) => v.lab_dip_id === String(contrastLab) && Number(v.version) === 2,
+          ).id,
+          batch_no: null,
+          source_dyeing_program_id: null,
+        },
+      },
+    ],
+  });
+  assert.equal(locked.error?.code, '23514');
+  const failure = await denied.rpc('erp_save_fabric_document', {
+    p_resource: 'programs',
+    p_root: {
+      table: 'dyeing_program',
+      id: String(created.id),
+      before: canonical.dyeing_program.find((p) => p.id === String(created.id)),
+    },
+    p_action: 'edit',
+    p_changes: [
+      {
+        table: 'dyeing_program',
+        id: String(created.id),
+        before: canonical.dyeing_program.find((p) => p.id === String(created.id)),
+        values: { date: '2026-11-25' },
+      },
+    ],
+  });
+  assert.equal(failure.error?.code, '42501');
+  // Empty Draft groups must survive save/reload and remain in the ordinary list.
+  const previousMax = (await db.query('select max(id) id from garments_erp.dyeing_program')).rows[0]
+    .id;
+  await route('programs');
+  await page.reload();
+  await button(page, '+ New document').click();
+  await ed.getByRole('combobox', { name: 'Dyer', exact: true }).click();
+  await ed
+    .getByRole('option')
+    .nth(initialSnapshot.dyer.findIndex((d) => d.id === sourceDyer))
+    .click();
+  await addManual(1, 0);
+  await button(ed, 'Manage Rows').click();
+  await button(managed, 'Remove Row').click();
+  await button(managed, 'Close').click();
+  await button(ed, 'Review changes').click();
+  await button(ed, 'Confirm save').click();
+  await ed.waitFor({ state: 'hidden' });
+  const empty = (
+    await db.query(
+      'select id,program_number from garments_erp.dyeing_program where id>$1 order by id desc limit 1',
+      [previousMax],
+    )
+  ).rows[0];
+  assert.ok(empty);
+  assert.equal(
+    (
+      await db.query(
+        'select count(*)::int n from garments_erp.dyeing_program_item where dyeing_program_id=$1',
+        [empty.id],
+      )
+    ).rows[0].n,
+    0,
+  );
+  await page.reload();
+  await page
+    .getByRole('table', { name: 'Dyeing programs', exact: true })
+    .getByRole('button', { name: empty.program_number, exact: true })
+    .click();
+  await ed.getByText('Status: Draft', { exact: true }).waitFor();
+  await button(ed, 'Review finalization').click();
+  await ed
+    .getByRole('alert')
+    .filter({ hasText: /Final programs require/ })
+    .waitFor();
+  await button(ed, 'Cancel').click();
+  console.log(
+    'PASS authenticated ProgramEditor multi-edition create, unapproved version, explicit reuse/batch, complete links, manual override, removal, reload, stale review, Final, receipt provenance and denied writes',
   );
 }
 

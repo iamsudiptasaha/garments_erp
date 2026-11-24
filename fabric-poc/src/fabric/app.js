@@ -222,7 +222,12 @@ const fabricOverviewLabels = {
 
 const fabricDocumentTotals = new Set(['quantity', 'received', 'left']);
 function fabricDocumentSummary({ id, rows }, columns) {
-  const record = { ...rows[0], id, rows, lineCount: rows.length };
+  const record = {
+    ...rows[0],
+    id,
+    rows,
+    lineCount: rows.filter((row) => !row.emptyDocument).length,
+  };
   for (const key of columns) {
     if (fabricDocumentTotals.has(key)) {
       record[key] = rows.reduce((total, row) => total + Number(row[key] ?? 0), 0);

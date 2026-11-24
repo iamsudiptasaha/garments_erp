@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialFabric } from '../src/fabric/domain.js';
+import { initialFabric, fabricRows } from '../src/fabric/domain.js';
 import {
   programDraft,
   addPlannerRequirements,
@@ -96,4 +96,60 @@ test('repeated manual fabric rows require an explicit target instead of guessing
   const targeted = reconcileProgramLinks(next, next.items[0].id, ['1', '2'], rows);
   assert.equal(targeted.items[0].quantity, 16.125);
   assert.equal(targeted.items[1].quantity, 3);
+});
+
+test('removing staged additions refreshes the final-set validation without overwriting entered kg', () => {
+  const { data, rows, lab } = fixture(),
+    draft = programDraft(data);
+  draft.header.dyer_id = 'dy1';
+  let next = addPlannerRequirements(draft, lab, 'seed-navy-v1', ['1', '2'], rows);
+  next.items[0].quantity = 77;
+  next = reconcileProgramLinks(next, next.items[0].id, ['2'], rows);
+  const changes = fabricChanges(data, saveProgram(data, next), 'programs');
+  assert.equal(next.items[0].quantity, 77);
+  assert.equal(changes.find((c) => c.table === 'fabric_plan_dyeing_link').reviewed_required_kg, 2);
+});
+test('Draft permits empty edition groups and Final rejects them', () => {
+  const { data, rows, lab } = fixture(),
+    draft = programDraft(data);
+  draft.header.dyer_id = 'dy1';
+  const next = addPlannerRequirements(draft, lab, 'seed-navy-v1', ['1'], rows);
+  next.items = [];
+  next.links = [];
+  assert.equal(saveProgram(data, next).dyeing_program_lab_dip.at(-1).lab_dip_id, lab);
+  next.header.dyeing_program_status_id = '2';
+  assert.throws(() => saveProgram(data, next), /Final programs require/);
+});
+test('reuse preserves the explicit source and rejects a different edition source', () => {
+  const { data, rows, lab } = fixture(),
+    draft = programDraft(data);
+  draft.header.dyer_id = 'dy1';
+  const next = addPlannerRequirements(draft, lab, 'seed-navy-v1', ['1'], rows);
+  const source = data.dyeing_program_lab_dip.find((g) => g.lab_dip_id === lab);
+  next.groups[0].source_dyeing_program_id = source.dyeing_program_id;
+  assert.equal(
+    saveProgram(data, next).dyeing_program_lab_dip.at(-1).source_dyeing_program_id,
+    source.dyeing_program_id,
+  );
+  next.groups[0].source_dyeing_program_id = 'missing';
+  assert.throws(() => saveProgram(data, next), /source program/);
+});
+
+test('an empty Draft remains listed with header identity and no fabricated fabric item', () => {
+  const { data, rows, lab } = fixture(),
+    draft = programDraft(data);
+  draft.header.dyer_id = 'dy1';
+  const next = addPlannerRequirements(draft, lab, 'seed-navy-v1', ['1'], rows);
+  next.items = [];
+  next.links = [];
+  const saved = saveProgram(data, next),
+    listed = fabricRows(saved, 'programs').find((r) => r.documentId === next.header.id);
+  assert.ok(listed);
+  assert.equal(listed.programStatus, 'Draft');
+  assert.equal(listed.emptyDocument, true);
+  assert.equal(listed.quantity, 0);
+  assert.equal(
+    saved.dyeing_program_item.some((i) => i.dyeing_program_id === next.header.id),
+    false,
+  );
 });

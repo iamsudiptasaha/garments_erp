@@ -35,7 +35,11 @@ for attempt in {1..30}; do
 done
 curl --silent --fail -X OPTIONS http://127.0.0.1:18765/ >/dev/null
 curl --silent --fail http://127.0.0.1:18766/fabric.html >/dev/null
-ATTACHMENT_FILES_SERVICE=http://127.0.0.1:18765 node fabric-poc/integration/attachment-browser.mjs
-ATTACHMENT_FILES_SERVICE=http://127.0.0.1:18765 node fabric-poc/integration/attachment-browser.mjs --owning-modal
-ATTACHMENT_FILES_SERVICE=http://127.0.0.1:18765 node fabric-poc/integration/attachment-browser.mjs --fabric-planner
-node fabric-poc/integration/attachment-browser.mjs --contact-purpose
+if [[ $# -gt 0 ]]; then
+  ATTACHMENT_FILES_SERVICE=http://127.0.0.1:18765 node fabric-poc/integration/attachment-browser.mjs "$@"
+else
+  ATTACHMENT_FILES_SERVICE=http://127.0.0.1:18765 node fabric-poc/integration/attachment-browser.mjs
+  ATTACHMENT_FILES_SERVICE=http://127.0.0.1:18765 node fabric-poc/integration/attachment-browser.mjs --owning-modal
+  ATTACHMENT_FILES_SERVICE=http://127.0.0.1:18765 node fabric-poc/integration/attachment-browser.mjs --fabric-planner
+  node fabric-poc/integration/attachment-browser.mjs --contact-purpose
+fi

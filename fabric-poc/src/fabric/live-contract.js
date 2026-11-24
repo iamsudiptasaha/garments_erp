@@ -63,7 +63,13 @@ export const fabricContract = {
   },
   programs: {
     dyeing_program: ['date', 'dyer_id', 'dyeing_program_status_id'],
-    dyeing_program_lab_dip: ['dyeing_program_id', 'lab_dip_id', 'lab_dip_version_id', 'batch_no'],
+    dyeing_program_lab_dip: [
+      'dyeing_program_id',
+      'lab_dip_id',
+      'lab_dip_version_id',
+      'batch_no',
+      'source_dyeing_program_id',
+    ],
     dyeing_program_item: [
       'dyeing_program_id',
       'dyeing_program_lab_dip_id',
@@ -253,6 +259,7 @@ export const fabricColumnTypes = {
     lab_dip_id: 'bigint',
     lab_dip_version_id: 'bigint',
     batch_no: 'bigint',
+    source_dyeing_program_id: 'bigint',
     created_at: 'timestamp with time zone',
     updated_at: 'timestamp with time zone',
   },

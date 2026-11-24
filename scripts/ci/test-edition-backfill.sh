@@ -45,4 +45,23 @@ end $$;
 SQL
 docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 < "$migration" >/tmp/erp-edition-migration.log
 docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 < database/tests/dyeing-edition-backfill-after.sql >/tmp/erp-edition-backfill-after.log
-echo 'PASS conflicting legacy migration rollback and populated identity-preserving backfill'
+for followup in supabase/migrations/*.sql; do
+ version=$(basename "$followup" | cut -d_ -f1)
+ if [[ "$version" > 20261123200917 ]]; then
+  if [[ "$version" == 20261124150636 ]]; then
+   # The old schema permits this legacy conflict; remediation must fail closed
+   # and roll back every DDL object before an explicit fixture reconciliation.
+   docker exec "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 -c "insert into garments_erp.dyeing_program(dyer_id,dyeing_program_status_id) select (data->>'dyer')::bigint,2 from public.ci_edition_backfill_fixture;" >> "$work/replay.log" 2>&1
+   if docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 < "$followup" > "$work/remediation-conflict.log" 2>&1; then
+    echo 'FAIL: empty Final legacy program passed remediation preflight' >&2
+    exit 1
+   fi
+   grep -q 'Remediation preflight' "$work/remediation-conflict.log"
+   docker exec "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 -c "do \$\$ begin if exists(select 1 from information_schema.columns where table_schema='garments_erp' and table_name='dyeing_program_lab_dip' and column_name='source_dyeing_program_id') or to_regprocedure('garments_erp.guard_fabric_provenance()') is not null then raise exception 'Remediation DDL did not roll back';end if;end \$\$; delete from garments_erp.dyeing_program p where dyeing_program_status_id=2 and not exists(select 1 from garments_erp.dyeing_program_lab_dip g where g.dyeing_program_id=p.id);" >> "$work/replay.log" 2>&1
+  fi
+  docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 < "$followup" >> "$work/replay.log" 2>&1
+ fi
+done
+docker exec "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 -c "do \$\$ begin if exists(select 1 from garments_erp.dyeing_program_lab_dip where source_dyeing_program_id is not null) then raise exception 'Historical reuse was fabricated';end if;end \$\$;" >> "$work/replay.log" 2>&1
+docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 < database/tests/fabric-er-schema.sql >> "$work/replay.log" 2>&1
+echo 'PASS conflicting legacy migration and remediation preflight rollback, populated identity-preserving backfill, and no invented reuse sources'

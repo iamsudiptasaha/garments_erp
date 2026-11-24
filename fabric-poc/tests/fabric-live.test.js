@@ -326,3 +326,25 @@ test('pending verification migration leaves other Fabric reads available without
     /verification is unavailable/,
   );
 });
+
+test('an existing unreviewed version does not block another edition save or fabricate history', () => {
+  const before = initialFabric();
+  before.lab_dip_version.push({
+    id: 'unreviewed-valid-version',
+    lab_dip_id: before.lab_dip[0].id,
+    version: 99,
+    date: null,
+    comments: null,
+    lab_dip_status_id: null,
+  });
+  const after = structuredClone(before);
+  after.lab_dip[0].date = '2026-11-24';
+  const changes = fabricChanges(before, after, 'labDips');
+  assert.equal(changes.length, 1);
+  assert.equal(changes[0].table, 'lab_dip');
+  assert.equal(
+    changes.some((c) => c.id === 'unreviewed-valid-version'),
+    false,
+  );
+  assert.deepEqual(before.lab_dip_version_item, after.lab_dip_version_item);
+});

@@ -581,30 +581,60 @@ export function fabricRows(data, page) {
       };
     });
   if (page === 'programs')
-    return data.dyeing_program_item.map((r) => {
-      const h = get('dyeing_program', r.dyeing_program_id);
-      return {
-        id: r.id,
-        documentId: h.id,
-        bill: h.program_number || 'Number pending database save',
-        programStatus:
-          optionsFor(data, 'dyeingProgramStatuses').find(
-            ([id]) => id === h.dyeing_program_status_id,
-          )?.[1] || 'Unclassified',
-        date: h.date?.slice(0, 10) || '—',
-        supplier: supplier('dyer', h.dyer_id),
-        color: s.color(programContext(data, r).mappingId).name,
-        mapping:
-          optionsFor(data, 'colors').find(
-            ([id]) => id === programContext(data, r).mappingId,
-          )?.[1] || '—',
-        labDip: versionLabelForRow(data, r),
-        batch: previousBatchLabel(data, programContext(data, r).group?.batch_no),
-        name: get('fabric_type', r.fabric_type_id).name,
-        quantity: r.quantity,
-        comments: commentText(r.comments || ''),
-      };
-    });
+    return data.dyeing_program_item
+      .map((r) => {
+        const h = get('dyeing_program', r.dyeing_program_id);
+        return {
+          id: r.id,
+          documentId: h.id,
+          bill: h.program_number || 'Number pending database save',
+          programStatus:
+            optionsFor(data, 'dyeingProgramStatuses').find(
+              ([id]) => id === h.dyeing_program_status_id,
+            )?.[1] || 'Unclassified',
+          date: h.date?.slice(0, 10) || '—',
+          supplier: supplier('dyer', h.dyer_id),
+          color: s.color(programContext(data, r).mappingId).name,
+          mapping:
+            optionsFor(data, 'colors').find(
+              ([id]) => id === programContext(data, r).mappingId,
+            )?.[1] || '—',
+          labDip: versionLabelForRow(data, r),
+          batch: previousBatchLabel(data, programContext(data, r).group?.batch_no),
+          name: get('fabric_type', r.fabric_type_id).name,
+          quantity: r.quantity,
+          comments: commentText(r.comments || ''),
+        };
+      })
+      .concat(
+        data.dyeing_program
+          .filter((p) => !data.dyeing_program_item.some((i) => i.dyeing_program_id === p.id))
+          .map((p) => ({
+            // A header-only Draft remains discoverable. This is a presentation key,
+            // never a fabric-item ID; opening continues through documentId.
+            id: 'empty-program:' + p.id,
+            documentId: p.id,
+            emptyDocument: true,
+            bill: p.program_number || 'Number pending database save',
+            programStatus:
+              optionsFor(data, 'dyeingProgramStatuses').find(
+                ([id]) => id === p.dyeing_program_status_id,
+              )?.[1] || 'Unclassified',
+            date: p.date?.slice(0, 10) || '—',
+            supplier: supplier('dyer', p.dyer_id),
+            color: [
+              ...new Set(
+                (data.dyeing_program_lab_dip || [])
+                  .filter((g) => g.dyeing_program_id === p.id)
+                  .map((g) => s.color(get('lab_dip', g.lab_dip_id)?.color_map_by_brand_id).name),
+              ),
+            ].join(', '),
+            name: 'No fabric items',
+            quantity: 0,
+            comments: '',
+          })),
+      );
+
   if (['dyeBills', 'dyed', 'batches'].includes(page))
     return data.dyed_fabric_item.map((r) => {
       const d = dyed(r);

@@ -24,9 +24,11 @@ const button = (label, onClick, extra = {}) =>
   h('button', { type: 'button', onClick, ...extra }, label);
 function Dialog({ title, children, onClose }) {
   const ref = useRef(null);
+  const titleRef = useRef(null);
   useEffect(() => {
-    ref.current.showModal();
-  }, []);
+    if (!ref.current.open) ref.current.showModal();
+    titleRef.current?.focus();
+  }, [title]);
   return h(
     'dialog',
     {
@@ -39,7 +41,7 @@ function Dialog({ title, children, onClose }) {
         onClose();
       },
     },
-    h('h2', null, title),
+    h('h2', { ref: titleRef, tabIndex: -1 }, title),
     children,
     h('div', { className: 'editor-actions' }, button('Close', onClose)),
   );
@@ -374,60 +376,112 @@ export function ProgramEditor({
       setModal('links-review');
     });
   }
-  const summary = (next, previous = draft) =>
-    next.groups.map((g) =>
-      h(
-        'section',
-        { key: g.id, className: 'fabric-line' },
-        h('h3', null, groupLabel(g)),
-        h(
-          'p',
-          null,
-          versionLabel(data, g.lab_dip_version_id),
-          ' · Batch No. ',
-          previousBatchLabel(data, g.batch_no),
-        ),
-        h(
-          Table,
-          {
-            columns: [
-              'Fabric Type',
-              'Planner requirement',
-              'Change',
-              'Required kg',
-              'Ordered kg',
-              'Comments',
-            ],
-          },
-          next.items
-            .filter((i) => i.dyeing_program_lab_dip_id === g.id)
-            .map((item) => {
-              const links = next.links.filter((l) => l.dyeing_program_item_id === item.id),
-                old = previous.links.filter((l) => l.dyeing_program_item_id === item.id),
-                ids = [...new Set([...links, ...old].map((l) => l.item_part_fabric_id))];
-              const before = previous.items.find((i) => i.id === item.id)?.quantity;
+  const sourceLabel = (g) =>
+    data.dyeing_program.find((p) => p.id === g?.source_dyeing_program_id)?.program_number ||
+    'None recorded';
+  const summary = (next, previous = draft) => {
+    const groups = [
+      ...new Map([...previous.groups, ...next.groups].map((g) => [g.id, g])).values(),
+    ];
+    return h(
+      Fragment,
+      null,
+      groups.map((g) => {
+        const before = previous.groups.find((old) => old.id === g.id),
+          after = next.groups.find((row) => row.id === g.id);
+        const state = !before
+          ? 'Added'
+          : !after
+            ? 'Removed'
+            : ['lab_dip_id', 'lab_dip_version_id', 'batch_no', 'source_dyeing_program_id'].some(
+                  (k) => (before[k] || null) !== (after[k] || null),
+                )
+              ? 'Changed'
+              : 'Existing';
+        const oldItems = previous.items.filter((i) => i.dyeing_program_lab_dip_id === g.id);
+        const newItems = next.items.filter((i) => i.dyeing_program_lab_dip_id === g.id);
+        const items = [...new Map([...oldItems, ...newItems].map((i) => [i.id, i])).values()];
+        const field = (label, read) =>
+          h(
+            'tr',
+            { key: label },
+            h('th', { scope: 'row' }, label),
+            h('td', null, before ? read(before) : '—'),
+            h('td', null, after ? read(after) : 'Removed'),
+          );
+        return h(
+          'section',
+          { key: g.id, className: 'fabric-line' },
+          h('h3', null, groupLabel(g)),
+          h('p', { className: 'status-chip' }, state),
+          h(
+            Table,
+            { columns: ['Edition group', 'Previous', 'Proposed'] },
+            field('Colour / Edition', groupLabel),
+            field('Version', (row) => versionLabel(data, row.lab_dip_version_id)),
+            field('Batch No.', (row) => previousBatchLabel(data, row.batch_no)),
+            field('Source Program', sourceLabel),
+          ),
+          h(
+            Table,
+            {
+              columns: [
+                'Fabric Type',
+                'Planner requirement',
+                'Change',
+                'Required kg',
+                'Ordered kg',
+                'Comments',
+              ],
+            },
+            items.map((item) => {
+              const oldItem = oldItems.find((i) => i.id === item.id),
+                newItem = newItems.find((i) => i.id === item.id);
+              const oldLinks = previous.links.filter((l) => l.dyeing_program_item_id === item.id);
+              const links = next.links.filter((l) => l.dyeing_program_item_id === item.id);
+              const ids = [...new Set([...oldLinks, ...links].map((l) => l.item_part_fabric_id))];
               return h(
                 Fragment,
                 { key: item.id },
                 h(
                   'tr',
                   null,
-                  h('th', { scope: 'row' }, fabricName(item.fabric_type_id)),
-                  h('td', null, ids.length ? `${links.length} linked` : 'Manual'),
-                  h('td'),
+                  h(
+                    'th',
+                    { scope: 'row' },
+                    oldItem && newItem && oldItem.fabric_type_id !== newItem.fabric_type_id
+                      ? `${fabricName(oldItem.fabric_type_id)} → ${fabricName(newItem.fabric_type_id)}`
+                      : fabricName(item.fabric_type_id),
+                  ),
+                  h(
+                    'td',
+                    null,
+                    ids.length ? `${oldLinks.length} → ${links.length} linked` : 'Manual',
+                  ),
+                  h('td', null, !oldItem ? 'Added' : !newItem ? 'Removed' : 'Existing'),
                   h('td'),
                   h(
                     'td',
                     null,
-                    before != null && Number(before) !== Number(item.quantity)
-                      ? `${kg(before)} → ${kg(item.quantity)}`
-                      : kg(item.quantity),
+                    !newItem
+                      ? `${kg(oldItem.quantity)} → Removed`
+                      : oldItem && Number(oldItem.quantity) !== Number(newItem.quantity)
+                        ? `${kg(oldItem.quantity)} → ${kg(newItem.quantity)}`
+                        : kg(newItem.quantity),
                   ),
-                  h('td', null, h(RichComment, { value: item.comments })),
+                  h(
+                    'td',
+                    null,
+                    oldItem &&
+                      newItem &&
+                      oldItem.comments !== newItem.comments &&
+                      h(RichComment, { value: oldItem.comments }),
+                    h(RichComment, { value: newItem?.comments ?? oldItem?.comments }),
+                  ),
                 ),
                 ids.map((rid) => {
                   const r = requirements.find((r) => r.id === rid),
-                    was = old.some((l) => l.item_part_fabric_id === rid),
+                    was = oldLinks.some((l) => l.item_part_fabric_id === rid),
                     is = links.some((l) => l.item_part_fabric_id === rid);
                   return h(
                     'tr',
@@ -447,23 +501,22 @@ export function ProgramEditor({
                 }),
               );
             }),
-          h(
-            'tr',
-            { className: 'planner-total' },
-            h('th', { colSpan: 4, scope: 'row' }, 'Edition subtotal'),
             h(
-              'td',
-              null,
-              kg(
-                next.items
-                  .filter((i) => i.dyeing_program_lab_dip_id === g.id)
-                  .reduce((n, i) => n + Number(i.quantity), 0),
-              ),
+              'tr',
+              { className: 'planner-total' },
+              h('th', { colSpan: 4, scope: 'row' }, 'Edition subtotal'),
+              h('td', null, kg(newItems.reduce((n, i) => n + Number(i.quantity), 0))),
             ),
           ),
-        ),
+        );
+      }),
+      h(
+        'p',
+        null,
+        `${next.groups.length} edition groups · ${next.items.length} fabric rows · ${next.links.length} planner links · ${kg(next.items.reduce((n, i) => n + Number(i.quantity), 0))} kg`,
       ),
     );
+  };
   return h(
     'dialog',
     {
@@ -490,35 +543,6 @@ export function ProgramEditor({
             `${review.draft.header.date} · ${data.contacts.find((c) => c.id === data.dyer.find((d) => d.id === review.draft.header.dyer_id)?.contacts_id)?.company_name || 'Dyer'} · ${statusChange(draft.header.dyeing_program_status_id, review.draft.header.dyeing_program_status_id)}`,
           ),
           summary(review.draft, programDraft(data, id)),
-          programDraft(data, id).items.some(
-            (old) => !review.draft.items.some((i) => i.id === old.id),
-          ) &&
-            h(
-              Table,
-              { columns: ['Removed fabric row', 'Previous ordered kg', 'Planner links removed'] },
-              programDraft(data, id)
-                .items.filter((old) => !review.draft.items.some((i) => i.id === old.id))
-                .map((old) =>
-                  h(
-                    'tr',
-                    { key: old.id },
-                    h('th', { scope: 'row' }, fabricName(old.fabric_type_id)),
-                    h('td', null, kg(old.quantity)),
-                    h(
-                      'td',
-                      null,
-                      programDraft(data, id).links.filter(
-                        (l) => l.dyeing_program_item_id === old.id,
-                      ).length,
-                    ),
-                  ),
-                ),
-            ),
-          h(
-            'p',
-            null,
-            `${draft.groups.length} edition groups · ${draft.items.length} fabric items · ${draft.links.length} planner links · ${kg(draft.items.reduce((n, i) => n + Number(i.quantity), 0))} kg`,
-          ),
           h(
             'div',
             { className: 'editor-actions' },
@@ -607,13 +631,32 @@ export function ProgramEditor({
                       draft.links.some((l) => items.some((i) => i.id === l.dyeing_program_item_id))
                     )
                       throw Error('Remove planner links explicitly before changing the edition.');
-                    changeGroup(g, { lab_dip_id, lab_dip_version_id: '', batch_no: null });
+                    changeGroup(g, {
+                      lab_dip_id,
+                      lab_dip_version_id: '',
+                      batch_no: null,
+                      source_dyeing_program_id: null,
+                    });
                   }),
               }),
-              data.dyeing_program_lab_dip?.some(
-                (old) =>
-                  old.lab_dip_id === g.lab_dip_id && old.dyeing_program_id !== draft.header.id,
-              ) && h('span', { className: 'status-chip' }, 'Approved from Previous Program'),
+              g.source_dyeing_program_id &&
+                h('span', { className: 'status-chip' }, 'Approved from Previous Program'),
+              h(RecordSelect, {
+                label: `${groupLabel(g)} Source Program`,
+                value: g.source_dyeing_program_id || '',
+                clearable: true,
+                options: data.dyeing_program
+                  .filter(
+                    (p) =>
+                      p.id !== draft.header.id &&
+                      data.dyeing_program_lab_dip.some(
+                        (old) => old.dyeing_program_id === p.id && old.lab_dip_id === g.lab_dip_id,
+                      ),
+                  )
+                  .map((p) => ({ value: p.id, label: p.program_number || 'Existing program' })),
+                onChange: (source_dyeing_program_id) =>
+                  changeGroup(g, { source_dyeing_program_id: source_dyeing_program_id || null }),
+              }),
               h(
                 'div',
                 { className: 'fabric-fields' },
@@ -884,11 +927,6 @@ export function ProgramEditor({
           },
         },
         pending && summary(pending),
-        h(
-          'p',
-          null,
-          `${pending?.groups.length || 0} edition groups · ${pending?.links.length || 0} complete links`,
-        ),
         button(
           'Confirm complete links',
           () => {
