@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { useId, useRef, useLayoutEffect, useState } from 'react';
 import Select from 'react-select';
 import { latestStatusItem, statusFor } from '../colours/domain.js';
 import { programContext, previousBatchLabel, versionsForMapping } from './relationships.js';
@@ -48,9 +48,49 @@ export function RecordSelect({
   placeholder = 'Type a name to find a record…',
 }) {
   const id = useId();
+  const picker = useRef(null);
+  const [portalTarget, setPortalTarget] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menu, setMenu] = useState({ placement: 'auto', height: 300 });
+  useLayoutEffect(() => {
+    // A body portal is behind a modal's top layer and inert. Keep the menu in
+    // its owning dialog, but fixed to the viewport to escape overflow clipping.
+    setPortalTarget(picker.current.closest('dialog') || document.body);
+  }, []);
+  useLayoutEffect(() => {
+    if (!menuOpen) return;
+    const control = picker.current.querySelector('.fabric-record__control');
+    const viewport = window.visualViewport;
+    const update = () => {
+      const rect = control.getBoundingClientRect();
+      const top = viewport?.offsetTop || 0;
+      const above = rect.top - top;
+      const below = top + (viewport?.height || window.innerHeight) - rect.bottom;
+      const placement = below >= Math.min(300, above) ? 'bottom' : 'top';
+      // Allow for menu margins and MenuList padding as well as option content.
+      const height = Math.max(1, Math.min(300, (placement === 'bottom' ? below : above) - 16));
+      setMenu((old) =>
+        old.placement === placement && old.height === height ? old : { placement, height },
+      );
+    };
+    update();
+    document.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    viewport?.addEventListener('resize', update);
+    viewport?.addEventListener('scroll', update);
+    const observer = new ResizeObserver(update);
+    observer.observe(control);
+    return () => {
+      document.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+      viewport?.removeEventListener('resize', update);
+      viewport?.removeEventListener('scroll', update);
+      observer.disconnect();
+    };
+  }, [menuOpen]);
   return h(
     'div',
-    { className: 'fabric-record-picker' },
+    { className: 'fabric-record-picker', ref: picker },
     h('label', { htmlFor: id }, label),
     h(Select, {
       inputId: id,
@@ -62,8 +102,15 @@ export function RecordSelect({
       isClearable: clearable,
       isSearchable: true,
       placeholder,
-      menuPlacement: 'auto',
-      maxMenuHeight: 300,
+      menuPortalTarget: portalTarget,
+      menuPosition: 'fixed',
+      menuShouldScrollIntoView: false,
+      styles: { menuPortal: (base) => ({ ...base, zIndex: 20 }) },
+      onMenuOpen: () => setMenuOpen(true),
+      onMenuClose: () => setMenuOpen(false),
+      menuPlacement: menu.placement,
+      minMenuHeight: Math.min(140, menu.height),
+      maxMenuHeight: menu.height,
       classNamePrefix: 'fabric-record',
       noOptionsMessage: () => 'No matching records',
       formatOptionLabel: (o) =>
