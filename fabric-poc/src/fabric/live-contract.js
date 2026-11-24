@@ -63,12 +63,18 @@ export const fabricContract = {
   },
   programs: {
     dyeing_program: ['date', 'dyer_id', 'dyeing_program_status_id'],
-    dyeing_program_item: [
+    dyeing_program_lab_dip: [
       'dyeing_program_id',
-      'fabric_type_id',
-      'quantity',
+      'lab_dip_id',
       'lab_dip_version_id',
       'batch_no',
+      'source_dyeing_program_id',
+    ],
+    dyeing_program_item: [
+      'dyeing_program_id',
+      'dyeing_program_lab_dip_id',
+      'fabric_type_id',
+      'quantity',
       'comments',
     ],
   },
@@ -247,15 +253,24 @@ export const fabricColumnTypes = {
     created_at: 'timestamp with time zone',
     updated_at: 'timestamp with time zone',
   },
+  dyeing_program_lab_dip: {
+    id: 'bigint',
+    dyeing_program_id: 'bigint',
+    lab_dip_id: 'bigint',
+    lab_dip_version_id: 'bigint',
+    batch_no: 'bigint',
+    source_dyeing_program_id: 'bigint',
+    created_at: 'timestamp with time zone',
+    updated_at: 'timestamp with time zone',
+  },
   dyeing_program_item: {
     id: 'bigint',
-    fabric_type_id: 'bigint',
     dyeing_program_id: 'bigint',
+    dyeing_program_lab_dip_id: 'bigint',
+    fabric_type_id: 'bigint',
     quantity: 'numeric',
     comments: 'text',
-    batch_no: 'bigint',
     created_at: 'timestamp with time zone',
-    lab_dip_version_id: 'bigint',
     updated_at: 'timestamp with time zone',
   },
   dyed_fabric_bill: {
@@ -289,6 +304,7 @@ export const fabricColumnTypes = {
     created_at: 'timestamp with time zone',
     updated_at: 'timestamp with time zone',
   },
+  fabric_plan_dyeing_link: { item_part_fabric_id: 'bigint', dyeing_program_item_id: 'bigint' },
   contact_purpose: {
     id: 'bigint',
     type: 'text',

@@ -1,7 +1,7 @@
 -- Disposable synthetic database only; all business fixtures roll back.
 begin;
 do $$
-declare style bigint; body_type bigint; sleeve_type bigint; body bigint; sleeve bigint; size_type bigint; size bigint; variant bigint; sleeve_design bigint;
+declare edition_group bigint; style bigint; body_type bigint; sleeve_type bigint; body bigint; sleeve bigint; size_type bigint; size bigint; variant bigint; sleeve_design bigint;
  body_variant bigint; sleeve_variant bigint; body_requirement bigint; sleeve_requirement bigint; component bigint; saved_issue bigint; second_lab bigint; second_version bigint; second_line bigint;
  yarn bigint; supplier bigint; po bigint; poi bigint; ybi bigint; fabric bigint; knit bigint;
  brand bigint; colour bigint; mapping bigint; dyer bigint; lab bigint; version bigint; program bigint; program_item bigint; alternate_program bigint; alternate_line bigint;
@@ -32,7 +32,8 @@ begin
  insert into garments_erp.lab_dip_version(lab_dip_id,version) values(lab,1) returning id into version;
  insert into garments_erp.lab_dip_version_item(lab_dip_version_id,date,lab_dip_status_id) select version,current_date,id from garments_erp.lab_dip_version_status where sort_order=6;
  insert into garments_erp.dyeing_program(dyer_id,dyeing_program_status_id) values(dyer,2) returning id into program;
- insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity) values(fabric,program,version,100) returning id into program_item;
+ insert into garments_erp.dyeing_program_lab_dip(dyeing_program_id,lab_dip_id,lab_dip_version_id) values(program,lab,version) returning id into edition_group;
+ insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,dyeing_program_lab_dip_id,quantity) values(fabric,program,edition_group,100) returning id into program_item;
  insert into garments_erp.item(style_code,brand_id) values('Fabric planner verification',brand) returning id into style;
  insert into garments_erp.part_list(part) values('Planner body') returning id into body_type;
  insert into garments_erp.part_list(part) values('Planner sleeve') returning id into sleeve_type;
@@ -82,8 +83,9 @@ begin
  insert into garments_erp.lab_dip_version(lab_dip_id,version) values(second_lab,1) returning id into second_version;
  insert into garments_erp.item_part_fabric(variant_item_id,fabric_type_id,lab_dip_id,sub_part_name,consumption_per_piece_kg)
  values(body_variant,fabric,second_lab,'Contrast cuff',0.0125) returning id into component;
- insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity)
- values(fabric,program,second_version,0.01) returning id into second_line;
+ insert into garments_erp.dyeing_program_lab_dip(dyeing_program_id,lab_dip_id,lab_dip_version_id) values(program,second_lab,second_version) returning id into edition_group;
+ insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,dyeing_program_lab_dip_id,quantity)
+ values(fabric,program,edition_group,0.01) returning id into second_line;
  begin
   insert into garments_erp.fabric_plan_dyeing_link values(component,program_item);
   raise exception 'TEST accepted parent dip for contrasting sub-part';
@@ -105,8 +107,8 @@ begin
  if (select lab_dip_id from garments_erp.item_part_fabric where id=component)<>second_lab then raise exception 'TEST parent edit changed component dip';end if;
  delete from garments_erp.item_part_fabric where id=component;
 
- perform public.erp_set_fabric_plan_dyeing_link(sleeve_requirement,program_item,false,'programs');
- perform public.erp_set_fabric_plan_dyeing_link(sleeve_requirement,program_item,true,'productionItems');
+ perform public.erp_set_fabric_plan_dyeing_link(sleeve_requirement,program_item,false,'programs',(select jsonb_build_object('program',garments_erp.fabric_json('dyeing_program',to_jsonb(p0)),'requirement',(select garments_erp.fabric_json('item_part_fabric',to_jsonb(f)) from garments_erp.item_part_fabric f where f.id=sleeve_requirement)) from garments_erp.dyeing_program p0 join garments_erp.dyeing_program_item i0 on i0.dyeing_program_id=p0.id where i0.id=program_item),(select round(coalesce(sum(r.required_kg),0),3) from garments_erp.fabric_plan_requirements r where r.id in(select item_part_fabric_id from garments_erp.fabric_plan_dyeing_link where dyeing_program_item_id=program_item except select sleeve_requirement)));
+ perform public.erp_set_fabric_plan_dyeing_link(sleeve_requirement,program_item,true,'productionItems',(select jsonb_build_object('program',garments_erp.fabric_json('dyeing_program',to_jsonb(p0)),'requirement',(select garments_erp.fabric_json('item_part_fabric',to_jsonb(f)) from garments_erp.item_part_fabric f where f.id=sleeve_requirement)) from garments_erp.dyeing_program p0 join garments_erp.dyeing_program_item i0 on i0.dyeing_program_id=p0.id where i0.id=program_item),(select round(coalesce(sum(r.required_kg),0),3) from garments_erp.fabric_plan_requirements r where r.id in(select item_part_fabric_id from garments_erp.fabric_plan_dyeing_link where dyeing_program_item_id=program_item union select sleeve_requirement)));
  payload:=jsonb_build_object('resource','dyeBills','action','create','root',jsonb_build_object('table','dyed_fabric_bill','id',header_temp,'before',null),'changes',jsonb_build_array(
  jsonb_build_object('table','dyed_fabric_bill','id',header_temp,'before',null,'values',jsonb_build_object('invoice_number','VERIFY-CREATE','invoice_date',current_date)),
  jsonb_build_object('table','dyed_fabric_item','id',line_temp,'before',null,'values',jsonb_build_object('dyed_fabric_bill_id',header_temp,'dyeing_program_item_id',program_item::text,'knitting_bill_item_id',knit::text,'gross_quantity',10,'billed_quantity',9,'final_quantity',8,'dyeing_rate',10,'dyeing_rolls',1)),
@@ -147,11 +149,14 @@ begin
  update garments_erp.item_part_fabric set item_part_fabric_status_id=null where id=body_requirement;
  if not exists(select 1 from garments_erp.fabric_plan_estimates where id=body_requirement and item_part_fabric_status_id=3) then raise exception 'TEST receipt recalculation failed';end if;
  update garments_erp.dyeing_program_item set quantity=3 where id=program_item;
+ set constraints all deferred; -- Construct the complete Final document before validating it.
  insert into garments_erp.dyeing_program(dyer_id,dyeing_program_status_id) values(dyer,2) returning id into alternate_program;
- insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity)
- values(fabric,alternate_program,version,2.5) returning id into alternate_line;
+ insert into garments_erp.dyeing_program_lab_dip(dyeing_program_id,lab_dip_id,lab_dip_version_id) values(alternate_program,lab,version) returning id into edition_group;
+ insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,dyeing_program_lab_dip_id,quantity)
+ values(fabric,alternate_program,edition_group,2.5) returning id into alternate_line;
  insert into garments_erp.fabric_plan_dyeing_link(item_part_fabric_id,dyeing_program_item_id)
  values(body_requirement,alternate_line);
+ set constraints all immediate;
  if not exists(select 1 from garments_erp.fabric_plan_estimates where id=body_requirement
      and estimated_ordered_kg=5.25 and order_shortage_kg=0)
     or not exists(select 1 from garments_erp.fabric_plan_estimates where id=sleeve_requirement

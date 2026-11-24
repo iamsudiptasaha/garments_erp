@@ -1,5 +1,7 @@
 # Lab-dip edition migration — 29 October 2026
 
+> Historical implementation record. Current approved edition-group ownership and release/recovery rules are documented in [Dyeing edition groups](dyeing-edition-groups.md). Earlier variant-colour, item-level version/batch and automatic approved-version selection descriptions below are superseded.
+
 Applied migration: `20261029140713_lab_dip_editions_variants_and_batch_traceability` in project kidvckaicclqvtlddeyz. UI unchanged in this database-only step.
 
 ## Structure

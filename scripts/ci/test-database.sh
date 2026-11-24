@@ -25,12 +25,15 @@ for migration in supabase/migrations/*.sql; do
   fi
 done
 docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < /tmp/erp-ci-seed.sql >/tmp/erp-ci-seed.log
+bash scripts/ci/test-edition-backfill.sh
 node fabric-poc/integration/database-check.mjs
+node fabric-poc/integration/dyeing-edition-concurrency.mjs
+node fabric-poc/integration/fabric-er-concurrency.mjs
 node fabric-poc/integration/account-security.mjs
 node fabric-poc/integration/employee-security.mjs
 node fabric-poc/integration/contact-primary.mjs
 # Existing contracts run in the isolated database only.
-for sql in database/tests/access-schema-boundary.sql database/tests/grid-preferences.sql database/tests/raw-material-transactions.sql database/tests/dyed-bill-verification.sql database/tests/production-hub-and-review-ownership.sql database/tests/production-atomic-handover.sql database/tests/item-batch-number.sql database/tests/finished-products.sql database/tests/billing-packing-dispatch.sql database/tests/production-workspace.sql database/tests/lab-dip-status-items.sql database/tests/contact-primary.sql database/tests/contacts-workspace.sql database/tests/contact-purpose-workspace.sql database/tests/fabric-reference-contract.sql database/tests/live-fabric-access.sql database/tests/fabric-validation-scope.sql database/tests/private-file-storage.sql database/tests/bucket-lifecycle.sql database/tests/file-upload-routes.sql database/tests/reviewed-attachments.sql; do
+for sql in database/tests/access-schema-boundary.sql database/tests/grid-preferences.sql database/tests/raw-material-transactions.sql database/tests/dyed-bill-verification.sql database/tests/production-hub-and-review-ownership.sql database/tests/production-atomic-handover.sql database/tests/item-batch-number.sql database/tests/finished-products.sql database/tests/billing-packing-dispatch.sql database/tests/production-workspace.sql database/tests/lab-dip-status-items.sql database/tests/contact-primary.sql database/tests/contacts-workspace.sql database/tests/contact-purpose-workspace.sql database/tests/fabric-reference-contract.sql database/tests/dyeing-edition-groups.sql database/tests/fabric-er-remediation.sql database/tests/fabric-er-schema.sql database/tests/live-fabric-access.sql database/tests/fabric-validation-scope.sql database/tests/private-file-storage.sql database/tests/bucket-lifecycle.sql database/tests/file-upload-routes.sql database/tests/reviewed-attachments.sql; do
   { echo "select set_config('request.jwt.claims','{\"aal\":\"aal2\",\"amr\":[{\"method\":\"password\"}],\"session_id\":\"10000000-0000-4000-8000-000000000001\"}',false);"; cat "$sql"; } | docker exec -i "$container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 >/tmp/erp-ci-contract.log
 done
 { sed '/^\\ir transferable-materials-fixture.sql$/r database/tests/transferable-materials-fixture.sql' database/tests/transferable-materials.sql | sed '/^\\ir transferable-materials-fixture.sql$/d'; } |

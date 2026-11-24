@@ -5,7 +5,9 @@ test('Lab Dip record search shows exact edition/version and latest review fields
   test.skip(!!process.env.E2E_BASE_URL, 'Local sample-only interaction');
   await page.goto('/fabric.html#programs');
   await page.locator('.erp-overview-table tbody tr').first().getByRole('button').first().click();
-  const picker = page.getByRole('combobox', { name: 'Lab dip', exact: true }).first();
+  const picker = page
+    .getByRole('combobox', { name: 'Navy · Edition 1 version', exact: true })
+    .first();
   await picker.fill('Navy');
   const option = page.getByRole('listbox').getByRole('option').filter({ hasText: 'Navy' });
   await expect(option.first()).toContainText('Edition 1');
@@ -29,7 +31,7 @@ test('dyed bills show detailed searchable program records and require verificati
     .first();
   await expect(option).toContainText('River Dyeing');
   await expect(option).toContainText('Edition 1');
-  await expect(option).toContainText('Previous batch');
+  await expect(option).toContainText('Batch No.');
   await option.click();
   await page.getByRole('button', { name: 'Review document →', exact: true }).click();
   const save = page.getByRole('button', { name: 'Confirm & save document', exact: true });
@@ -67,20 +69,24 @@ test('colour comments preserve rich formatting across review, save and reopen', 
   const programName = await program.locator('tbody tr').first().getByRole('button').innerText();
   const openProgram = () => program.getByRole('button', { name: programName, exact: true }).click();
   await openProgram();
-  const comment = page
-    .getByRole('textbox', { name: 'Comments for this colour', exact: true })
-    .first();
+  await page.getByRole('button', { name: 'Manage Rows', exact: true }).click();
+  const comment = page.getByRole('textbox', { name: 'Sinker comments', exact: true }).first();
   await comment.fill('Approved shade — handle carefully');
   await comment.press('ControlOrMeta+A');
   await page.getByRole('button', { name: 'Bold', exact: true }).first().click();
   await expect(comment.locator('b, strong')).toHaveText('Approved shade — handle carefully');
-  await page.getByRole('button', { name: 'Review document →', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Manage Program Rows' })
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Review changes', exact: true }).click();
   await expect(
     page.getByRole('dialog').locator('.fabric-rich-content b, .fabric-rich-content strong').first(),
   ).toHaveText('Approved shade — handle carefully');
-  await page.getByRole('button', { name: 'Confirm & save document', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm save', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await openProgram();
+  await page.getByRole('button', { name: 'Manage Rows', exact: true }).click();
   await expect(comment.locator('b, strong')).toHaveText('Approved shade — handle carefully');
   // Untrusted pasted markup never becomes executable content or attributes.
   await comment.evaluate((element) => {

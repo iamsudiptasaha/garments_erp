@@ -28,13 +28,13 @@ export function programOptions(data) {
   return data.dyeing_program_item.map((line) => {
     const program = data.dyeing_program.find((r) => r.id === line.dyeing_program_id),
       fabric = data.fabric_type.find((r) => r.id === line.fabric_type_id),
-      lab = labDetails(data, line.lab_dip_version_id),
+      lab = labDetails(data, programContext(data, line).version?.id),
       name = `${program?.program_number || 'Program'} · ${fabric?.name || 'Fabric'} · ${lab.name}`,
       lineNumber =
         data.dyeing_program_item
           .filter((r) => r.dyeing_program_id === line.dyeing_program_id)
           .findIndex((r) => r.id === line.id) + 1,
-      details = `${lab.details} · Previous batch ${previousBatchLabel(data, line.batch_no)} · ${line.quantity ?? 'Unknown'} kg · Program line ${lineNumber}`;
+      details = `${lab.details} · Batch No. ${previousBatchLabel(data, programContext(data, line).group?.batch_no)} · ${line.quantity ?? 'Unknown'} kg · Program line ${lineNumber}`;
     return { value: line.id, label: `${name} · ${details}`, name, details };
   });
 }

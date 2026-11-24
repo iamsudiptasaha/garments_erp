@@ -100,15 +100,6 @@ export function saveItemSetup(data, itemId, setup) {
       )
         throw Error('Select each part once per variant.');
       seenParts.add(entry.part_list_id);
-      const lab = entry.lab_dip_id ? next.lab_dip?.find((l) => l.id === entry.lab_dip_id) : null;
-      if (entry.lab_dip_id && !lab) throw Error('Choose an existing lab dip.');
-      if (lab) {
-        const brand = next.color_map_by_brand.find(
-          (m) => m.id === lab.color_map_by_brand_id,
-        )?.brand_list_id;
-        if (brand !== next.item.find((i) => i.id === itemId)?.brand_id)
-          throw Error('Lab dip must match the item brand.');
-      }
       let part = next.item_part.find(
         (p) => p.item_id === itemId && p.part_list_id === entry.part_list_id,
       );
@@ -119,13 +110,11 @@ export function saveItemSetup(data, itemId, setup) {
       const mapping = next.variant_item.find(
         (v) => v.item_part_id === part.id && v.variant_id === named.id,
       );
-      if (mapping) mapping.lab_dip_id = entry.lab_dip_id || null;
-      else
+      if (!mapping)
         next.variant_item.push({
           id: crypto.randomUUID(),
           item_part_id: part.id,
           variant_id: named.id,
-          lab_dip_id: entry.lab_dip_id || null,
         });
     }
   }

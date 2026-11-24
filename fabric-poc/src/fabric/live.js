@@ -12,7 +12,15 @@ function editable(row, fields) {
 }
 function versionWrite(data, row) {
   const item = latestStatusItem(data, row);
-  if (!item) throw Error('Lab-dip version is missing its current status item.');
+  // Unreviewed versions are valid. Preserve their NULL review fields instead of
+  // manufacturing an approval record or blocking another edition's save.
+  if (!item)
+    return {
+      ...row,
+      date: row.date ?? null,
+      comments: row.comments ?? null,
+      lab_dip_status_id: row.lab_dip_status_id ?? null,
+    };
   // Compatibility transport only: the document RPC atomically writes review fields
   // into lab_dip_version_item; these are not physical version columns.
   return {
@@ -40,6 +48,24 @@ export function fabricChanges(before, after, resource) {
     }
     for (const r of old.values())
       if (!current.has(r.id)) changes.push({ table, id: r.id, before: r, values: null });
+  }
+  if (resource === 'programs') {
+    const key = (l) => `${l.item_part_fabric_id}:${l.dyeing_program_item_id}`;
+    const old = new Map((before.fabric_plan_dyeing_link || []).map((l) => [key(l), l]));
+    const current = new Map((after.fabric_plan_dyeing_link || []).map((l) => [key(l), l]));
+    for (const [id, values] of current)
+      if (!old.has(id))
+        changes.push({
+          table: 'fabric_plan_dyeing_link',
+          id,
+          before: null,
+          values,
+          reviewed_required_kg:
+            after._program_planner_totals?.[values.dyeing_program_item_id] ?? null,
+        });
+    for (const [id, previous] of old)
+      if (!current.has(id))
+        changes.push({ table: 'fabric_plan_dyeing_link', id, before: previous, values: null });
   }
   return changes;
 }

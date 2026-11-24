@@ -1,15 +1,7 @@
 import { getAccessClient } from '../access/client.js';
 import { RecordAttachmentField, useRecordAttachments } from '../files/record-attachments.js';
 import { CheckoutVariantPicker } from './checkout-variant-picker.js';
-import { RichCommentEditor, RichComment } from './rich-comment.js';
-import { LabRecordSelect } from './lab-record-select.js';
 import { RecordSelect, programOptions } from './record-select.js';
-import {
-  defaultVersion,
-  versionLabel,
-  batchesForVersion,
-  previousBatchLabel,
-} from './relationships.js';
 import {
   receiptModeFor,
   switchReceiptMode,
@@ -153,15 +145,6 @@ export function BillEditor({
         page === 'materialReceipts'
           ? updateReceipt(data, d.header, key, value)
           : { ...d.header, [key]: value },
-      ...(page === 'programs' && key === 'dyer_id'
-        ? {
-            lines: d.lines.map((l) => ({
-              ...l,
-              lab_dip_version_id: defaultVersion(data, l.color_map_by_brand_id, value),
-              batch_no: null,
-            })),
-          }
-        : {}),
     }));
   }
   function updateLine(index, key, value) {
@@ -281,46 +264,6 @@ export function BillEditor({
           ),
         ),
     );
-  }
-  const groups = spec.groups
-    ? Object.values(
-        draft.lines.reduce((all, line, index) => {
-          const key =
-            line._group ||
-            `${line.color_map_by_brand_id || 'new'}|${line.lab_dip_version_id || ''}|${line.batch_no || ''}|${line.comments || ''}`;
-          (all[key] ||= {
-            key,
-            color: line.color_map_by_brand_id || '',
-            version: line.lab_dip_version_id || '',
-            batch: line.batch_no || '',
-            comments: line.comments || '',
-            indices: [],
-          }).indices.push(index);
-          return all;
-        }, {}),
-      )
-    : [];
-  function groupChange(group, key, value) {
-    setDraft((d) => ({
-      ...d,
-      lines: d.lines.map((l, i) =>
-        group.indices.includes(i)
-          ? {
-              ...l,
-              [key]: value,
-              ...(key === 'color_map_by_brand_id' && value !== l.color_map_by_brand_id
-                ? {
-                    batch_no: null,
-                    lab_dip_version_id: defaultVersion(data, value, draft.header.dyer_id),
-                  }
-                : key === 'lab_dip_version_id'
-                  ? { batch_no: null }
-                  : {}),
-              _group: group.key,
-            }
-          : l,
-      ),
-    }));
   }
   function submit(e) {
     e.preventDefault();
@@ -593,15 +536,6 @@ export function BillEditor({
                   h(
                     'tr',
                     null,
-                    spec.groups &&
-                      h(
-                        React.Fragment,
-                        null,
-                        h('th', null, 'Colour mapping'),
-                        h('th', null, 'Lab-dip version'),
-                        h('th', null, 'Previous batch'),
-                        h('th', null, 'Colour comments'),
-                      ),
                     spec.lineFields.map((f) => h('th', { key: f.key }, f.label)),
                   ),
                 ),
@@ -612,21 +546,6 @@ export function BillEditor({
                     h(
                       'tr',
                       { key: i },
-                      spec.groups &&
-                        h(
-                          React.Fragment,
-                          null,
-                          h(
-                            'td',
-                            null,
-                            optionsFor(data, 'colors').find(
-                              ([v]) => v === line.color_map_by_brand_id,
-                            )?.[1],
-                          ),
-                          h('td', null, versionLabel(data, line.lab_dip_version_id)),
-                          h('td', null, previousBatchLabel(data, line.batch_no)),
-                          h('td', null, h(RichComment, { value: line.comments })),
-                        ),
                       spec.lineFields.map((f) =>
                         h(
                           'td',
@@ -755,11 +674,7 @@ export function BillEditor({
           h(
             'p',
             { className: 'editor-note' },
-            spec.groups
-              ? 'One dyer per program. Add colour sections, then fabric rows within each colour.'
-              : spec.lines
-                ? 'Enter the document once, then add every line below.'
-                : '',
+            spec.lines ? 'Enter the document once, then add every line below.' : '',
           ),
           page === 'suppliers'
             ? h(
@@ -828,97 +743,7 @@ export function BillEditor({
                   field(f, draft.header[f.key], (v) => updateHeader(f.key, v), ''),
                 ),
               ),
-          spec.groups
-            ? groups.map((group, gi) =>
-                h(
-                  'section',
-                  { className: 'colour-section', key: group.key },
-                  h('h3', null, `Colour section ${gi + 1}`),
-                  h(
-                    'div',
-                    { className: 'fabric-fields' },
-                    field(
-                      { key: 'color', label: 'Colour mapping', type: 'select', source: 'colors' },
-                      group.color,
-                      (v) => groupChange(group, 'color_map_by_brand_id', v),
-                      `Section ${gi + 1} `,
-                    ),
-                    h(LabRecordSelect, {
-                      data,
-                      mappingId: group.color,
-                      dyerId: draft.header.dyer_id,
-                      value: group.version,
-                      onChange: (v) => groupChange(group, 'lab_dip_version_id', v),
-                      label: 'Lab dip',
-                    }),
-                    field(
-                      {
-                        key: 'batch_no',
-                        label: 'Previous batch (optional)',
-                        type: 'select',
-                        required: false,
-                        disabled: !group.version,
-                        options: batchesForVersion(data, group.version)
-                          .filter(
-                            (batch) =>
-                              !group.indices.some(
-                                (i) =>
-                                  data.dyed_fabric_item.find(
-                                    (d) => d.id === batch.dyed_fabric_item_id,
-                                  )?.dyeing_program_item_id === draft.lines[i].id,
-                              ),
-                          )
-                          .map((batch) => [batch.id, batch.batch_no]),
-                      },
-                      group.batch,
-                      (v) => groupChange(group, 'batch_no', v || null),
-                      `Section ${gi + 1} `,
-                    ),
-                    h(RichCommentEditor, {
-                      value: group.comments,
-                      onChange: (value) => groupChange(group, 'comments', value),
-                    }),
-                  ),
-                  h(
-                    'p',
-                    { className: 'editor-note' },
-                    !group.color
-                      ? 'Select a colour mapping. The latest accepted version is selected when available.'
-                      : !group.version
-                        ? 'No accepted default. Select a lab-dip version explicitly; all versions are available.'
-                        : 'Previous batches are restricted to this exact lab-dip version. The version can be changed explicitly.',
-                  ),
-                  group.indices.map((i) => lineCard(draft.lines[i], i)),
-                  h(
-                    'p',
-                    { className: 'derived' },
-                    `Colour total: ${group.indices.reduce((s, i) => s + Number(draft.lines[i].quantity || 0), 0)} kg`,
-                  ),
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      onClick: () =>
-                        setDraft((d) => ({
-                          ...d,
-                          lines: [
-                            ...d.lines,
-                            {
-                              ...fresh(spec),
-                              color_map_by_brand_id: group.color,
-                              lab_dip_version_id: group.version,
-                              batch_no: group.batch || null,
-                              comments: group.comments,
-                              _group: group.key,
-                            },
-                          ],
-                        })),
-                    },
-                    '+ Add fabric to this colour',
-                  ),
-                ),
-              )
-            : spec.lines && draft.lines.map(lineCard),
+          spec.lines && draft.lines.map(lineCard),
           spec.lines &&
             h(
               'button',
@@ -932,23 +757,11 @@ export function BillEditor({
                       ...d.lines,
                       {
                         ...fresh(spec),
-                        ...(spec.groups
-                          ? {
-                              _group: crypto.randomUUID(),
-                              color_map_by_brand_id: '',
-                              batch_no: null,
-                              comments: '',
-                            }
-                          : {}),
                       },
                     ],
                   })),
               },
-              spec.groups
-                ? '+ Add colour section'
-                : page === 'knitting'
-                  ? '+ Add fabric line'
-                  : '+ Add line',
+              page === 'knitting' ? '+ Add fabric line' : '+ Add line',
             ),
           totalsView,
           h(

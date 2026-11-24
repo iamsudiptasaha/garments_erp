@@ -80,6 +80,7 @@ import {
   WorkspaceConnectionBanner,
 } from './record-page.js';
 import { BillEditor } from './editor.js';
+import { ProgramEditor } from './program-editor.js';
 import { ProgramFabricPlanner } from './planner.js';
 import { FabricPlanner } from './planner-workspace.js';
 import './styles.css';
@@ -221,7 +222,12 @@ const fabricOverviewLabels = {
 
 const fabricDocumentTotals = new Set(['quantity', 'received', 'left']);
 function fabricDocumentSummary({ id, rows }, columns) {
-  const record = { ...rows[0], id, rows, lineCount: rows.length };
+  const record = {
+    ...rows[0],
+    id,
+    rows,
+    lineCount: rows.filter((row) => !row.emptyDocument).length,
+  };
   for (const key of columns) {
     if (fabricDocumentTotals.has(key)) {
       record[key] = rows.reduce((total, row) => total + Number(row[key] ?? 0), 0);
@@ -1186,6 +1192,7 @@ function App({ live, refreshWorkspaceAccess }) {
       return plannerView
         ? h(plannerProgram ? ProgramFabricPlanner : FabricPlanner, {
             key: plannerProgram || 'all',
+            onSourceChange: refreshLive,
             client: getAccessClient(),
             program: plannerProgram,
             canEdit: can('edit', 'productionItems'),
@@ -1636,17 +1643,19 @@ function App({ live, refreshWorkspaceAccess }) {
     ),
     editor &&
       h(
-        editor.page === 'labDips'
-          ? LabEditor
-          : editor.page === 'materialContacts'
-            ? ContactEditor
-            : editor.page === 'productionItems'
-              ? live
-                ? ProductionItemEditor
-                : ItemEditor
-              : editor.page === 'productionJobs'
-                ? JobEditor
-                : BillEditor,
+        editor.page === 'programs'
+          ? ProgramEditor
+          : editor.page === 'labDips'
+            ? LabEditor
+            : editor.page === 'materialContacts'
+              ? ContactEditor
+              : editor.page === 'productionItems'
+                ? live
+                  ? ProductionItemEditor
+                  : ItemEditor
+                : editor.page === 'productionJobs'
+                  ? JobEditor
+                  : BillEditor,
         {
           key: `${editor.page}:${editor.id || 'new'}`,
           page: editor.page,

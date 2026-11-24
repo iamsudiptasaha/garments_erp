@@ -195,7 +195,7 @@ function Source({ record, snapshot, canEdit, onEdit, onClose }) {
     ),
   );
 }
-export function FabricPlanner({ client, canEdit, canLink, capabilities }) {
+export function FabricPlanner({ client, canEdit, canLink, capabilities, onSourceChange }) {
   const [snapshot, setSnapshot] = useState(null),
     [notice, setNotice] = useState('Loading fabric plan…');
   const [view, setView] = useState('overview'),
@@ -346,8 +346,9 @@ export function FabricPlanner({ client, canEdit, canLink, capabilities }) {
         canEdit,
         canLink,
         onClose: () => setEditing(null),
-        onSave: (data) => {
+        onSave: async (data) => {
           setSnapshot(data);
+          await onSourceChange?.();
           setEditing(null);
           setNotice('Fabric plan saved.');
         },

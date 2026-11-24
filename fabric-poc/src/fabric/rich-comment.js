@@ -48,7 +48,7 @@ export function RichComment({ value }) {
   });
 }
 
-export function RichCommentEditor({ value, onChange }) {
+export function RichCommentEditor({ value, onChange, label = 'Comments for this colour' }) {
   const ref = useRef(null),
     labelId = useId();
   useEffect(() => {
@@ -61,7 +61,7 @@ export function RichCommentEditor({ value, onChange }) {
   return h(
     'div',
     { className: 'fabric-rich-editor' },
-    h('span', { id: labelId }, 'Comments for this colour'),
+    h('span', { id: labelId }, label),
     h(
       'div',
       { className: 'fabric-rich-toolbar', role: 'group', 'aria-label': 'Comment formatting' },

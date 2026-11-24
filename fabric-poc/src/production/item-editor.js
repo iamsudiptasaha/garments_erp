@@ -13,7 +13,7 @@ export function ItemEditor({ data, id, onSave, onClose }) {
         sizes: s.sizes.length ? s.sizes : [{ size_list_id: '', pieces: '' }],
         variants: s.variants.length
           ? s.variants
-          : [{ name: '', share_weight: 1, parts: [{ part_list_id: '', lab_dip_id: '' }] }],
+          : [{ name: '', share_weight: 1, parts: [{ part_list_id: '' }] }],
       };
     }),
     [review, setReview] = useState(false),
@@ -53,22 +53,6 @@ export function ItemEditor({ data, id, onSave, onClose }) {
     } catch (e) {
       setError(e.message);
     }
-  }
-  function labOptions() {
-    return (data.lab_dip || [])
-      .filter(
-        (l) =>
-          data.color_map_by_brand.find((m) => m.id === l.color_map_by_brand_id)?.brand_list_id ===
-          draft.header.brand_id,
-      )
-      .map((l) => {
-        const m = data.color_map_by_brand.find((m) => m.id === l.color_map_by_brand_id),
-          dyer = data.dyer.find((d) => d.id === l.dyer_id);
-        return [
-          l.id,
-          `${data.color_map.find((c) => c.id === m.color_map_id)?.name} · ${data.contacts.find((c) => c.id === dyer?.contacts_id)?.company_name} · Edition ${l.edition}`,
-        ];
-      });
   }
   const checklistInputs = h(
     'section',
@@ -152,14 +136,6 @@ export function ItemEditor({ data, id, onSave, onClose }) {
                     'div',
                     { className: 'item-review-part', key: j },
                     h('strong', null, name('part_list', p.part_list_id, 'part')),
-                    h(
-                      'p',
-                      null,
-                      'Lab dip: ' +
-                        (p.lab_dip_id
-                          ? labOptions().find(([key]) => key === p.lab_dip_id)?.[1] || 'Selected'
-                          : 'Not selected'),
-                    ),
                   ),
                 ),
                 h('button', { onClick: () => setReview(false) }, 'Edit variant & parts'),
@@ -300,7 +276,7 @@ export function ItemEditor({ data, id, onSave, onClose }) {
                     ...s,
                     variants: [
                       ...s.variants,
-                      { name: '', share_weight: 1, parts: [{ part_list_id: '', lab_dip_id: '' }] },
+                      { name: '', share_weight: 1, parts: [{ part_list_id: '' }] },
                     ],
                   })),
               },
@@ -340,17 +316,6 @@ export function ItemEditor({ data, id, onSave, onClose }) {
                           ),
                         })),
                     ),
-                    pick(
-                      'Lab dip / edition',
-                      p.lab_dip_id,
-                      labOptions(),
-                      (value) =>
-                        changeVariant(i, (v) => ({
-                          ...v,
-                          parts: v.parts.map((p, k) => (k === j ? { ...p, lab_dip_id: value } : p)),
-                        })),
-                      false,
-                    ),
                   ),
                 ),
                 h(
@@ -360,7 +325,7 @@ export function ItemEditor({ data, id, onSave, onClose }) {
                     onClick: () =>
                       changeVariant(i, (v) => ({
                         ...v,
-                        parts: [...v.parts, { part_list_id: '', lab_dip_id: '' }],
+                        parts: [...v.parts, { part_list_id: '' }],
                       })),
                   },
                   '+ Add part',

@@ -370,7 +370,7 @@ export const pages = {
   },
   programs: {
     title: 'Dyeing programs',
-    subtitle: 'Choose a dyer, then organise fabrics by colour',
+    subtitle: 'Edition groups share an explicitly selected version and optional Batch No.',
     entity: 'dyeing_program',
     lines: 'dyeing_program_item',
     foreign: 'dyeing_program_id',
@@ -387,12 +387,6 @@ export const pages = {
       }),
       field('dyer_id', 'Dyer', 'select', { source: 'dyers' }),
     ],
-    groups: true,
-    groupFields: [
-      field('lab_dip_version_id', 'Lab-dip version'),
-      field('batch_no', 'Previous batch'),
-      field('comments', 'Comments'),
-    ],
     lineFields: [
       field('fabric_type_id', 'Fabric type', 'select', { source: 'fabricTypes' }),
       field('quantity', 'Program quantity · kg', 'number'),
@@ -404,7 +398,7 @@ export const pages = {
       column('supplier', 'Dyer', false, 190),
       column('mapping', 'Colour mapping', false, 250),
       column('labDip', 'Lab-dip version', false, 200),
-      column('batch', 'Previous batch'),
+      column('batch', 'Batch No.'),
       column('name', 'Fabric type'),
       column('quantity', 'Planned · kg', true),
       column('comments', 'Colour comments', false, 260),

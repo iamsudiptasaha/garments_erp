@@ -22,18 +22,24 @@ query() {
 npx --yes deno@2.9.6 run --no-lock --allow-env --allow-read=/tmp/erp-test-runtime.json \
   --allow-net=127.0.0.1,localhost scripts/ci/serve-files-local.ts > "$work/files.log" 2>&1 &
 files_pid=$!
+# Keep the test listener outside Linux ephemeral client ports. Fail if our server exits.
 VITE_SUPABASE_URL=https://erp-local.invalid \
 VITE_SUPABASE_PUBLISHABLE_KEY="$(node -p "require('/tmp/erp-test-runtime.json').PUBLISHABLE_KEY")" \
   node fabric-poc/node_modules/vite/bin/vite.js fabric-poc --host 127.0.0.1 --port 18766 --strictPort > "$work/vite.log" 2>&1 &
 vite_pid=$!
 for attempt in {1..30}; do
-  if curl --silent --fail -X OPTIONS http://127.0.0.1:55426/ >/dev/null &&
+  if curl --silent --fail -X OPTIONS http://127.0.0.1:18765/ >/dev/null &&
      curl --silent --fail http://127.0.0.1:18766/fabric.html >/dev/null; then break; fi
+  if ! kill -0 "$files_pid" 2>/dev/null || ! kill -0 "$vite_pid" 2>/dev/null; then exit 1; fi
   sleep 1
 done
-curl --silent --fail -X OPTIONS http://127.0.0.1:55426/ >/dev/null
+curl --silent --fail -X OPTIONS http://127.0.0.1:18765/ >/dev/null
 curl --silent --fail http://127.0.0.1:18766/fabric.html >/dev/null
-ATTACHMENT_FILES_SERVICE=http://127.0.0.1:55426 node fabric-poc/integration/attachment-browser.mjs
-ATTACHMENT_FILES_SERVICE=http://127.0.0.1:55426 node fabric-poc/integration/attachment-browser.mjs --owning-modal
-ATTACHMENT_FILES_SERVICE=http://127.0.0.1:55426 node fabric-poc/integration/attachment-browser.mjs --fabric-planner
-node fabric-poc/integration/attachment-browser.mjs --contact-purpose
+if [[ $# -gt 0 ]]; then
+  ATTACHMENT_FILES_SERVICE=http://127.0.0.1:18765 node fabric-poc/integration/attachment-browser.mjs "$@"
+else
+  ATTACHMENT_FILES_SERVICE=http://127.0.0.1:18765 node fabric-poc/integration/attachment-browser.mjs
+  ATTACHMENT_FILES_SERVICE=http://127.0.0.1:18765 node fabric-poc/integration/attachment-browser.mjs --owning-modal
+  ATTACHMENT_FILES_SERVICE=http://127.0.0.1:18765 node fabric-poc/integration/attachment-browser.mjs --fabric-planner
+  node fabric-poc/integration/attachment-browser.mjs --contact-purpose
+fi

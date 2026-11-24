@@ -4,7 +4,7 @@ insert into garments_erp.lab_dip_version_status(status,sort_order) values
  ('Pending',1),('Reviewed',2),('Revision',3),('Resubmit',4),('Rejected',5),('Approved',6)
  on conflict(sort_order) do nothing;
 do $$
-declare yarn bigint; supplier bigint; po bigint; poi bigint; ybi bigint; fabric bigint; knit bigint;
+declare edition_group bigint; yarn bigint; supplier bigint; po bigint; poi bigint; ybi bigint; fabric bigint; knit bigint;
  brand bigint; colour bigint; mapping bigint; dyer bigint; lab bigint; version bigint; program bigint; program_item bigint; legacy_bill bigint; legacy_line bigint;
 begin
  update garments_erp.employee_status set is_verified=true,verified_by_employee_id=900001 where employee_id=900001;
@@ -23,7 +23,8 @@ begin
  insert into garments_erp.lab_dip_version(lab_dip_id,version) values(lab,1) returning id into version;
  insert into garments_erp.lab_dip_version_item(lab_dip_version_id,date,lab_dip_status_id) select version,current_date,id from garments_erp.lab_dip_version_status where sort_order=6;
  insert into garments_erp.dyeing_program(dyer_id) values(dyer) returning id into program;
- insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,lab_dip_version_id,quantity) values(fabric,program,version,100) returning id into program_item;
+ insert into garments_erp.dyeing_program_lab_dip(dyeing_program_id,lab_dip_id,lab_dip_version_id) values(program,lab,version) returning id into edition_group;
+ insert into garments_erp.dyeing_program_item(fabric_type_id,dyeing_program_id,dyeing_program_lab_dip_id,quantity) values(fabric,program,edition_group,100) returning id into program_item;
  insert into garments_erp.dyed_fabric_bill(invoice_number,invoice_date)
  values('Browser manual receipt source',current_date) returning id into legacy_bill;
  insert into garments_erp.dyed_fabric_item(

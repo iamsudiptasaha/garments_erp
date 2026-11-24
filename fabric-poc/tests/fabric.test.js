@@ -1,4 +1,4 @@
-import { batchesForVersion, programContext, defaultVersion } from '../src/fabric/relationships.js';
+import { batchesForVersion, programContext } from '../src/fabric/relationships.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -83,8 +83,8 @@ test('removing a consumed source or stealing line identities fails without parti
 test('colour sections preserve comments per line and one program header', () => {
   const data = initialFabric(),
     draft = documentFor(data, 'programs', 'dp1');
-  draft.lines
-    .filter((l) => l.color_map_by_brand_id === 'co1')
+  draft.items
+    .filter((l) => programContext(data, l).mappingId === 'co1')
     .forEach((l) => (l.comments = 'Revised navy instructions'));
   const next = saveDocument(data, 'programs', draft);
   assert.equal(next.dyeing_program.length, 2);
@@ -230,9 +230,12 @@ test('legacy local colours upgrade preserves all existing document and mapping I
   assert.equal(next.color_map.length, 2);
 });
 
-test('batch choices follow exact lab-dip versions, even for the same colour', () => {
+test('batch choices follow editions across versions and exclude the whole current program', () => {
   const data = initialFabric(),
-    v = data.dyeing_program_item.find((r) => r.id === 'di1').lab_dip_version_id;
+    v = programContext(
+      data,
+      data.dyeing_program_item.find((r) => r.id === 'di1'),
+    ).version.id;
   assert.deepEqual(
     batchesForVersion(data, v).map((b) => b.batch_no),
     ['B-104', 'B-106'],
@@ -240,38 +243,49 @@ test('batch choices follow exact lab-dip versions, even for the same colour', ()
   assert.deepEqual(batchesForVersion(data, ''), []);
   const old = data.lab_dip_version.find((r) => r.id === v);
   data.lab_dip_version.push({ ...old, id: 'redo-v2', version: 2 });
-  assert.deepEqual(batchesForVersion(data, 'redo-v2'), []);
   assert.deepEqual(
-    batchesForVersion(data, v, 'di1').map((b) => b.batch_no),
-    ['B-106'],
+    batchesForVersion(data, 'redo-v2').map((b) => b.batch_no),
+    ['B-104', 'B-106'],
+  );
+  assert.deepEqual(
+    batchesForVersion(data, v, 'dp1').map((b) => b.batch_no),
+    [],
   );
 });
-test('program requires a version, permits null previous batch and rejects wrong-version or own output', () => {
+test('program requires explicit version, permits no batch and rejects another edition or own output', () => {
   const data = initialFabric(),
-    version = data.dyeing_program_item[0].lab_dip_version_id,
-    draft = {
-      header: { program_number: 'DP-NEW', date: '2026-10-30', dyer_id: 'dy1' },
-      lines: [
-        {
-          fabric_type_id: 'ft1',
-          quantity: 1,
-          lab_dip_version_id: version,
-          batch_no: 'seed-batch-1',
-          comments: '',
-        },
-      ],
-    };
+    source = data.dyeing_program_lab_dip[0],
+    draft = documentFor(data, 'programs');
+  draft.header.dyer_id = 'dy1';
+  draft.groups = [
+    {
+      ...source,
+      id: crypto.randomUUID(),
+      dyeing_program_id: draft.header.id,
+      batch_no: 'seed-batch-1',
+    },
+  ];
+  draft.items = [
+    {
+      id: crypto.randomUUID(),
+      dyeing_program_id: draft.header.id,
+      dyeing_program_lab_dip_id: draft.groups[0].id,
+      fabric_type_id: 'ft1',
+      quantity: 1,
+      comments: '',
+    },
+  ];
   const saved = saveDocument(data, 'programs', draft);
-  assert.equal(saved.dyeing_program_item.at(-1).lab_dip_version_id, version);
-  assert.equal(saved.dyeing_program_item.at(-1).color_map_by_brand_id, undefined);
-  draft.lines[0].batch_no = 'seed-batch-3';
-  assert.throws(() => saveDocument(data, 'programs', draft), /exact selected lab-dip version/);
-  draft.lines[0].batch_no = null;
-  assert.equal(saveDocument(data, 'programs', draft).dyeing_program_item.at(-1).batch_no, null);
-  draft.lines[0].lab_dip_version_id = '';
-  assert.throws(() => saveDocument(data, 'programs', draft), /Lab-dip version is required/);
+  assert.equal(saved.dyeing_program_lab_dip.at(-1).lab_dip_version_id, source.lab_dip_version_id);
+  assert.equal(saved.dyeing_program_item.at(-1).lab_dip_version_id, undefined);
+  draft.groups[0].batch_no = 'seed-batch-3';
+  assert.throws(() => saveDocument(data, 'programs', draft), /same edition/);
+  draft.groups[0].batch_no = null;
+  assert.equal(saveDocument(data, 'programs', draft).dyeing_program_lab_dip.at(-1).batch_no, null);
+  draft.groups[0].lab_dip_version_id = '';
+  assert.throws(() => saveDocument(data, 'programs', draft), /explicitly select its version/);
   const own = documentFor(data, 'programs', 'dp1');
-  own.lines[0].batch_no = 'seed-batch-1';
+  own.groups[0].batch_no = 'seed-batch-1';
   assert.throws(() => saveDocument(data, 'programs', own), /own output/);
 });
 test('colour master and mapping forms do not expose obsolete swatch or shade fields', () => {
@@ -377,7 +391,7 @@ test('dyed bill edits store batch in its mapping and preserve mapping identity a
   assert.throws(() => saveDocument(data, 'dyeBills', draft), /unique/);
   assert.equal(data.batch_no_lab_dip_version_map.find((b) => b.id === mapId).batch_no, 'B-104');
 });
-test('default version selects latest accepted, while unapproved versions remain selectable explicitly', () => {
+test('edition options retain unapproved versions and approval does not select a default', () => {
   const d = initialFabric(),
     lab = d.lab_dip.find((l) => l.color_map_by_brand_id === 'co1' && l.dyer_id === 'dy1');
   d.lab_dip_version = d.lab_dip_version.filter((v) => v.lab_dip_id !== lab.id);
@@ -405,10 +419,11 @@ test('default version selects latest accepted, while unapproved versions remain 
     date: '2026-10-30',
     lab_dip_status_id: 'ld-awaiting',
   });
-  assert.equal(defaultVersion(d, 'co1', 'dy1'), 'approved');
+  assert.ok(d.lab_dip_version.some((v) => v.id === 'awaiting'));
+  assert.equal(documentFor(d, 'programs').groups.length, 0);
   d.lab_dip_version_item.find((item) => item.lab_dip_version_id === 'awaiting').lab_dip_status_id =
     'ld-comments';
-  assert.equal(defaultVersion(d, 'co1', 'dy1'), 'awaiting');
+  assert.equal(documentFor(d, 'programs').groups.length, 0);
 });
 test('older local relationships upgrade without guessing contact links or changing counts', () => {
   const data = initialFabric(),
@@ -448,8 +463,17 @@ test('database-generated document numbers cannot be entered or overwritten in lo
       .purchase_order_number,
     'YPO-014',
   );
-  delete draft.header.id;
-  draft.lines = draft.lines.map(({ id: _id, ...line }) => line);
+  draft.header.id = crypto.randomUUID();
+  const groupIds = new Map(draft.groups.map((g) => [g.id, crypto.randomUUID()]));
+  draft.groups.forEach((g) => {
+    g.id = groupIds.get(g.id);
+    g.dyeing_program_id = draft.header.id;
+  });
+  draft.items.forEach((i) => {
+    i.id = crypto.randomUUID();
+    i.dyeing_program_id = draft.header.id;
+    i.dyeing_program_lab_dip_id = groupIds.get(i.dyeing_program_lab_dip_id);
+  });
   assert.equal(saveDocument(data, 'programs', draft).dyeing_program.at(-1).program_number, null);
   for (const [page, key] of [
     ['orders', 'purchase_order_number'],

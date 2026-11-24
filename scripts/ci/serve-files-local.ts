@@ -6,5 +6,5 @@ Deno.env.set('SUPABASE_ANON_KEY', settings.ANON_KEY);
 Deno.env.set('SUPABASE_SERVICE_ROLE_KEY', settings.SERVICE_ROLE_KEY);
 const serve = Deno.serve;
 Deno.serve = ((handler: Deno.ServeHandler) =>
-  serve({ hostname: '127.0.0.1', port: 55426 }, handler)) as typeof Deno.serve;
+  serve({ hostname: '127.0.0.1', port: 18765 }, handler)) as typeof Deno.serve;
 await import('../../supabase/functions/erp-files/index.ts');
