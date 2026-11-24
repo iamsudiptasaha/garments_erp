@@ -19,7 +19,7 @@ test.beforeAll(async () => {
   });
   outputs = Array.isArray(result) ? result.flatMap((r) => r.output) : result.output;
 });
-async function open(page) {
+async function open(page, query = '') {
   await page.route('**/__program-acceptance**', (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('.js'))
@@ -40,7 +40,7 @@ async function open(page) {
       body: '<html lang="en"><head><link rel="stylesheet" href="/__program-acceptance.css"></head><body><div id="root"></div><script type="module" src="/__program-acceptance.js"></script></body></html>',
     });
   });
-  await page.goto('/__program-acceptance');
+  await page.goto('/__program-acceptance' + query);
   await expect(page.getByRole('dialog', { name: 'Dyeing Program', exact: true })).toBeVisible();
 }
 async function choose(page, name, query, text) {
@@ -57,6 +57,8 @@ test('complete planner links reopen checked, consolidate editions, recalculate a
   await page.getByRole('button', { name: 'Manage Rows', exact: true }).click();
   await page.getByRole('button', { name: 'Manage Links', exact: true }).click();
   const picker = page.getByRole('dialog', { name: 'Fabric Planner · Add to Program', exact: true });
+  await expect(picker.getByLabel('Colour', { exact: true })).toBeDisabled();
+  await expect(picker.getByLabel('Lab Dip edition', { exact: true })).toBeDisabled();
   await expect(picker.getByRole('checkbox', { name: /Body/ })).toBeChecked();
   await picker.getByRole('checkbox', { name: /Sleeve/ }).check();
   await picker.getByRole('button', { name: 'Review complete links', exact: true }).click();
@@ -288,3 +290,107 @@ test('reuse label requires an explicit persisted source rather than another prog
     ),
   ).toBe('dp1');
 });
+
+for (const width of [1440, 390]) {
+  for (const entry of ['manual', 'planner']) {
+    test(`search menus escape dialog clipping at ${width}px via ${entry}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 640 });
+      await open(page, '?longOptions');
+      await page
+        .getByRole('button', {
+          name: entry === 'manual' ? 'Add manual row' : 'Add from Fabric Planner',
+          exact: true,
+        })
+        .click();
+      const dialog = page.getByRole('dialog', {
+        name:
+          entry === 'manual' ? 'Add manual fabric requirement' : 'Fabric Planner · Add to Program',
+        exact: true,
+      });
+      // A short, scrolling dialog reproduces the clipping boundary independently
+      // of reference data size and desktop/mobile field wrapping.
+      await dialog.evaluate((el) => {
+        el.style.maxHeight = '260px';
+      });
+      const menu = dialog.locator('.fabric-record__menu');
+      const list = dialog.getByRole('listbox');
+      if (entry === 'planner') {
+        const colour = dialog.getByRole('combobox', { name: 'Colour', exact: true });
+        await colour.click();
+        await expect(page.getByRole('option')).toHaveCount(45);
+        await assertVisibleMenu();
+        expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+        await colour.fill('Navy');
+        await colour.press('ArrowDown');
+        await colour.press('Enter');
+      }
+      const input = dialog.getByRole('combobox', { name: 'Lab Dip edition', exact: true });
+      await input.click();
+      await expect(page.getByRole('option')).toHaveCount(entry === 'manual' ? 94 : 50);
+      async function assertVisibleMenu() {
+        await expect
+          .poll(async () =>
+            menu.evaluate((el) => {
+              const r = el.getBoundingClientRect();
+              const control = el
+                .closest('dialog')
+                .querySelector('[aria-expanded="true"]')
+                .closest('.fabric-record__control')
+                .getBoundingClientRect();
+              const hit = [r.top + 6, r.bottom - 6].every((y) =>
+                el.contains(document.elementFromPoint(r.left + r.width / 2, y)),
+              );
+              return (
+                r.top >= 0 &&
+                r.bottom <= innerHeight &&
+                r.left >= 0 &&
+                r.right <= innerWidth &&
+                Math.abs(r.left - control.left) < 2 &&
+                Math.abs(r.width - control.width) < 2 &&
+                Math.min(Math.abs(r.top - control.bottom), Math.abs(r.bottom - control.top)) <= 9 &&
+                hit
+              );
+            }),
+          )
+          .toBe(true);
+      }
+      await assertVisibleMenu();
+      expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+      expect(
+        await menu.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const d = el.closest('dialog').getBoundingClientRect();
+          return r.top < d.top || r.bottom > d.bottom;
+        }),
+      ).toBe(true);
+      await page.screenshot({ path: test.info().outputPath('dropdown-open.png') });
+      await page.setViewportSize({ width, height: 420 });
+      await assertVisibleMenu();
+      // React Select's portal must follow the input when its dialog scrolls.
+      const beforeScroll = await dialog.evaluate((el) => el.scrollTop);
+      await dialog.evaluate((el) => {
+        el.scrollTop += 24;
+      });
+      expect(await dialog.evaluate((el) => el.scrollTop)).toBeGreaterThan(beforeScroll);
+      await assertVisibleMenu();
+      await list.evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+      });
+      await page.getByRole('option', { name: /Navy · Edition 50$/, exact: false }).click();
+      await expect(menu).toHaveCount(0);
+      await expect(input.locator('..').locator('..')).toContainText('Edition 50');
+      await input.click();
+      await input.press('Escape');
+      await expect(menu).toHaveCount(0);
+      await expect(dialog).toBeVisible();
+      await input.fill('Edition 49');
+      await input.press('ArrowDown');
+      await input.press('Enter');
+      await expect(input.locator('..').locator('..')).toContainText('Edition 49');
+      await expect(
+        dialog.getByRole('combobox', { name: 'Explicit version', exact: true }),
+      ).toBeEmpty();
+      await page.screenshot({ path: test.info().outputPath('dropdown-selection.png') });
+    });
+  }
+}

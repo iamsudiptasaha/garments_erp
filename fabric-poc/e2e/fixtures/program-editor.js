@@ -113,6 +113,30 @@ const snapshot = {
   program_items: [],
   actual_consumption: [],
 };
+// Large reference lists exercise the real editor without altering business rules.
+if (new URLSearchParams(location.search).has('longOptions')) {
+  const navy = data.lab_dip.find((l) => l.id === lab);
+  const mapping = data.color_map_by_brand.find((m) => m.id === navy.color_map_by_brand_id);
+  for (let n = 8; n <= 50; n++) {
+    data.lab_dip.push({ ...navy, id: 'long-edition-' + n, edition: n });
+    data.lab_dip_version.push({
+      id: 'long-version-' + n,
+      lab_dip_id: 'long-edition-' + n,
+      version: 1,
+    });
+    data.color_map.push({ id: 'long-colour-' + n, name: 'Colour ' + n });
+    data.color_map_by_brand.push({
+      ...mapping,
+      id: 'long-mapping-' + n,
+      color_map_id: 'long-colour-' + n,
+    });
+    data.lab_dip.push({
+      ...navy,
+      id: 'long-colour-lab-' + n,
+      color_map_by_brand_id: 'long-mapping-' + n,
+    });
+  }
+}
 const client = {
   auth: {
     onAuthStateChange(fn) {
